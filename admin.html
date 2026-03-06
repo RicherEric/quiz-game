@@ -234,9 +234,10 @@
                 select.dispatchEvent(new Event('change'));
             }
 
-            // 開始定時更新排行榜
+            // 開始定時更新排行榜 & 統計資料
             fetchLeaderboard();
             setInterval(fetchLeaderboard, 3000);
+            startStatsPolling();
 
             // 即時訂閱：玩家提交答案、新玩家加入、分數更新時立刻刷新
             adminChannel = sbClient.channel('admin-realtime')
@@ -272,23 +273,18 @@
             if (state === 'waiting') {
                 selector.disabled = false;
                 document.getElementById('btn-start').classList.remove('hidden');
-                stopStatsPolling();
             } else if (state === 'playing') {
                 selector.disabled = true;
                 document.getElementById('btn-stop').classList.remove('hidden');
-                startStatsPolling();
             } else if (state === 'stopped') {
                 selector.disabled = true;
                 document.getElementById('btn-score').classList.remove('hidden');
-                startStatsPolling();
             } else if (state === 'scoring') {
                 selector.disabled = true;
                 document.getElementById('btn-next').classList.remove('hidden');
                 document.getElementById('btn-end').classList.remove('hidden');
-                stopStatsPolling();
             } else if (state === 'ended') {
                 selector.disabled = true;
-                stopStatsPolling();
             }
 
             // 更新狀態顯示
