@@ -24,9 +24,17 @@
         }
 
         @keyframes revealRow {
-            from { opacity: 0; transform: translateY(12px); }
-            to   { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
+
         .reveal-row {
             animation: revealRow 0.35s ease-out forwards;
             opacity: 0;
@@ -46,11 +54,13 @@
                     <h1 class="text-3xl font-black text-gold-gradient">中央控場台</h1>
                     <p class="text-gold-400/70">狀態：<span id="current-state-label"
                             class="text-slate-400 font-bold">讀取中...</span></p>
-                    <p class="text-gold-400/70">已加入玩家：<span id="header-player-count" class="text-emerald-400 font-bold text-lg">0</span> 人</p>
+                    <p class="text-gold-400/70">已加入玩家：<span id="header-player-count"
+                            class="text-emerald-400 font-bold text-lg">0</span> 人</p>
                 </div>
             </div>
 
-            <div id="control-panel" class="flex items-center space-x-4 bg-midnight-950 p-3 rounded-2xl border border-gold-800/50">
+            <div id="control-panel"
+                class="flex items-center space-x-4 bg-midnight-950 p-3 rounded-2xl border border-gold-800/50">
                 <select id="q-selector"
                     class="bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold text-xl border border-gold-700/50 cursor-pointer w-64">
                     <option value="">載入題目中...</option>
@@ -91,13 +101,13 @@
             <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">🏆 總積分排行榜</button>
             <button onclick="switchTab('tab-history')" id="btn-tab-history" class="tab-btn">📝 答題紀錄</button>
             <div class="ml-auto flex space-x-3">
-                <button onclick="showQRCode()"
-                    class="px-6 py-3 font-bold text-lg rounded-xl bg-gold-700/80 text-gold-100 hover:bg-gold-600 border border-gold-500/50 transition">
-                    📱 QR Code
-                </button>
                 <button onclick="resetAll()"
                     class="px-6 py-3 font-bold text-lg rounded-xl bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 transition">
                     🔄 重置所有答題
+                </button>
+                <button onclick="showQRCode()"
+                    class="px-6 py-3 font-bold text-lg rounded-xl bg-gold-700/80 text-gold-100 hover:bg-gold-600 border border-gold-500/50 transition">
+                    📱 QR Code
                 </button>
             </div>
         </div>
@@ -111,28 +121,32 @@
                 <!-- 題目選項（點選設定正確答案） -->
                 <div id="q-options-display" class="bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30 hidden">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div onclick="selectCorrectAnswer(1)" id="opt-card-a" class="flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                        <div onclick="selectCorrectAnswer(1)" id="opt-card-a"
+                            class="flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
                             <div class="flex items-start space-x-3">
                                 <span class="text-blue-300 font-black text-lg shrink-0">A.</span>
                                 <span id="opt-text-a" class="text-blue-100 font-bold text-lg">—</span>
                             </div>
                             <span id="opt-count-a" class="text-blue-200 font-black text-2xl ml-3">0</span>
                         </div>
-                        <div onclick="selectCorrectAnswer(2)" id="opt-card-b" class="flex items-center justify-between cursor-pointer bg-indigo-900/20 border-2 border-indigo-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                        <div onclick="selectCorrectAnswer(2)" id="opt-card-b"
+                            class="flex items-center justify-between cursor-pointer bg-indigo-900/20 border-2 border-indigo-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
                             <div class="flex items-start space-x-3">
                                 <span class="text-indigo-300 font-black text-lg shrink-0">B.</span>
                                 <span id="opt-text-b" class="text-indigo-100 font-bold text-lg">—</span>
                             </div>
                             <span id="opt-count-b" class="text-indigo-200 font-black text-2xl ml-3">0</span>
                         </div>
-                        <div onclick="selectCorrectAnswer(3)" id="opt-card-c" class="flex items-center justify-between cursor-pointer bg-sky-900/20 border-2 border-sky-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                        <div onclick="selectCorrectAnswer(3)" id="opt-card-c"
+                            class="flex items-center justify-between cursor-pointer bg-sky-900/20 border-2 border-sky-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
                             <div class="flex items-start space-x-3">
                                 <span class="text-sky-300 font-black text-lg shrink-0">C.</span>
                                 <span id="opt-text-c" class="text-sky-100 font-bold text-lg">—</span>
                             </div>
                             <span id="opt-count-c" class="text-sky-200 font-black text-2xl ml-3">0</span>
                         </div>
-                        <div onclick="selectCorrectAnswer(4)" id="opt-card-d" class="flex items-center justify-between cursor-pointer bg-cyan-900/20 border-2 border-cyan-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                        <div onclick="selectCorrectAnswer(4)" id="opt-card-d"
+                            class="flex items-center justify-between cursor-pointer bg-cyan-900/20 border-2 border-cyan-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
                             <div class="flex items-start space-x-3">
                                 <span class="text-cyan-300 font-black text-lg shrink-0">D.</span>
                                 <span id="opt-text-d" class="text-cyan-100 font-bold text-lg">—</span>
@@ -146,10 +160,13 @@
                 <div class="bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-2xl font-bold text-gold-200">📋 提交狀況</h3>
-                        <span class="text-3xl font-black text-gold-gradient"><span id="submitted-count">0</span> / <span id="total-count">0</span> 人</span>
+                        <span class="text-3xl font-black text-gold-gradient"><span id="submitted-count">0</span> / <span
+                                id="total-count">0</span> 人</span>
                     </div>
                     <div class="w-full bg-midnight-950 rounded-full h-4 overflow-hidden">
-                        <div id="submit-progress-bar" class="bg-gradient-to-r from-gold-500 to-gold-700 h-4 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        <div id="submit-progress-bar"
+                            class="bg-gradient-to-r from-gold-500 to-gold-700 h-4 rounded-full transition-all duration-500"
+                            style="width: 0%"></div>
                     </div>
                 </div>
 
@@ -194,14 +211,17 @@
     </div>
 
     <!-- QR Code Modal -->
-    <div id="qr-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this)closeQRCode()">
-        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 text-center space-y-6 shadow-2xl max-w-md">
+    <div id="qr-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+        onclick="if(event.target===this)closeQRCode()">
+        <div
+            class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 text-center space-y-6 shadow-2xl max-w-md">
             <h2 class="text-3xl font-black text-gold-gradient">掃描加入遊戲</h2>
             <div class="bg-white p-4 rounded-2xl inline-block">
                 <img id="qr-img" src="" alt="QR Code" class="w-64 h-64">
             </div>
             <p id="qr-url" class="text-gold-300 text-lg font-mono break-all"></p>
-            <button onclick="closeQRCode()" class="px-8 py-3 bg-gold-700 hover:bg-gold-600 text-midnight-950 font-bold rounded-xl text-lg transition">關閉</button>
+            <button onclick="closeQRCode()"
+                class="px-8 py-3 bg-gold-700 hover:bg-gold-600 text-midnight-950 font-bold rounded-xl text-lg transition">關閉</button>
         </div>
     </div>
 
