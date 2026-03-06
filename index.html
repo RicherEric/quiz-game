@@ -130,9 +130,10 @@
             <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                 class="h-32 mx-auto drop-shadow-[0_0_20px_rgba(251,191,36,0.4)]">
             <h1 class="text-6xl font-black text-gold-gradient">挑戰結束！</h1>
-            <div class="bg-midnight-900/60 p-10 rounded-[3rem] border-4 border-gold-600/40">
-                <p class="text-3xl text-gold-200 font-bold">感謝您的參與！</p>
-                <p class="text-2xl text-gold-200/60 mt-4">請看大螢幕等待主持人公布成績</p>
+            <div class="bg-midnight-900/60 p-10 rounded-[3rem] border-4 border-gold-600/40 space-y-4">
+                <div id="end-rank" class="text-5xl font-black text-gold-300"></div>
+                <div id="end-score" class="text-3xl text-gold-200 font-bold"></div>
+                <p class="text-xl text-gold-200/60 mt-4">感謝您的參與！</p>
             </div>
         </div>
     </div>
@@ -300,6 +301,19 @@
             else if (status.state === 'ended') {
                 hideAllUI();
                 document.getElementById('end-ui').classList.remove('hidden');
+
+                // 取得排行榜並顯示分數與名次
+                const { data: allPlayers } = await sbClient.from('players').select('*').order('score', { ascending: false });
+                if (allPlayers) {
+                    const myRank = allPlayers.findIndex(p => p.name === myName) + 1;
+                    const myData = allPlayers.find(p => p.name === myName);
+                    const myScore = myData ? myData.score : 0;
+                    const crownIcons = { 1: '👑', 2: '👑', 3: '👑' };
+                    const crown = crownIcons[myRank] || '';
+                    document.getElementById('end-rank').innerHTML = crown ? `${crown} 第 ${myRank} 名 ${crown}` : `第 ${myRank} 名`;
+                    document.getElementById('end-score').innerText = `得分：${myScore} 分`;
+                }
+
                 confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#ffffff'] });
             }
         }

@@ -658,8 +658,9 @@
             players.forEach((p, i) => {
                 const isTop3 = i < 3;
                 const bg = isTop3 ? 'bg-gradient-to-r from-gold-500/20 to-gold-700/20 border border-gold-500/50' : 'bg-midnight-800/50 border border-gold-800/30';
+                const crown = isTop3 ? ' 👑' : '';
                 html += `<div class="grid grid-cols-12 gap-4 items-center px-8 py-4 rounded-xl ${bg}">
-                            <div class="col-span-2 text-center font-bold text-xl">${i + 1}</div>
+                            <div class="col-span-2 text-center font-bold text-xl">${i + 1}${crown}</div>
                             <div class="col-span-6 font-bold text-xl">${p.name}</div>
                             <div class="col-span-4 text-right font-mono font-black text-2xl text-gold-300">${p.score}</div>
                          </div>`;
@@ -762,8 +763,12 @@
                 const correctCount = responses.filter(r => r.is_correct).length;
                 const totalCount = responses.length;
 
+                const correctLabel = choiceLabels[correctAnswer] || '?';
+                const correctOptionText = q ? (q[`option_${correctLabel.toLowerCase()}`] || '') : '';
+                const correctDisplay = correctOptionText ? `${correctLabel}. ${correctOptionText}` : correctLabel;
+
                 const headerInfo = hasScored
-                    ? `正確答案：<span class="text-emerald-400 font-bold">${choiceLabels[correctAnswer] || '?'}</span>　答對：<span class="text-emerald-400 font-bold">${correctCount}</span> / ${totalCount} 人`
+                    ? `正確答案：<span class="text-emerald-400 font-bold">${correctDisplay}</span>　答對：<span class="text-emerald-400 font-bold">${correctCount}</span> / ${totalCount} 人`
                     : `<span class="text-yellow-400">尚未結算</span>　已作答：${totalCount} 人`;
 
                 html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 overflow-hidden">
