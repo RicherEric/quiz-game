@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滙智 10 週年互動問答</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: {
+                            50: '#fff9eb', 100: '#ffedc6', 200: '#ffda88', 300: '#ffc24a', 400: '#ffaa1d',
+                            500: '#f98c00', 600: '#e47000', 700: '#bb5200', 800: '#964000', 900: '#7c3500', 950: '#461b00',
+                        },
+                        midnight: {
+                            900: '#0f172a', 950: '#020617' // 更深的午夜藍
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .option-btn { @apply w-full py-6 text-2xl font-bold text-white rounded-2xl shadow-lg transform transition-all active:scale-95 disabled:grayscale-[0.5] disabled:opacity-50; }
+        .timer-flash { animation: flash 1s infinite; }
+        @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        /* 兩段式作答的選取特效改為金色光環 */
+        .selected-opt { @apply ring-4 ring-gold-400 scale-95 shadow-[0_0_20px_rgba(251,191,36,0.5)]; }
+        .dimmed-opt { @apply opacity-50 saturate-50; }
+        /* 金色文字漸層 */
+        .text-gold-gradient { @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-200 to-gold-500; }
+    </style>
+</head>
+<body class="bg-midnight-950 text-gold-100 font-sans min-h-screen selection:bg-gold-600 selection:text-white">
+
+    <div id="app" class="max-w-3xl mx-auto p-6">
+        
+        <div id="login-ui" class="text-center mt-16 space-y-8">
+            <div class="flex flex-col items-center justify-center space-y-6">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="滙智 10 週年Logo" class="h-32 md:h-40 drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+                <h1 class="text-5xl md:text-6xl font-black text-gold-gradient tracking-tight drop-shadow-lg">滙智 10 週年 答題挑戰賽</h1>
+            </div>
+            
+            <div class="bg-midnight-900/50 p-8 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm">
+                <p class="text-gold-300/80 text-xl mb-6 font-medium">準備好展現你的智慧了嗎？</p>
+                <input id="p-name" type="text" placeholder="請輸入您的暱稱" class="w-full p-5 rounded-2xl text-midnight-950 text-2xl text-center focus:ring-4 focus:ring-gold-500 outline-none shadow-inner bg-gold-100 placeholder-gold-800/50 font-bold border-2 border-gold-600/50">
+                <button onclick="join()" class="w-full mt-6 bg-gradient-to-r from-gold-500 to-gold-700 py-5 rounded-2xl text-3xl font-black hover:from-gold-400 hover:to-gold-600 shadow-[0_0_25px_rgba(251,191,36,0.4)] transition border-2 border-gold-400/50 text-midnight-950">登入挑戰</button>
+            </div>
+        </div>
+
+        <div id="ready-ui" class="hidden text-center mt-32 space-y-10">
+            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md">
+                <h2 class="text-5xl font-bold text-gold-100 mb-4">歡迎，<span id="user-display" class="text-gold-gradient"></span>！</h2>
+                <p class="text-2xl text-gold-200/80 leading-relaxed">
+                    系統已載入 <span id="q-count" class="font-bold text-gold-400 text-3xl">0</span> 道精選題目。<br>
+                    每題限時 <span class="font-bold text-gold-400 text-3xl">10</span> 秒，<br>
+                    把握時間，爭取最高榮耀！
+                </p>
+                <button onclick="startGame()" class="w-full max-w-md mx-auto mt-10 bg-gradient-to-br from-gold-400 to-gold-600 text-midnight-950 py-6 rounded-full text-4xl font-black shadow-[0_0_40px_rgba(251,191,36,0.5)] hover:scale-105 transition transform border-4 border-gold-300/50">START</button>
+            </div>
+        </div>
+
+        <div id="game-ui" class="hidden space-y-6">
+            <div class="flex justify-between items-center bg-midnight-900/70 backdrop-blur-md p-5 rounded-3xl border-2 border-gold-600/40 shadow-[0_0_20px_rgba(251,191,36,0.2)]">
+                <div class="flex flex-col">
+                    <span class="text-sm text-gold-400/80 uppercase tracking-widest font-bold mb-1">目前總分</span>
+                    <span id="score-display" class="text-4xl font-black text-gold-gradient drop-shadow-md">0</span>
+                </div>
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo" class="h-12 md:h-16 opacity-80">
+                <div class="text-right">
+                    <span class="text-sm text-gold-400/80 uppercase tracking-widest font-bold mb-1">剩餘時間</span>
+                    <div id="timer" class="text-4xl font-mono font-bold text-gold-200 drop-shadow-md">10.0s</div>
+                </div>
+            </div>
+
+            <div class="py-6 text-center space-y-4 bg-midnight-900/40 rounded-3xl p-6 border border-gold-800/30">
+                <div id="q-category" class="text-lg text-gold-300 font-bold tracking-widest uppercase bg-midnight-800/80 inline-block px-6 py-2 rounded-full border-2 border-gold-600/50 shadow-sm">Question 1</div>
+                <h2 id="q-text" class="text-3xl md:text-4xl font-bold leading-tight min-h-[7rem] flex items-center justify-center text-gold-100 drop-shadow-lg px-4">載入中...</h2>
+            </div>
+
+            <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <button onclick="selectOption(1)" id="opt1" class="option-btn bg-blue-900 border-2 border-gold-600/50 hover:bg-blue-800 shadow-[0_0_10px_rgba(251,191,36,0.2)]">A</button>
+                <button onclick="selectOption(2)" id="opt2" class="option-btn bg-indigo-900 border-2 border-gold-600/50 hover:bg-indigo-800 shadow-[0_0_10px_rgba(251,191,36,0.2)]">B</button>
+                <button onclick="selectOption(3)" id="opt3" class="option-btn bg-sky-900 border-2 border-gold-600/50 hover:bg-sky-800 shadow-[0_0_10px_rgba(251,191,36,0.2)]">C</button>
+                <button onclick="selectOption(4)" id="opt4" class="option-btn bg-cyan-900 border-2 border-gold-600/50 hover:bg-cyan-800 shadow-[0_0_10px_rgba(251,191,36,0.2)]">D</button>
+            </div>
+
+            <button id="submit-btn" onclick="submitAnswer()" class="w-full mt-6 py-5 bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 hover:from-gold-400 hover:to-gold-600 rounded-2xl text-3xl font-black shadow-[0_0_30px_rgba(251,191,36,0.5)] transition transform hidden border-2 border-gold-400/50">確認送出</button>
+            
+            <div id="feedback" class="hidden text-center p-6 rounded-2xl text-3xl font-black mt-6 shadow-2xl transition-all"></div>
+        </div>
+
+        <div id="end-ui" class="hidden text-center mt-20 space-y-8">
+            <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo" class="h-32 mx-auto mb-4 drop-shadow-[0_0_20px_rgba(251,191,36,0.4)]">
+            <h1 class="text-6xl font-black text-gold-gradient drop-shadow-xl">挑戰圓滿結束！</h1>
+            <div class="bg-midnight-900/60 p-10 rounded-[3rem] border-4 border-gold-600/40 shadow-2xl backdrop-blur-md">
+                <p class="text-3xl text-gold-200 font-bold">您的最終榮耀積分</p>
+                <div id="final-score" class="text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-gold-100 via-gold-400 to-gold-600 my-8 drop-shadow-2xl">0</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- 遊戲設定 ---
+        const FIXED_TIME = 10; // 固定每題 10 秒
+
+        let myName = "";
+        let questions = [];
+        let currentQIndex = 0;
+        let currentTotalScore = 0;
+        
+        let startTime = 0;
+        let timerInterval = null;
+        let hasAnswered = false;
+        let currentSelection = 0;
+
+        // 登入並預先載入題庫
+        async function join() {
+            myName = document.getElementById('p-name').value.trim();
+            if (!myName) return alert("請輸入名字");
+            
+            const { error } = await sbClient.from('players').insert({ name: myName });
+            if (error) return alert("加入失敗，名字可能被拿走囉！");
+
+            const { data: qData, error: qError } = await sbClient.from('questions').select('*').order('id', { ascending: true });
+            if (qError || !qData || qData.length === 0) return alert("題庫載入失敗，請確認資料庫有題目！");
+            
+            questions = qData;
+
+            document.getElementById('user-display').innerText = myName;
+            document.getElementById('q-count').innerText = questions.length;
+            document.getElementById('login-ui').classList.add('hidden');
+            document.getElementById('ready-ui').classList.remove('hidden');
+        }
+
+        // 按下 Start 開始遊戲
+        function startGame() {
+            document.getElementById('ready-ui').classList.add('hidden');
+            document.getElementById('game-ui').classList.remove('hidden');
+            currentQIndex = 0;
+            currentTotalScore = 0;
+            loadNextQuestion();
+        }
+
+        // 載入下一題
+        function loadNextQuestion() {
+            if (currentQIndex >= questions.length) {
+                showEndScreen();
+                return;
+            }
+
+            const q = questions[currentQIndex];
+            hasAnswered = false;
+            currentSelection = 0;
+            startTime = Date.now();
+
+            resetUI();
+            refreshUI(q);
+            // 強制使用固定 10 秒
+            startTimer(FIXED_TIME);
+        }
+
+        function resetUI() {
+            document.getElementById('feedback').classList.add('hidden');
+            document.getElementById('options-grid').classList.remove('hidden');
+            document.getElementById('submit-btn').classList.add('hidden');
+            
+            document.querySelectorAll('.option-btn').forEach(btn => {
+                btn.disabled = false;
+                btn.classList.remove('grayscale', 'selected-opt', 'dimmed-opt');
+            });
+        }
+
+        function refreshUI(q) {
+            document.getElementById('q-category').innerText = `Question ${currentQIndex + 1} / ${questions.length}`;
+            document.getElementById('q-text').innerText = q.question;
+            document.getElementById('opt1').innerText = q.option_a;
+            document.getElementById('opt2').innerText = q.option_b;
+            document.getElementById('opt3').innerText = q.option_c;
+            document.getElementById('opt4').innerText = q.option_d;
+        }
+
+        function startTimer(seconds) {
+            if(timerInterval) clearInterval(timerInterval);
+            const timerEl = document.getElementById('timer');
+            
+            timerInterval = setInterval(() => {
+                const now = Date.now();
+                const remaining = Math.max(0, seconds - (now - startTime) / 1000);
+                timerEl.innerText = remaining.toFixed(1) + "s";
+                
+                // 最後 3 秒變紅色閃爍警告 (在深色背景下改為亮紅色)
+                if(remaining <= 3) timerEl.classList.add('text-red-500', 'timer-flash');
+                else timerEl.classList.remove('text-red-500', 'timer-flash');
+
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    if(!hasAnswered) processAnswer(0); // 逾時
+                }
+            }, 100);
+        }
+
+        // 玩家點擊選項
+        function selectOption(choice) {
+            if (hasAnswered) return;
+            currentSelection = choice;
+
+            for (let i = 1; i <= 4; i++) {
+                const btn = document.getElementById('opt' + i);
+                if (i === choice) {
+                    btn.classList.add('selected-opt');
+                    btn.classList.remove('dimmed-opt');
+                } else {
+                    btn.classList.remove('selected-opt');
+                    btn.classList.add('dimmed-opt');
+                }
+            }
+            document.getElementById('submit-btn').classList.remove('hidden');
+        }
+
+        // 玩家點擊確認送出
+        function submitAnswer() {
+            if (currentSelection === 0 || hasAnswered) return;
+            processAnswer(currentSelection);
+        }
+
+        // 處理作答結果與算分
+        async function processAnswer(choice) {
+            if(hasAnswered) return;
+            hasAnswered = true;
+            clearInterval(timerInterval);
+            
+            document.getElementById('submit-btn').classList.add('hidden');
+            
+            const q = questions[currentQIndex];
+            const now = Date.now();
+            const elapsedMs = now - startTime;
+            const elapsedSec = elapsedMs / 1000;
+            const isCorrect = (choice === q.answer);
+            
+            document.querySelectorAll('.option-btn').forEach(btn => btn.disabled = true);
+            
+            let earnedScore = 0;
+            if (isCorrect) {
+                earnedScore = Math.max(0, Math.floor(q.points * (1 - (elapsedSec / FIXED_TIME))));
+                currentTotalScore += earnedScore;
+                document.getElementById('score-display').innerText = currentTotalScore;
+                
+                sbClient.rpc('increment_score', { player_name: myName, score_val: earnedScore }).then();
+                showSuccess(earnedScore);
+            } else {
+                if (choice === 0) showFailure(`時間到！正確答案是 ${q.answer}`);
+                else showFailure(`答錯囉！正確答案是 ${q.answer}`);
+            }
+
+            sbClient.from('responses').insert({
+                player_name: myName,
+                question_id: q.id,
+                choice: choice,
+                is_correct: isCorrect,
+                response_time_ms: elapsedMs
+            }).then();
+
+            setTimeout(() => {
+                currentQIndex++;
+                loadNextQuestion();
+            }, 2000);
+        }
+
+        function showSuccess(score) {
+            // 特效改為金色與藍色系
+            confetti({ particleCount: 200, spread: 80, origin: { y: 0.6 }, colors: ['#fbbf24', '#f59e0b', '#3b82f6', '#1d4ed8', '#ffffff'] });
+            const fb = document.getElementById('feedback');
+            document.getElementById('options-grid').classList.add('hidden');
+            fb.innerText = `答對了！+${score} 分`;
+            // 金色與綠色混合的成功提示
+            fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-gradient-to-r from-gold-500/30 to-emerald-500/30 text-gold-200 border-2 border-gold-400/50 block mt-6 backdrop-blur-md shadow-[0_0_30px_rgba(251,191,36,0.3)]";
+        }
+
+        function showFailure(msg) {
+            const fb = document.getElementById('feedback');
+            document.getElementById('options-grid').classList.add('hidden');
+            fb.innerText = msg;
+            // 深紅色失敗提示，帶有金色邊框
+            fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-red-950/60 text-red-200 border-2 border-red-800/50 block mt-6 backdrop-blur-md shadow-lg";
+        }
+
+        // 遊戲結束畫面
+        function showEndScreen() {
+            document.getElementById('game-ui').classList.add('hidden');
+            document.getElementById('end-ui').classList.remove('hidden');
+            document.getElementById('final-score').innerText = currentTotalScore;
+            // 結算時的大型金色紙屑特效
+            confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#f59e0b', '#d97706', '#ffffff'], scalar: 1.2 });
+        }
+    </script>
+</body>
+</html>

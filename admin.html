@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滙智 10 週年 - 主持人即時戰況台</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: {
+                            50: '#fff9eb', 100: '#ffedc6', 200: '#ffda88', 300: '#ffc24a', 400: '#ffaa1d',
+                            500: '#f98c00', 600: '#e47000', 700: '#bb5200', 800: '#964000', 900: '#7c3500', 950: '#461b00',
+                        },
+                        midnight: {
+                            900: '#0f172a', 950: '#020617'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .text-gold-gradient { @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-200 to-gold-500; }
+        /* 排行榜前三名的特殊發光效果 */
+        .rank-1 { @apply bg-gradient-to-r from-gold-500/30 to-gold-700/30 border-gold-400 shadow-[0_0_15px_rgba(251,191,36,0.4)] text-gold-100 scale-[1.02]; }
+        .rank-2 { @apply bg-slate-400/20 border-slate-300/50 text-slate-100; }
+        .rank-3 { @apply bg-orange-700/20 border-orange-500/50 text-orange-200; }
+    </style>
+</head>
+<body class="bg-midnight-950 text-gold-100 font-sans min-h-screen">
+
+    <div class="max-w-6xl mx-auto p-8">
+        <header class="flex justify-between items-center mb-10 pb-6 border-b border-gold-800/50">
+            <div class="flex items-center space-x-6">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo" class="h-20 drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
+                <div>
+                    <h1 class="text-4xl font-black text-gold-gradient tracking-widest drop-shadow-lg">實時戰況中心</h1>
+                    <p class="text-gold-400/70 mt-1">Live Leaderboard & Statistics</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-6">
+                <div class="bg-midnight-900/80 border border-gold-600/30 px-6 py-3 rounded-2xl text-center shadow-lg">
+                    <p class="text-xs text-gold-400/80 uppercase tracking-widest">總參賽人數</p>
+                    <p id="total-players" class="text-3xl font-black text-gold-300">0</p>
+                </div>
+                
+                <button onclick="resetGameData()" class="bg-red-950/50 border border-red-800 hover:bg-red-900/80 text-red-400 px-6 py-4 rounded-xl font-bold transition duration-300 text-sm">
+                    ⚠️ 清空所有資料
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <div class="bg-midnight-900/50 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm overflow-hidden">
+                <div class="bg-midnight-800/80 px-8 py-4 border-b border-gold-700/30 grid grid-cols-12 gap-4 text-gold-400/80 font-bold tracking-widest text-sm uppercase">
+                    <div class="col-span-2 text-center">排名 Rank</div>
+                    <div class="col-span-6">參賽者 Player</div>
+                    <div class="col-span-4 text-right">榮耀積分 Score</div>
+                </div>
+                
+                <div id="leaderboard-container" class="p-4 space-y-3 min-h-[500px]">
+                    <div class="text-center text-gold-500/50 py-20 text-xl font-bold tracking-widest animate-pulse">
+                        等待資料載入中...
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 初始化與定時更新
+        async function fetchDashboardData() {
+            try {
+                // 1. 取得排行榜前 15 名，並取得總人數
+                const { data: players, count, error } = await sbClient
+                    .from('players')
+                    .select('*', { count: 'exact' })
+                    .order('score', { ascending: false })
+                    .limit(15);
+
+                if (error) throw error;
+
+                // 更新總人數
+                document.getElementById('total-players').innerText = count || 0;
+
+                // 渲染排行榜
+                renderLeaderboard(players);
+
+            } catch (err) {
+                console.error("讀取資料失敗:", err);
+            }
+        }
+
+        function renderLeaderboard(players) {
+            const container = document.getElementById('leaderboard-container');
+            
+            if (!players || players.length === 0) {
+                container.innerHTML = '<div class="text-center text-gold-500/50 py-20 text-xl font-bold tracking-widest">目前尚無參賽者資料</div>';
+                return;
+            }
+
+            let html = '';
+            players.forEach((player, index) => {
+                const rank = index + 1;
+                let specialClass = 'bg-midnight-800/40 border-gold-800/20'; // 預設樣式
+                let rankTrophy = `#${rank}`;
+
+                // 前三名特殊樣式
+                if (rank === 1) {
+                    specialClass = 'rank-1';
+                    rankTrophy = '🏆 1';
+                } else if (rank === 2) {
+                    specialClass = 'rank-2';
+                    rankTrophy = '🥈 2';
+                } else if (rank === 3) {
+                    specialClass = 'rank-3';
+                    rankTrophy = '🥉 3';
+                }
+
+                html += `
+                    <div class="grid grid-cols-12 gap-4 items-center px-8 py-5 rounded-2xl border transition-all duration-500 ${specialClass}">
+                        <div class="col-span-2 text-center font-black text-2xl">${rankTrophy}</div>
+                        <div class="col-span-6 font-bold text-2xl truncate">${player.name}</div>
+                        <div class="col-span-4 text-right font-mono font-black text-3xl text-gold-300 drop-shadow">${player.score}</div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // 一鍵清空測試資料 (需要 Supabase RLS 權限允許 Delete)
+        async function resetGameData() {
+            const confirmReset = confirm("⚠️ 警告：這將會刪除「所有參賽者」與「作答紀錄」！\n請確認只在正式活動開始前使用此功能。\n\n確定要清空嗎？");
+            if (!confirmReset) return;
+
+            const confirmAgain = prompt("為避免誤觸，請輸入大寫的 YES 以確認刪除：");
+            if (confirmAgain !== "YES") {
+                alert("已取消清空操作。");
+                return;
+            }
+
+            try {
+                // 刪除玩家與作答紀錄
+                await sbClient.from('players').delete().neq('id', 0);
+                await sbClient.from('responses').delete().neq('id', 0);
+                
+                alert("資料已全部清空！準備迎接正式挑戰。");
+                fetchDashboardData();
+            } catch (err) {
+                alert("清空失敗。這可能是因為 Supabase 的安全權限 (RLS) 阻擋了刪除操作。\n請直接進入 Supabase 後台 Table Editor 手動刪除資料。");
+                console.error(err);
+            }
+        }
+
+        // 首次載入
+        fetchDashboardData();
+        
+        // 設定每 2 秒自動更新一次戰況
+        setInterval(fetchDashboardData, 2000);
+
+    </script>
+</body>
+</html>
