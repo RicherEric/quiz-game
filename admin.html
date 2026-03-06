@@ -90,7 +90,11 @@
             <button onclick="switchTab('tab-stats')" id="btn-tab-stats" class="tab-btn tab-active">📊 作答監控</button>
             <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">🏆 總積分排行榜</button>
             <button onclick="switchTab('tab-history')" id="btn-tab-history" class="tab-btn">📝 答題紀錄</button>
-            <div class="ml-auto">
+            <div class="ml-auto flex space-x-3">
+                <button onclick="showQRCode()"
+                    class="px-6 py-3 font-bold text-lg rounded-xl bg-gold-700/80 text-gold-100 hover:bg-gold-600 border border-gold-500/50 transition">
+                    📱 QR Code
+                </button>
                 <button onclick="resetAll()"
                     class="px-6 py-3 font-bold text-lg rounded-xl bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 transition">
                     🔄 重置所有答題
@@ -188,6 +192,31 @@
 
         </main>
     </div>
+
+    <!-- QR Code Modal -->
+    <div id="qr-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this)closeQRCode()">
+        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 text-center space-y-6 shadow-2xl max-w-md">
+            <h2 class="text-3xl font-black text-gold-gradient">掃描加入遊戲</h2>
+            <div class="bg-white p-4 rounded-2xl inline-block">
+                <img id="qr-img" src="" alt="QR Code" class="w-64 h-64">
+            </div>
+            <p id="qr-url" class="text-gold-300 text-lg font-mono break-all"></p>
+            <button onclick="closeQRCode()" class="px-8 py-3 bg-gold-700 hover:bg-gold-600 text-midnight-950 font-bold rounded-xl text-lg transition">關閉</button>
+        </div>
+    </div>
+
+    <script>
+        function showQRCode() {
+            const playerUrl = window.location.origin + '/';
+            const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=' + encodeURIComponent(playerUrl);
+            document.getElementById('qr-img').src = qrApiUrl;
+            document.getElementById('qr-url').innerText = playerUrl;
+            document.getElementById('qr-modal').classList.remove('hidden');
+        }
+        function closeQRCode() {
+            document.getElementById('qr-modal').classList.add('hidden');
+        }
+    </script>
 
     <script>
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
