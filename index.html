@@ -157,7 +157,7 @@
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
         const FIXED_TIME = 10;
 
-        let sbClient, myName = "", currentQ = null, startTime = 0, timerInterval = null, hasAnswered = false, currentSelection = 0, totalScore = 0, channel = null, inPreview = false;
+        let sbClient, myName = "", currentQ = null, startTime = 0, timerInterval = null, hasAnswered = false, currentSelection = 0, totalScore = 0, channel = null, inPreview = false, lastProcessedKey = '', pollInterval = null;
 
         // 確保 SDK 載入後才初始化
         window.onload = () => {
@@ -198,16 +198,28 @@
                     filter: 'id=eq.1'
                 }, (payload) => {
                     console.log("偵測到主持人指令:", payload.new.state);
+                    const key = `${payload.new.state}_${payload.new.current_q_id}_${payload.new.start_time}`;
+                    lastProcessedKey = key;
                     handleStateChange(payload.new);
                 })
                 .subscribe((status) => {
                     console.log("廣播連線狀態:", status);
                 });
+
+            // 輪詢備援：每 2 秒檢查一次，防止即時連線漏接
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(checkCurrentStatus, 2000);
         }
 
         async function checkCurrentStatus() {
             const { data } = await sbClient.from('game_status').select('*').eq('id', 1).single();
-            if (data) handleStateChange(data);
+            if (data) {
+                const key = `${data.state}_${data.current_q_id}_${data.start_time}`;
+                if (key !== lastProcessedKey) {
+                    lastProcessedKey = key;
+                    handleStateChange(data);
+                }
+            }
         }
 
         function hideAllUI() {
@@ -359,7 +371,12 @@
                 earnedScore = Math.max(0, Math.floor(currentQ.points * (1 - (elapsedMs / (FIXED_TIME * 1000)))));
                 totalScore += earnedScore;
                 document.getElementById('score-display').innerText = totalScore;
-                sbClient.rpc('increment_score', { player_name: myName, score_val: earnedScore });
+                // 直接更新資料庫分數（不依賴 RPC 函數）
+                sbClient.from('players').select('score').eq('name', myName).single().then(({ data: pData }) => {
+                    if (pData) {
+                        sbClient.from('players').update({ score: pData.score + earnedScore }).eq('name', myName).then();
+                    }
+                });
                 showFeedback(true, `答對了！+${earnedScore} 分`);
             } else {
                 const correctLabel = ["", "A", "B", "C", "D"][currentQ.answer];
