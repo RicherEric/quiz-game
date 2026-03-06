@@ -40,23 +40,38 @@
                 </div>
             </div>
 
-            <div class="flex items-center space-x-4 bg-midnight-950 p-3 rounded-2xl border border-gold-800/50">
+            <div id="control-panel" class="flex items-center space-x-4 bg-midnight-950 p-3 rounded-2xl border border-gold-800/50">
                 <select id="q-selector"
                     class="bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold text-xl border border-gold-700/50 cursor-pointer w-64">
                     <option value="">載入題目中...</option>
                 </select>
 
-                <button onclick="changeState('playing')"
+                <!-- waiting 狀態：開放作答 -->
+                <button id="btn-start" onclick="changeState('playing')"
                     class="bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 text-white px-8 py-4 rounded-xl font-bold text-xl transition shadow-lg border border-emerald-400/50">
-                    ▶️ 開放作答 (Start)
+                    ▶️ 開放作答
                 </button>
-                <button onclick="changeState('waiting')"
-                    class="bg-slate-700 hover:bg-slate-600 text-white px-8 py-4 rounded-xl font-bold text-xl transition shadow-lg border border-slate-500/50">
-                    ⏸️ 暫停/收回畫面
+
+                <!-- playing 狀態：停止作答 -->
+                <button id="btn-stop" onclick="changeState('stopped')"
+                    class="hidden bg-gradient-to-r from-amber-600 to-amber-800 hover:from-amber-500 text-white px-8 py-4 rounded-xl font-bold text-xl transition shadow-lg border border-amber-400/50">
+                    ⏸️ 停止作答
                 </button>
-                <button onclick="changeState('ended')"
-                    class="bg-red-800 hover:bg-red-700 text-white px-6 py-4 rounded-xl font-bold text-lg transition ml-4">
-                    🏆 結束遊戲 (結算)
+
+                <!-- stopped 狀態：結算 -->
+                <button id="btn-score" onclick="changeState('scoring')"
+                    class="hidden bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 text-white px-8 py-4 rounded-xl font-bold text-xl transition shadow-lg border border-blue-400/50">
+                    💰 結算
+                </button>
+
+                <!-- scoring 狀態：下一題 + 結束遊戲 -->
+                <button id="btn-next" onclick="nextQuestion()"
+                    class="hidden bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 text-white px-8 py-4 rounded-xl font-bold text-xl transition shadow-lg border border-emerald-400/50">
+                    ➡️ 下一題
+                </button>
+                <button id="btn-end" onclick="changeState('ended')"
+                    class="hidden bg-red-800 hover:bg-red-700 text-white px-6 py-4 rounded-xl font-bold text-lg transition">
+                    🏆 結束遊戲
                 </button>
             </div>
         </header>
@@ -134,7 +149,7 @@
                         alert("請至 Supabase -> SQL Editor 手動執行以下指令來初始化資料：\n\ninsert into public.game_status (id, current_q_id, state, start_time) values (1, 1, 'waiting', 0);");
                     }
                 }
-                document.getElementById('current-state-label').innerText = '⏸️ 待機中 (Waiting)';
+                updateControlButtons('waiting');
             } catch (err) {
                 console.error("初始化檢查失敗", err);
             }
@@ -171,7 +186,47 @@
             setInterval(fetchLeaderboard, 3000);
         }
 
-        // 發送指令給所有手機 (更新 game_status) 並加入防呆機制
+        let currentState = 'waiting';
+
+        function updateControlButtons(state) {
+            currentState = state;
+            const ids = ['btn-start', 'btn-stop', 'btn-score', 'btn-next', 'btn-end'];
+            ids.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+            const selector = document.getElementById('q-selector');
+
+            if (state === 'waiting') {
+                selector.disabled = false;
+                document.getElementById('btn-start').classList.remove('hidden');
+            } else if (state === 'playing') {
+                selector.disabled = true;
+                document.getElementById('btn-stop').classList.remove('hidden');
+            } else if (state === 'stopped') {
+                selector.disabled = true;
+                document.getElementById('btn-score').classList.remove('hidden');
+            } else if (state === 'scoring') {
+                selector.disabled = true;
+                document.getElementById('btn-next').classList.remove('hidden');
+                document.getElementById('btn-end').classList.remove('hidden');
+            } else if (state === 'ended') {
+                selector.disabled = true;
+            }
+
+            // 更新狀態顯示
+            const label = document.getElementById('current-state-label');
+            const labels = {
+                waiting: ['⏸️ 待機中 (Waiting)', 'text-slate-400 font-bold'],
+                playing: ['🟢 開放作答中 (Playing)', 'text-emerald-400 font-bold'],
+                stopped: ['🔴 已停止作答 (Stopped)', 'text-amber-400 font-bold'],
+                scoring: ['💰 結算中 (Scoring)', 'text-blue-400 font-bold'],
+                ended: ['🏆 遊戲結束 (Ended)', 'text-gold-400 font-bold']
+            };
+            const [text, cls] = labels[state] || ['未知', 'text-slate-400 font-bold'];
+            label.innerText = text;
+            label.className = cls;
+        }
+
+        // 發送指令給所有手機 (更新 game_status)
         async function changeState(newState) {
             const selectEl = document.getElementById('q-selector');
             const qId = selectEl.value;
@@ -181,14 +236,13 @@
                 return;
             }
 
-            const startTime = Date.now();
-
-            // 加上 .select() 確保資料真的有被更新到
-            const { data, error } = await sbClient.from('game_status').update({
+            const updateData = {
                 current_q_id: parseInt(qId),
                 state: newState,
-                start_time: startTime
-            }).eq('id', 1).select();
+                start_time: Date.now()
+            };
+
+            const { data, error } = await sbClient.from('game_status').update(updateData).eq('id', 1).select();
 
             if (error) {
                 alert(`狀態切換失敗！發生錯誤：${error.message}`);
@@ -196,10 +250,39 @@
             } else if (!data || data.length === 0) {
                 alert("切換失敗！找不到初始化資料 (id=1)，請重新整理網頁讓系統自動建立。");
             } else {
-                const label = document.getElementById('current-state-label');
-                if (newState === 'playing') { label.innerText = '🟢 開放作答中 (Playing)'; label.className = 'text-emerald-400 font-bold'; }
-                if (newState === 'waiting') { label.innerText = '⏸️ 待機中 (Waiting)'; label.className = 'text-slate-400 font-bold'; }
-                if (newState === 'ended') { label.innerText = '🏆 結算畫面 (Ended)'; label.className = 'text-gold-400 font-bold'; }
+                updateControlButtons(newState);
+
+                // stopped 時自動刷新統計
+                if (newState === 'stopped') {
+                    fetchCurrentQuestionStats();
+                    switchTab('tab-stats');
+                }
+                // scoring 時自動切到排行榜
+                if (newState === 'scoring') {
+                    fetchLeaderboard();
+                    switchTab('tab-leaderboard');
+                }
+            }
+        }
+
+        // 下一題：自動選擇下一題，切回 waiting
+        async function nextQuestion() {
+            const selectEl = document.getElementById('q-selector');
+            const currentIdx = selectEl.selectedIndex;
+            if (currentIdx < selectEl.options.length - 1) {
+                selectEl.selectedIndex = currentIdx + 1;
+                selectEl.dispatchEvent(new Event('change'));
+            }
+            // 切回 waiting
+            const qId = selectEl.value;
+            const { data, error } = await sbClient.from('game_status').update({
+                current_q_id: parseInt(qId),
+                state: 'waiting',
+                start_time: 0
+            }).eq('id', 1).select();
+
+            if (!error && data && data.length > 0) {
+                updateControlButtons('waiting');
             }
         }
 

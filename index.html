@@ -82,6 +82,30 @@
             </div>
         </div>
 
+        <div id="preview-ui" class="hidden text-center mt-16 space-y-8">
+            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+                <div id="preview-q-category"
+                    class="text-lg text-gold-300 font-bold uppercase bg-midnight-800/80 px-6 py-2 rounded-full border-2 border-gold-600/50 inline-block">
+                    Question</div>
+                <h2 id="preview-q-text" class="text-3xl font-bold leading-tight text-gold-100">載入中...</h2>
+                <button onclick="startAnswering()"
+                    class="w-full mt-4 bg-gradient-to-r from-gold-500 to-gold-700 py-6 rounded-2xl text-3xl font-black shadow-[0_0_25px_rgba(251,191,36,0.4)] text-midnight-950 transform transition-all active:scale-95">
+                    開始作答
+                </button>
+            </div>
+        </div>
+
+        <div id="scoring-ui" class="hidden text-center mt-20 space-y-8">
+            <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                class="h-28 mx-auto drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+            <h1 class="text-5xl font-black text-gold-gradient">本輪結算</h1>
+            <div class="bg-midnight-900/60 p-10 rounded-[3rem] border-4 border-gold-600/40">
+                <p class="text-3xl text-gold-200 font-bold">目前累積積分</p>
+                <div id="scoring-score" class="text-9xl font-black text-gold-gradient my-8">0</div>
+            </div>
+            <p class="text-2xl text-gold-200/60">等待主持人進入下一題...</p>
+        </div>
+
         <div id="game-ui" class="hidden space-y-6">
             <div
                 class="flex justify-between items-center bg-midnight-900/70 p-5 rounded-3xl border-2 border-gold-600/40">
@@ -133,7 +157,7 @@
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
         const FIXED_TIME = 10;
 
-        let sbClient, myName = "", currentQ = null, startTime = 0, timerInterval = null, hasAnswered = false, currentSelection = 0, totalScore = 0, channel = null;
+        let sbClient, myName = "", currentQ = null, startTime = 0, timerInterval = null, hasAnswered = false, currentSelection = 0, totalScore = 0, channel = null, inPreview = false;
 
         // 確保 SDK 載入後才初始化
         window.onload = () => {
@@ -186,45 +210,65 @@
             if (data) handleStateChange(data);
         }
 
+        function hideAllUI() {
+            ['waiting-ui', 'preview-ui', 'game-ui', 'scoring-ui', 'end-ui'].forEach(id =>
+                document.getElementById(id).classList.add('hidden')
+            );
+        }
+
         async function handleStateChange(status) {
             if (status.state === 'waiting') {
                 stopTimer();
-                document.getElementById('game-ui').classList.add('hidden');
-                document.getElementById('end-ui').classList.add('hidden');
+                inPreview = false;
+                hideAllUI();
                 document.getElementById('waiting-ui').classList.remove('hidden');
             }
             else if (status.state === 'playing') {
-                // 如果已經在答這一題，不要重複刷新
-                if (currentQ && currentQ.id === status.current_q_id && !document.getElementById('game-ui').classList.contains('hidden')) return;
+                // 如果已經在答這一題（preview 或 game-ui 顯示中），不要重複刷新
+                if (currentQ && currentQ.id === status.current_q_id && (inPreview || !document.getElementById('game-ui').classList.contains('hidden'))) return;
 
                 const { data: q } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
                 if (q) {
                     currentQ = q;
-                    startTime = status.start_time;
                     hasAnswered = false;
                     currentSelection = 0;
+                    startTime = 0; // 會在 user 點「開始作答」時設定
+                    inPreview = true;
 
-                    const elapsedSec = (Date.now() - startTime) / 1000;
+                    // 顯示題目預覽
+                    document.getElementById('preview-q-category').innerText = `Question ${q.id}`;
+                    document.getElementById('preview-q-text').innerText = q.question;
 
-                    // 中途進場若時間已過，直接顯示逾時
-                    if (elapsedSec >= FIXED_TIME) {
-                        showFeedback(false, "本題作答時間已結束。");
-                        document.getElementById('waiting-ui').classList.add('hidden');
-                        document.getElementById('game-ui').classList.remove('hidden');
-                        document.getElementById('options-grid').classList.add('hidden');
-                    } else {
-                        document.getElementById('waiting-ui').classList.add('hidden');
-                        document.getElementById('game-ui').classList.remove('hidden');
-                        resetUI();
-                        refreshUI(q);
-                        startTimer(FIXED_TIME, startTime);
-                    }
+                    hideAllUI();
+                    document.getElementById('preview-ui').classList.remove('hidden');
                 }
+            }
+            else if (status.state === 'stopped') {
+                // 停止作答：未答題者自動逾時
+                if (!hasAnswered) {
+                    processAnswer(0);
+                }
+                // 如果還在 preview，切到 game-ui 顯示 feedback
+                if (inPreview) {
+                    inPreview = false;
+                    hideAllUI();
+                    document.getElementById('game-ui').classList.remove('hidden');
+                    if (currentQ) refreshUI(currentQ);
+                    document.getElementById('options-grid').classList.add('hidden');
+                }
+                stopTimer();
+            }
+            else if (status.state === 'scoring') {
+                stopTimer();
+                inPreview = false;
+                hideAllUI();
+                document.getElementById('scoring-ui').classList.remove('hidden');
+                document.getElementById('scoring-score').innerText = totalScore;
             }
             else if (status.state === 'ended') {
                 stopTimer();
-                document.getElementById('game-ui').classList.add('hidden');
-                document.getElementById('waiting-ui').classList.add('hidden');
+                inPreview = false;
+                hideAllUI();
                 document.getElementById('end-ui').classList.remove('hidden');
                 document.getElementById('final-score').innerText = totalScore;
                 confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#ffffff'] });
@@ -239,6 +283,18 @@
                 btn.disabled = false;
                 btn.classList.remove('grayscale', 'selected-opt', 'dimmed-opt');
             });
+        }
+
+        function startAnswering() {
+            if (!currentQ || hasAnswered) return;
+            inPreview = false;
+            startTime = Date.now(); // 個人計時從此刻開始
+
+            hideAllUI();
+            document.getElementById('game-ui').classList.remove('hidden');
+            resetUI();
+            refreshUI(currentQ);
+            startTimer(FIXED_TIME, startTime);
         }
 
         function refreshUI(q) {
