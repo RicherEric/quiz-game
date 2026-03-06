@@ -272,7 +272,7 @@
     <script>
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
         // TODO: 請替換為你的 Supabase service_role key（Supabase Dashboard → Settings → API）
-        const SUPABASE_SERVICE_KEY = "YOUR_SUPABASE_SERVICE_ROLE_KEY";
+        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
         const QR_FIXED_TOKEN = "qz-w10-8f3a2b1c4d5e6f7a";
         const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -884,13 +884,12 @@
                 return;
             }
 
-            const { data, error } = await sbClient.from('users')
-                .select('id')
-                .eq('username', username)
-                .eq('password', password)
-                .maybeSingle();
+            const { data, error } = await sbClient.rpc('admin_login', {
+                p_username: username,
+                p_password: password
+            });
 
-            if (error || !data) {
+            if (error || !data || !data.success) {
                 errorEl.textContent = '帳號或密碼錯誤';
                 errorEl.classList.remove('hidden');
                 return;

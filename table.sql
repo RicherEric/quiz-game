@@ -115,6 +115,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- 管理員登入驗證（透過 RPC，不需要開放 users 表的 RLS）
+CREATE OR REPLACE FUNCTION admin_login(p_username text, p_password text)
+RETURNS json AS $$
+DECLARE
+  v_id integer;
+BEGIN
+  SELECT id INTO v_id FROM users
+  WHERE username = p_username AND password = p_password;
+
+  IF v_id IS NULL THEN
+    RETURN json_build_object('success', false);
+  END IF;
+
+  RETURN json_build_object('success', true, 'user_id', v_id);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- 4. 啟用 RLS（重複執行不會報錯）
 ALTER TABLE public.players ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.responses ENABLE ROW LEVEL SECURITY;
