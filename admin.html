@@ -93,24 +93,36 @@
             <div id="tab-stats" class="space-y-6">
                 <h2 id="stats-q-text" class="text-3xl font-bold text-gold-100 mb-4">請從上方選擇題目...</h2>
 
-                <!-- 題目選項 -->
+                <!-- 題目選項（點選設定正確答案） -->
                 <div id="q-options-display" class="bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30 hidden">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div class="flex items-start space-x-3 bg-blue-900/20 border border-blue-500/30 px-4 py-3 rounded-xl">
-                            <span class="text-blue-300 font-black text-lg shrink-0">A.</span>
-                            <span id="opt-text-a" class="text-blue-100 font-bold text-lg">—</span>
+                        <div onclick="selectCorrectAnswer(1)" id="opt-card-a" class="flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                            <div class="flex items-start space-x-3">
+                                <span class="text-blue-300 font-black text-lg shrink-0">A.</span>
+                                <span id="opt-text-a" class="text-blue-100 font-bold text-lg">—</span>
+                            </div>
+                            <span id="opt-count-a" class="text-blue-200 font-black text-2xl ml-3">0</span>
                         </div>
-                        <div class="flex items-start space-x-3 bg-indigo-900/20 border border-indigo-500/30 px-4 py-3 rounded-xl">
-                            <span class="text-indigo-300 font-black text-lg shrink-0">B.</span>
-                            <span id="opt-text-b" class="text-indigo-100 font-bold text-lg">—</span>
+                        <div onclick="selectCorrectAnswer(2)" id="opt-card-b" class="flex items-center justify-between cursor-pointer bg-indigo-900/20 border-2 border-indigo-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                            <div class="flex items-start space-x-3">
+                                <span class="text-indigo-300 font-black text-lg shrink-0">B.</span>
+                                <span id="opt-text-b" class="text-indigo-100 font-bold text-lg">—</span>
+                            </div>
+                            <span id="opt-count-b" class="text-indigo-200 font-black text-2xl ml-3">0</span>
                         </div>
-                        <div class="flex items-start space-x-3 bg-sky-900/20 border border-sky-500/30 px-4 py-3 rounded-xl">
-                            <span class="text-sky-300 font-black text-lg shrink-0">C.</span>
-                            <span id="opt-text-c" class="text-sky-100 font-bold text-lg">—</span>
+                        <div onclick="selectCorrectAnswer(3)" id="opt-card-c" class="flex items-center justify-between cursor-pointer bg-sky-900/20 border-2 border-sky-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                            <div class="flex items-start space-x-3">
+                                <span class="text-sky-300 font-black text-lg shrink-0">C.</span>
+                                <span id="opt-text-c" class="text-sky-100 font-bold text-lg">—</span>
+                            </div>
+                            <span id="opt-count-c" class="text-sky-200 font-black text-2xl ml-3">0</span>
                         </div>
-                        <div class="flex items-start space-x-3 bg-cyan-900/20 border border-cyan-500/30 px-4 py-3 rounded-xl">
-                            <span class="text-cyan-300 font-black text-lg shrink-0">D.</span>
-                            <span id="opt-text-d" class="text-cyan-100 font-bold text-lg">—</span>
+                        <div onclick="selectCorrectAnswer(4)" id="opt-card-d" class="flex items-center justify-between cursor-pointer bg-cyan-900/20 border-2 border-cyan-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                            <div class="flex items-start space-x-3">
+                                <span class="text-cyan-300 font-black text-lg shrink-0">D.</span>
+                                <span id="opt-text-d" class="text-cyan-100 font-bold text-lg">—</span>
+                            </div>
+                            <span id="opt-count-d" class="text-cyan-200 font-black text-2xl ml-3">0</span>
                         </div>
                     </div>
                 </div>
@@ -134,40 +146,6 @@
                     </div>
                 </div>
 
-                <!-- 選項分布 -->
-                <div class="grid grid-cols-4 gap-6">
-                    <div class="bg-blue-900/30 border border-blue-500/50 p-6 rounded-2xl text-center">
-                        <p class="text-blue-300 font-bold text-xl mb-2">選項 A</p>
-                        <p id="count-A" class="text-5xl font-black text-blue-100">0</p>
-                    </div>
-                    <div class="bg-indigo-900/30 border border-indigo-500/50 p-6 rounded-2xl text-center">
-                        <p class="text-indigo-300 font-bold text-xl mb-2">選項 B</p>
-                        <p id="count-B" class="text-5xl font-black text-indigo-100">0</p>
-                    </div>
-                    <div class="bg-sky-900/30 border border-sky-500/50 p-6 rounded-2xl text-center">
-                        <p class="text-sky-300 font-bold text-xl mb-2">選項 C</p>
-                        <p id="count-C" class="text-5xl font-black text-sky-100">0</p>
-                    </div>
-                    <div class="bg-cyan-900/30 border border-cyan-500/50 p-6 rounded-2xl text-center">
-                        <p class="text-cyan-300 font-bold text-xl mb-2">選項 D</p>
-                        <p id="count-D" class="text-5xl font-black text-cyan-100">0</p>
-                    </div>
-                </div>
-
-                <!-- 正確答案選擇 -->
-                <div id="answer-selector" class="bg-midnight-900/60 p-6 rounded-2xl border-2 border-emerald-500/50">
-                    <h3 class="text-2xl font-bold text-gold-200 mb-4">✅ 選擇正確答案</h3>
-                    <div class="grid grid-cols-4 gap-4">
-                        <button onclick="selectCorrectAnswer(1)" id="ans-btn-1"
-                            class="py-4 rounded-xl font-black text-2xl text-white bg-midnight-800 border-2 border-gold-700/50 transition-all hover:border-emerald-400">A</button>
-                        <button onclick="selectCorrectAnswer(2)" id="ans-btn-2"
-                            class="py-4 rounded-xl font-black text-2xl text-white bg-midnight-800 border-2 border-gold-700/50 transition-all hover:border-emerald-400">B</button>
-                        <button onclick="selectCorrectAnswer(3)" id="ans-btn-3"
-                            class="py-4 rounded-xl font-black text-2xl text-white bg-midnight-800 border-2 border-gold-700/50 transition-all hover:border-emerald-400">C</button>
-                        <button onclick="selectCorrectAnswer(4)" id="ans-btn-4"
-                            class="py-4 rounded-xl font-black text-2xl text-white bg-midnight-800 border-2 border-gold-700/50 transition-all hover:border-emerald-400">D</button>
-                    </div>
-                </div>
 
                 <div class="text-center mt-6">
                     <button onclick="fetchCurrentQuestionStats()" class="text-gold-400 hover:text-gold-200 underline">🔄
@@ -245,8 +223,8 @@
                 document.getElementById('opt-text-c').innerText = q.option_c || '—';
                 document.getElementById('opt-text-d').innerText = q.option_d || '—';
                 document.getElementById('q-options-display').classList.remove('hidden');
-                selectedAnswer = q.answer;
-                highlightSelectedAnswer(selectedAnswer);
+                selectedAnswer = 0;
+                highlightSelectedAnswer(0);
                 fetchCurrentQuestionStats();
             });
 
@@ -360,13 +338,17 @@
         }
 
         function highlightSelectedAnswer(choice) {
-            for (let i = 1; i <= 4; i++) {
-                const btn = document.getElementById('ans-btn-' + i);
-                if (i === choice) {
-                    btn.className = "py-4 rounded-xl font-black text-2xl text-white bg-emerald-700 border-2 border-emerald-400 ring-4 ring-emerald-400/50 transition-all";
-                } else {
-                    btn.className = "py-4 rounded-xl font-black text-2xl text-white bg-midnight-800 border-2 border-gold-700/50 transition-all hover:border-emerald-400";
-                }
+            const cards = ['a', 'b', 'c', 'd'];
+            const defaultStyles = [
+                'flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400',
+                'flex items-center justify-between cursor-pointer bg-indigo-900/20 border-2 border-indigo-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400',
+                'flex items-center justify-between cursor-pointer bg-sky-900/20 border-2 border-sky-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400',
+                'flex items-center justify-between cursor-pointer bg-cyan-900/20 border-2 border-cyan-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400'
+            ];
+            const selectedStyle = 'flex items-center justify-between cursor-pointer bg-emerald-900/30 border-2 border-emerald-400 ring-4 ring-emerald-400/50 px-4 py-3 rounded-xl transition-all';
+            for (let i = 0; i < 4; i++) {
+                const card = document.getElementById('opt-card-' + cards[i]);
+                card.className = (i + 1 === choice) ? selectedStyle : defaultStyles[i];
             }
         }
 
@@ -459,10 +441,10 @@
                 });
             }
 
-            document.getElementById('count-A').innerText = counts[1];
-            document.getElementById('count-B').innerText = counts[2];
-            document.getElementById('count-C').innerText = counts[3];
-            document.getElementById('count-D').innerText = counts[4];
+            document.getElementById('opt-count-a').innerText = counts[1];
+            document.getElementById('opt-count-b').innerText = counts[2];
+            document.getElementById('opt-count-c').innerText = counts[3];
+            document.getElementById('opt-count-d').innerText = counts[4];
 
             // 更新提交進度
             const submittedCount = respondedNames.size;
