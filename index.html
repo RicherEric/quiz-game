@@ -50,6 +50,18 @@
 <body class="bg-midnight-950 text-gold-100 font-sans min-h-screen">
     <div id="app" class="max-w-3xl mx-auto p-6">
 
+        <div id="no-token-ui" class="hidden text-center mt-16 space-y-8">
+            <div class="flex flex-col items-center justify-center space-y-6">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                    class="h-32 md:h-40 drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+                <h1 class="text-5xl md:text-6xl font-black text-gold-gradient tracking-tight drop-shadow-lg">滙智 10 週年挑戰賽</h1>
+            </div>
+            <div class="bg-midnight-900/50 p-8 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm">
+                <p class="text-3xl text-gold-200 font-bold mb-4">請掃描 QR Code 加入遊戲</p>
+                <p class="text-xl text-gold-300/80">請在主持人的螢幕上掃描 QR Code 來參與挑戰</p>
+            </div>
+        </div>
+
         <div id="login-ui" class="text-center mt-16 space-y-8">
             <div class="flex flex-col items-center justify-center space-y-6">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
@@ -142,28 +154,57 @@
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
 
-        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [];
+        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [], qrToken = null;
         let countdownTimer = null;
         const COUNTDOWN_TOTAL = 15000; // 15 seconds in ms
         const COUNTDOWN_CIRCUMFERENCE = 2 * Math.PI * 28; // ~175.93
 
-        window.onload = () => {
-            if (window.supabase) {
-                sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-                console.log("Supabase 初始化成功");
-            } else {
+        window.onload = async () => {
+            if (!window.supabase) {
                 alert("網路不穩定，通訊元件載入失敗，請重新整理網頁");
+                return;
             }
+            sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+            // 檢查 URL 是否有 QR token
+            const urlParams = new URLSearchParams(window.location.search);
+            qrToken = urlParams.get('token');
+
+            if (!qrToken) {
+                // 沒有 token → 顯示「請掃描 QR Code」提示
+                document.getElementById('login-ui').classList.add('hidden');
+                document.getElementById('no-token-ui').classList.remove('hidden');
+                return;
+            }
+
+            // 有 token → 匿名登入
+            const { data: { session } } = await sbClient.auth.getSession();
+            if (!session) {
+                const { error } = await sbClient.auth.signInAnonymously();
+                if (error) {
+                    alert("認證失敗，請重新掃描 QR Code");
+                    console.error("Anonymous sign-in error:", error);
+                    return;
+                }
+            }
+            console.log("Supabase 初始化成功，已匿名登入");
         };
 
         async function join() {
-            if (!sbClient) sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
             myName = document.getElementById('p-name').value.trim();
             if (!myName) return alert("請輸入名字");
 
-            const { error } = await sbClient.from('players').insert({ name: myName });
-            if (error) return alert("名字可能被拿走囉，請換一個！");
+            // 透過 RPC 驗證 QR token 並加入遊戲
+            const { data, error } = await sbClient.rpc('join_via_qr', {
+                qr_token: qrToken,
+                player_name: myName
+            });
+            if (error) {
+                if (error.message && error.message.includes('Invalid QR token')) {
+                    return alert("無效的 QR Code，請重新掃描！");
+                }
+                return alert("名字可能被拿走囉，請換一個！");
+            }
 
             // 載入題目 ID 順序，用於顯示題號
             const { data: qList } = await sbClient.from('questions').select('id').order('id', { ascending: true });
@@ -370,9 +411,12 @@
 
             const elapsedMs = startTime ? Date.now() - startTime : 0;
 
-            // 只記錄作答，不判斷對錯、不計算分數（由 admin 結算）
-            sbClient.from('responses').insert({
-                player_name: myName, question_id: currentQ.id, choice: choice, is_correct: null, response_time_ms: elapsedMs
+            // 透過 RPC 提交答案（RLS 保護）
+            sbClient.rpc('submit_response', {
+                p_player_name: myName,
+                p_question_id: currentQ.id,
+                p_choice: choice,
+                p_response_time_ms: elapsedMs
             }).then();
 
             if (choice === 0) {

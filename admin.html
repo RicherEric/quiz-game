@@ -258,7 +258,7 @@
 
     <script>
         function showQRCode() {
-            const playerUrl = window.location.origin + '/';
+            const playerUrl = window.location.origin + '/?token=' + 'qz-w10-8f3a2b1c4d5e6f7a';
             const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=' + encodeURIComponent(playerUrl);
             document.getElementById('qr-img').src = qrApiUrl;
             document.getElementById('qr-url').innerText = playerUrl;
@@ -271,8 +271,10 @@
 
     <script>
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
-        const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // TODO: 請替換為你的 Supabase service_role key（Supabase Dashboard → Settings → API）
+        const SUPABASE_SERVICE_KEY = "YOUR_SUPABASE_SERVICE_ROLE_KEY";
+        const QR_FIXED_TOKEN = "qz-w10-8f3a2b1c4d5e6f7a";
+        const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
         let questions = [];
         let selectedAnswer = 0;
@@ -294,6 +296,14 @@
                 updateControlButtons('waiting');
             } catch (err) {
                 console.error("初始化檢查失敗", err);
+            }
+
+            // 自動初始化 QR token
+            try {
+                await sbClient.from('qr_tokens').upsert({ id: 1, token: QR_FIXED_TOKEN }, { onConflict: 'id' });
+                console.log("QR token 已初始化");
+            } catch (err) {
+                console.error("QR token 初始化失敗", err);
             }
 
             // 載入題庫到下拉選單
