@@ -380,19 +380,25 @@
             const qId = parseInt(document.getElementById('q-selector').value);
             if (!qId) return alert("請選擇題目");
 
-            if (!selectedAnswer) {
-                alert("請先選擇正確答案！");
-                return;
-            }
-
             const q = questions.find(x => x.id === qId);
+
+            // 若 admin 未手動選擇正確答案，則使用資料庫中的預設答案
+            if (!selectedAnswer) {
+                if (q && q.answer) {
+                    selectedAnswer = q.answer;
+                    highlightSelectedAnswer(selectedAnswer);
+                } else {
+                    alert("請先選擇正確答案！（此題資料庫中也無預設答案）");
+                    return;
+                }
+            }
             const points = q ? (q.points || 1000) : 1000;
 
             // 取得此題所有作答
             const { data: responses, error: rErr } = await sbClient.from('responses').select('*').eq('question_id', qId);
             if (rErr) return alert("無法讀取作答資料：" + rErr.message);
 
-            // 計算並更新分數
+            // 計算並更新分數（含時間加成）
             let correctCount = 0;
             for (const r of (responses || [])) {
                 const isCorrect = (r.choice === selectedAnswer && r.choice !== 0);
@@ -401,11 +407,14 @@
                 // 更新 response 的 is_correct
                 await sbClient.from('responses').update({ is_correct: isCorrect }).eq('id', r.id);
 
-                // 答對的加分
+                // 答對的加分（依答題速度加成）
                 if (isCorrect) {
+                    const remainingMs = Math.max(0, 15000 - (r.response_time_ms || 15000));
+                    const score = Math.round(points * (1 + (remainingMs / 15000) * 0.75));
+
                     const { data: player } = await sbClient.from('players').select('score').eq('name', r.player_name).single();
                     if (player) {
-                        await sbClient.from('players').update({ score: player.score + points }).eq('name', r.player_name);
+                        await sbClient.from('players').update({ score: player.score + score }).eq('name', r.player_name);
                     }
                 }
             }
@@ -478,14 +487,42 @@
             document.getElementById('submit-progress-bar').style.width = pct + '%';
 
             // 更新各玩家提交狀態
+            // Build a map of player_name -> choice for detail display
+            const choiceMap = {};
+            if (responses) {
+                responses.forEach(r => { choiceMap[r.player_name] = r.choice; });
+            }
+            const choiceLabels = { 1: 'A', 2: 'B', 3: 'C', 4: 'D', 0: '未答' };
+            const choiceColors = {
+                1: 'text-blue-300 bg-blue-900/40',
+                2: 'text-indigo-300 bg-indigo-900/40',
+                3: 'text-sky-300 bg-sky-900/40',
+                4: 'text-cyan-300 bg-cyan-900/40',
+                0: 'text-red-400 bg-red-900/40'
+            };
+
             const { data: allPlayers } = await sbClient.from('players').select('name').order('name');
             if (allPlayers) {
                 let html = '';
                 allPlayers.forEach(p => {
                     const submitted = respondedNames.has(p.name);
+                    const showChoice = submitted && currentState === 'stopped';
+                    const choice = choiceMap[p.name];
+                    const choiceLabel = choiceLabels[choice] || '?';
+                    const choiceColor = choiceColors[choice] || 'text-gold-400';
+
+                    let statusHtml;
+                    if (showChoice) {
+                        statusHtml = `<span class="${choiceColor} font-black text-lg px-2 py-0.5 rounded">${choiceLabel}</span>`;
+                    } else if (submitted) {
+                        statusHtml = `<span class="text-emerald-400 font-bold whitespace-nowrap">✓ 已提交</span>`;
+                    } else {
+                        statusHtml = `<span class="text-gold-400/50 font-bold whitespace-nowrap">⏳ 等待中</span>`;
+                    }
+
                     html += `<div class="flex justify-between items-center px-3 py-2 rounded-lg text-sm ${submitted ? 'bg-emerald-900/30 border border-emerald-700/50' : 'bg-midnight-900/50 border border-gold-800/30'}">
                         <span class="font-bold truncate mr-2">${p.name}</span>
-                        <span class="${submitted ? 'text-emerald-400' : 'text-gold-400/50'} font-bold whitespace-nowrap">${submitted ? '✓ 已提交' : '⏳ 等待中'}</span>
+                        ${statusHtml}
                     </div>`;
                 });
                 document.getElementById('player-status-list').innerHTML = html || '<div class="text-gold-400/50 text-center py-4 col-span-full">尚無玩家</div>';
@@ -504,17 +541,44 @@
                     // 取得當前題目的作答名單（如果有選題的話）
                     const qId = document.getElementById('q-selector').value;
                     let respondedNames = new Set();
+                    const choiceMap = {};
                     if (qId) {
-                        const { data: responses } = await sbClient.from('responses').select('player_name').eq('question_id', qId);
-                        if (responses) responses.forEach(r => respondedNames.add(r.player_name));
+                        const { data: responses } = await sbClient.from('responses').select('player_name, choice').eq('question_id', qId);
+                        if (responses) responses.forEach(r => {
+                            respondedNames.add(r.player_name);
+                            choiceMap[r.player_name] = r.choice;
+                        });
                     }
+
+                    const choiceLabels = { 1: 'A', 2: 'B', 3: 'C', 4: 'D', 0: '未答' };
+                    const choiceColors = {
+                        1: 'text-blue-300 bg-blue-900/40',
+                        2: 'text-indigo-300 bg-indigo-900/40',
+                        3: 'text-sky-300 bg-sky-900/40',
+                        4: 'text-cyan-300 bg-cyan-900/40',
+                        0: 'text-red-400 bg-red-900/40'
+                    };
 
                     let html = '';
                     allPlayers.forEach(p => {
                         const submitted = respondedNames.has(p.name);
+                        const showChoice = submitted && currentState === 'stopped';
+                        const choice = choiceMap[p.name];
+                        const choiceLabel = choiceLabels[choice] || '?';
+                        const choiceColor = choiceColors[choice] || 'text-gold-400';
+
+                        let statusHtml;
+                        if (showChoice) {
+                            statusHtml = `<span class="${choiceColor} font-black text-lg px-2 py-0.5 rounded">${choiceLabel}</span>`;
+                        } else if (submitted) {
+                            statusHtml = `<span class="text-emerald-400 font-bold whitespace-nowrap">✓ 已提交</span>`;
+                        } else {
+                            statusHtml = `<span class="text-gold-400/50 font-bold whitespace-nowrap">⏳ 等待中</span>`;
+                        }
+
                         html += `<div class="flex justify-between items-center px-3 py-2 rounded-lg text-sm ${submitted ? 'bg-emerald-900/30 border border-emerald-700/50' : 'bg-midnight-900/50 border border-gold-800/30'}">
                             <span class="font-bold truncate mr-2">${p.name}</span>
-                            <span class="${submitted ? 'text-emerald-400' : 'text-gold-400/50'} font-bold whitespace-nowrap">${submitted ? '✓ 已提交' : '⏳ 等待中'}</span>
+                            ${statusHtml}
                         </div>`;
                     });
                     document.getElementById('player-status-list').innerHTML = html;

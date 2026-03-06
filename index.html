@@ -36,6 +36,14 @@
         .text-gold-gradient {
             @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-200 to-gold-500;
         }
+
+        .countdown-ring {
+            transform: rotate(-90deg);
+        }
+
+        .countdown-ring circle {
+            transition: stroke-dashoffset 0.1s linear;
+        }
     </style>
 </head>
 
@@ -83,9 +91,20 @@
             </div>
 
             <div class="py-6 text-center space-y-4 bg-midnight-900/40 rounded-3xl p-6 border border-gold-800/30">
-                <div id="q-category"
-                    class="text-lg text-gold-300 font-bold uppercase bg-midnight-800/80 px-6 py-2 rounded-full border-2 border-gold-600/50 inline-block">
-                    Question</div>
+                <div class="flex items-center justify-between">
+                    <div id="q-category"
+                        class="text-lg text-gold-300 font-bold uppercase bg-midnight-800/80 px-6 py-2 rounded-full border-2 border-gold-600/50 inline-block">
+                        Question</div>
+                    <div id="countdown-container" class="relative flex items-center justify-center">
+                        <svg class="countdown-ring" width="64" height="64" viewBox="0 0 64 64">
+                            <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(187,82,0,0.3)" stroke-width="5" />
+                            <circle id="countdown-circle" cx="32" cy="32" r="28" fill="none" stroke="#ffaa1d"
+                                stroke-width="5" stroke-linecap="round"
+                                stroke-dasharray="175.93" stroke-dashoffset="0" />
+                        </svg>
+                        <span id="countdown-text" class="absolute text-xl font-black text-gold-300">15.0</span>
+                    </div>
+                </div>
                 <h2 id="q-text" class="text-3xl font-bold leading-tight text-gold-100">載入中...</h2>
             </div>
 
@@ -121,6 +140,9 @@
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
 
         let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [];
+        let countdownTimer = null;
+        const COUNTDOWN_TOTAL = 15000; // 15 seconds in ms
+        const COUNTDOWN_CIRCUMFERENCE = 2 * Math.PI * 28; // ~175.93
 
         window.onload = () => {
             if (window.supabase) {
@@ -194,6 +216,50 @@
             );
         }
 
+        function startCountdown() {
+            stopCountdown();
+            const countdownStart = Date.now();
+            const textEl = document.getElementById('countdown-text');
+            const circleEl = document.getElementById('countdown-circle');
+
+            countdownTimer = setInterval(() => {
+                const elapsed = Date.now() - countdownStart;
+                const remaining = Math.max(0, COUNTDOWN_TOTAL - elapsed);
+                const seconds = (remaining / 1000).toFixed(1);
+
+                textEl.innerText = seconds;
+                // Update ring: full circle = 0 offset, empty = full circumference
+                const offset = COUNTDOWN_CIRCUMFERENCE * (1 - remaining / COUNTDOWN_TOTAL);
+                circleEl.setAttribute('stroke-dashoffset', offset);
+
+                // Color transition: gold -> red as time runs out
+                if (remaining < 5000) {
+                    circleEl.setAttribute('stroke', '#ef4444');
+                    textEl.classList.remove('text-gold-300');
+                    textEl.classList.add('text-red-400');
+                } else {
+                    circleEl.setAttribute('stroke', '#ffaa1d');
+                    textEl.classList.remove('text-red-400');
+                    textEl.classList.add('text-gold-300');
+                }
+
+                if (remaining <= 0) {
+                    stopCountdown();
+                    if (!hasAnswered) {
+                        // Auto-submit: send current selection (or 0 if nothing selected)
+                        processAnswer(currentSelection);
+                    }
+                }
+            }, 100);
+        }
+
+        function stopCountdown() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+        }
+
         async function handleStateChange(status) {
             if (status.state === 'waiting') {
                 hideAllUI();
@@ -214,15 +280,18 @@
                     document.getElementById('game-ui').classList.remove('hidden');
                     resetUI();
                     refreshUI(q);
+                    startCountdown();
                 }
             }
             else if (status.state === 'stopped') {
+                stopCountdown();
                 // 停止作答：未答題者自動提交
                 if (!hasAnswered) {
-                    processAnswer(0);
+                    processAnswer(currentSelection);
                 }
             }
             else if (status.state === 'scoring') {
+                stopCountdown();
                 hideAllUI();
                 document.getElementById('scoring-ui').classList.remove('hidden');
             }
@@ -241,6 +310,13 @@
                 btn.disabled = false;
                 btn.classList.remove('grayscale', 'selected-opt', 'dimmed-opt');
             });
+            // Reset countdown display
+            document.getElementById('countdown-text').innerText = '15.0';
+            document.getElementById('countdown-text').classList.remove('text-red-400');
+            document.getElementById('countdown-text').classList.add('text-gold-300');
+            const circleEl = document.getElementById('countdown-circle');
+            circleEl.setAttribute('stroke-dashoffset', '0');
+            circleEl.setAttribute('stroke', '#ffaa1d');
         }
 
         function refreshUI(q) {
@@ -272,6 +348,7 @@
         async function processAnswer(choice) {
             if (hasAnswered) return;
             hasAnswered = true;
+            stopCountdown();
             document.getElementById('submit-btn').classList.add('hidden');
             document.querySelectorAll('.option-btn').forEach(btn => btn.disabled = true);
 
