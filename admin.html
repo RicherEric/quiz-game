@@ -207,8 +207,8 @@
             if (!questions || questions.length === 0) {
                 select.innerHTML = '<option value="">(無題目資料)</option>';
             } else {
-                questions.forEach(q => {
-                    select.innerHTML += `<option value="${q.id}">Q${q.id}: ${q.question}</option>`;
+                questions.forEach((q, idx) => {
+                    select.innerHTML += `<option value="${q.id}">Q${idx + 1}: ${q.question}</option>`;
                 });
             }
 
@@ -217,7 +217,8 @@
                 const qId = select.value;
                 if (!qId) return;
                 const q = questions.find(x => x.id == qId);
-                document.getElementById('stats-q-text').innerText = `Q${q.id}: ${q.question}`;
+                const qIdx = questions.findIndex(x => x.id == qId);
+                document.getElementById('stats-q-text').innerText = `Q${qIdx + 1}: ${q.question}`;
                 // 顯示選項內容
                 document.getElementById('opt-text-a').innerText = q.option_a || '—';
                 document.getElementById('opt-text-b').innerText = q.option_b || '—';

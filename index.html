@@ -120,7 +120,7 @@
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
 
-        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null;
+        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [];
 
         window.onload = () => {
             if (window.supabase) {
@@ -139,6 +139,10 @@
 
             const { error } = await sbClient.from('players').insert({ name: myName });
             if (error) return alert("名字可能被拿走囉，請換一個！");
+
+            // 載入題目 ID 順序，用於顯示題號
+            const { data: qList } = await sbClient.from('questions').select('id').order('id', { ascending: true });
+            questionIdOrder = (qList || []).map(q => q.id);
 
             document.getElementById('user-display').innerText = myName;
             document.getElementById('login-ui').classList.add('hidden');
@@ -240,7 +244,8 @@
         }
 
         function refreshUI(q) {
-            document.getElementById('q-category').innerText = `Question ${q.id}`;
+            const qNum = questionIdOrder.indexOf(q.id) + 1 || q.id;
+            document.getElementById('q-category').innerText = `Question ${qNum}`;
             document.getElementById('q-text').innerText = q.question;
             document.getElementById('opt1').innerText = q.option_a;
             document.getElementById('opt2').innerText = q.option_b;
