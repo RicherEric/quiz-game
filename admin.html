@@ -79,13 +79,41 @@
         <div class="flex space-x-2 border-b border-gold-800/50">
             <button onclick="switchTab('tab-stats')" id="btn-tab-stats" class="tab-btn tab-active">📊 作答監控</button>
             <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">🏆 總積分排行榜</button>
+            <div class="ml-auto">
+                <button onclick="resetAll()"
+                    class="px-6 py-3 font-bold text-lg rounded-xl bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 transition">
+                    🔄 重置所有答題
+                </button>
+            </div>
         </div>
 
         <main
             class="bg-midnight-800/50 rounded-b-3xl rounded-tr-3xl border border-gold-700/30 shadow-2xl p-8 min-h-[500px]">
 
             <div id="tab-stats" class="space-y-6">
-                <h2 id="stats-q-text" class="text-3xl font-bold text-gold-100 mb-6">請從上方選擇題目...</h2>
+                <h2 id="stats-q-text" class="text-3xl font-bold text-gold-100 mb-4">請從上方選擇題目...</h2>
+
+                <!-- 題目選項 -->
+                <div id="q-options-display" class="bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30 hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="flex items-start space-x-3 bg-blue-900/20 border border-blue-500/30 px-4 py-3 rounded-xl">
+                            <span class="text-blue-300 font-black text-lg shrink-0">A.</span>
+                            <span id="opt-text-a" class="text-blue-100 font-bold text-lg">—</span>
+                        </div>
+                        <div class="flex items-start space-x-3 bg-indigo-900/20 border border-indigo-500/30 px-4 py-3 rounded-xl">
+                            <span class="text-indigo-300 font-black text-lg shrink-0">B.</span>
+                            <span id="opt-text-b" class="text-indigo-100 font-bold text-lg">—</span>
+                        </div>
+                        <div class="flex items-start space-x-3 bg-sky-900/20 border border-sky-500/30 px-4 py-3 rounded-xl">
+                            <span class="text-sky-300 font-black text-lg shrink-0">C.</span>
+                            <span id="opt-text-c" class="text-sky-100 font-bold text-lg">—</span>
+                        </div>
+                        <div class="flex items-start space-x-3 bg-cyan-900/20 border border-cyan-500/30 px-4 py-3 rounded-xl">
+                            <span class="text-cyan-300 font-black text-lg shrink-0">D.</span>
+                            <span id="opt-text-d" class="text-cyan-100 font-bold text-lg">—</span>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- 提交狀況 -->
                 <div class="bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30">
@@ -149,7 +177,7 @@
 
             <div id="tab-leaderboard" class="hidden">
                 <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-gold-100">Top 15 榮耀排行榜</h2>
+                    <h2 class="text-3xl font-bold text-gold-100">榮耀排行榜</h2>
                     <p class="text-gold-400/80">參賽總人數: <span id="total-players"
                             class="font-bold text-2xl text-gold-200">0</span></p>
                 </div>
@@ -211,6 +239,12 @@
                 if (!qId) return;
                 const q = questions.find(x => x.id == qId);
                 document.getElementById('stats-q-text').innerText = `Q${q.id}: ${q.question}`;
+                // 顯示選項內容
+                document.getElementById('opt-text-a').innerText = q.option_a || '—';
+                document.getElementById('opt-text-b').innerText = q.option_b || '—';
+                document.getElementById('opt-text-c').innerText = q.option_c || '—';
+                document.getElementById('opt-text-d').innerText = q.option_d || '—';
+                document.getElementById('q-options-display').classList.remove('hidden');
                 selectedAnswer = q.answer;
                 highlightSelectedAnswer(selectedAnswer);
                 fetchCurrentQuestionStats();
@@ -455,7 +489,7 @@
 
         // 讀取總排行榜
         async function fetchLeaderboard() {
-            const { data: players, count } = await sbClient.from('players').select('*', { count: 'exact' }).order('score', { ascending: false }).limit(15);
+            const { data: players, count } = await sbClient.from('players').select('*', { count: 'exact' }).order('score', { ascending: false });
             document.getElementById('total-players').innerText = count || 0;
 
             const container = document.getElementById('leaderboard-container');
@@ -483,6 +517,38 @@
 
             document.getElementById(tabId).classList.remove('hidden');
             document.getElementById('btn-' + tabId).classList.add('tab-active');
+        }
+
+        // 重置所有答題狀況
+        async function resetAll() {
+            if (!confirm('確定要重置所有答題紀錄嗎？\n\n這將會：\n• 清除所有作答紀錄\n• 將所有玩家積分歸零\n• 遊戲狀態回到待機中\n\n此操作無法復原！')) return;
+
+            try {
+                // 清除所有作答紀錄
+                await sbClient.from('responses').delete().neq('id', 0);
+
+                // 將所有玩家積分歸零
+                await sbClient.from('players').update({ score: 0 }).neq('id', 0);
+
+                // 遊戲狀態回到 waiting，題目回到第一題
+                await sbClient.from('game_status').update({
+                    current_q_id: questions.length > 0 ? questions[0].id : 1,
+                    state: 'waiting',
+                    start_time: 0
+                }).eq('id', 1);
+
+                // 重設本地狀態
+                const select = document.getElementById('q-selector');
+                select.selectedIndex = 0;
+                select.dispatchEvent(new Event('change'));
+                updateControlButtons('waiting');
+                fetchLeaderboard();
+
+                alert('已成功重置所有答題紀錄！');
+            } catch (err) {
+                console.error('重置失敗', err);
+                alert('重置失敗：' + err.message);
+            }
         }
 
         initAdmin();
