@@ -1,296 +1,222 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
+<script>
+    const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+    const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const FIXED_TIME = 10;
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>滙智 10 週年互動問答</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        gold: { 50: '#fff9eb', 100: '#ffedc6', 200: '#ffda88', 300: '#ffc24a', 400: '#ffaa1d', 500: '#f98c00', 600: '#e47000', 700: '#bb5200', 800: '#964000', 900: '#7c3500', 950: '#461b00' },
-                        midnight: { 900: '#0f172a', 950: '#020617' }
-                    }
-                }
-            }
+    let myName = "", currentQ = null, startTime = 0, timerInterval = null, hasAnswered = false, currentSelection = 0, totalScore = 0;
+    let channel = null;
+
+    async function join() {
+        myName = document.getElementById('p-name').value.trim();
+        if (!myName) return alert("請輸入名字");
+
+        // 檢查暱稱是否重複，若重複則嘗試讀取舊有總分 (若有實作持久化可用，目前先維持 insert)
+        const { error } = await sbClient.from('players').insert({ name: myName });
+        if (error) return alert("名字可能被拿走囉，請換一個！");
+
+        document.getElementById('user-display').innerText = myName;
+        document.getElementById('login-ui').classList.add('hidden');
+        document.getElementById('waiting-ui').classList.remove('hidden');
+
+        listenToHost(); // 開啟監聽
+    }
+
+    function listenToHost() {
+        // 1. 先抓取目前的狀態 (處理中途加入)
+        checkCurrentStatus();
+
+        // 2. 建立 Realtime 頻道
+        if (channel) sbClient.removeChannel(channel);
+
+        channel = sbClient.channel('quiz-control')
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'game_status',
+                filter: 'id=eq.1'
+            }, (payload) => {
+                console.log("收到狀態更新:", payload.new);
+                handleStateChange(payload.new);
+            })
+            .subscribe((status) => {
+                console.log("Realtime 訂閱狀態:", status);
+            });
+    }
+
+    async function checkCurrentStatus() {
+        const { data, error } = await sbClient.from('game_status').select('*').eq('id', 1).single();
+        if (data) {
+            console.log("初始狀態讀取:", data);
+            handleStateChange(data);
         }
-    </script>
-    <style>
-        .option-btn {
-            @apply w-full py-6 text-2xl font-bold text-white rounded-2xl shadow-lg transform transition-all active:scale-95 disabled:grayscale-[0.5] disabled:opacity-50;
-        }
+    }
 
-        .selected-opt {
-            @apply ring-4 ring-gold-400 scale-95 shadow-[0_0_20px_rgba(251, 191, 36, 0.5)];
-        }
-
-        .dimmed-opt {
-            @apply opacity-50 saturate-50;
-        }
-
-        .text-gold-gradient {
-            @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-200 to-gold-500;
-        }
-
-        .timer-flash {
-            animation: flash 1s infinite;
-        }
-
-        @keyframes flash {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.3;
-            }
-        }
-    </style>
-</head>
-
-<body class="bg-midnight-950 text-gold-100 font-sans min-h-screen">
-    <div id="app" class="max-w-3xl mx-auto p-6">
-
-        <div id="login-ui" class="text-center mt-16 space-y-8">
-            <div class="flex flex-col items-center justify-center space-y-6">
-                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
-                    class="h-32 md:h-40 drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
-                <h1 class="text-5xl md:text-6xl font-black text-gold-gradient tracking-tight drop-shadow-lg">滙智 10 週年挑戰賽
-                </h1>
-            </div>
-            <div class="bg-midnight-900/50 p-8 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm">
-                <input id="p-name" type="text" placeholder="請輸入您的暱稱"
-                    class="w-full p-5 rounded-2xl text-midnight-950 text-2xl text-center focus:ring-4 focus:ring-gold-500 outline-none shadow-inner bg-gold-100 placeholder-gold-800/50 font-bold border-2 border-gold-600/50">
-                <button onclick="join()"
-                    class="w-full mt-6 bg-gradient-to-r from-gold-500 to-gold-700 py-5 rounded-2xl text-3xl font-black shadow-[0_0_25px_rgba(251,191,36,0.4)] text-midnight-950">登入挑戰</button>
-            </div>
-        </div>
-
-        <div id="waiting-ui" class="hidden text-center mt-32 space-y-10">
-            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md">
-                <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-gold-400 mx-auto mb-6"></div>
-                <h2 class="text-4xl font-bold text-gold-100 mb-4">哈囉，<span id="user-display"
-                        class="text-gold-gradient"></span></h2>
-                <p class="text-2xl text-gold-200/80 leading-relaxed">請看大螢幕，<br>等待主持人開放作答...</p>
-            </div>
-        </div>
-
-        <div id="game-ui" class="hidden space-y-6">
-            <div
-                class="flex justify-between items-center bg-midnight-900/70 p-5 rounded-3xl border-2 border-gold-600/40">
-                <div class="flex flex-col"><span class="text-sm text-gold-400/80 font-bold">目前總分</span><span
-                        id="score-display" class="text-4xl font-black text-gold-gradient">0</span></div>
-                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
-                    class="h-12 opacity-80">
-                <div class="text-right"><span class="text-sm text-gold-400/80 font-bold">剩餘時間</span>
-                    <div id="timer" class="text-4xl font-mono font-bold text-gold-200">10.0s</div>
-                </div>
-            </div>
-
-            <div class="py-6 text-center space-y-4 bg-midnight-900/40 rounded-3xl p-6 border border-gold-800/30">
-                <div id="q-category"
-                    class="text-lg text-gold-300 font-bold uppercase bg-midnight-800/80 px-6 py-2 rounded-full border-2 border-gold-600/50">
-                    Question</div>
-                <h2 id="q-text" class="text-3xl font-bold leading-tight text-gold-100">載入中...</h2>
-            </div>
-
-            <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <button onclick="selectOption(1)" id="opt1"
-                    class="option-btn bg-blue-900 border-2 border-gold-600/50">A</button>
-                <button onclick="selectOption(2)" id="opt2"
-                    class="option-btn bg-indigo-900 border-2 border-gold-600/50">B</button>
-                <button onclick="selectOption(3)" id="opt3"
-                    class="option-btn bg-sky-900 border-2 border-gold-600/50">C</button>
-                <button onclick="selectOption(4)" id="opt4"
-                    class="option-btn bg-cyan-900 border-2 border-gold-600/50">D</button>
-            </div>
-
-            <button id="submit-btn" onclick="submitAnswer()"
-                class="w-full mt-6 py-5 bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 rounded-2xl text-3xl font-black hidden">確認送出</button>
-            <div id="feedback" class="hidden text-center p-6 rounded-2xl text-3xl font-black mt-6 shadow-2xl"></div>
-        </div>
-
-        <div id="end-ui" class="hidden text-center mt-20 space-y-8">
-            <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
-                class="h-32 mx-auto drop-shadow-[0_0_20px_rgba(251,191,36,0.4)]">
-            <h1 class="text-6xl font-black text-gold-gradient">挑戰結束！</h1>
-            <div class="bg-midnight-900/60 p-10 rounded-[3rem] border-4 border-gold-600/40">
-                <p class="text-3xl text-gold-200 font-bold">您的最終榮耀積分</p>
-                <div id="final-score" class="text-9xl font-black text-gold-gradient my-8">0</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
-        const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        const FIXED_TIME = 10;
-
-        let myName = "", currentQ = null, startTime = 0, timerInterval = null, hasAnswered = false, currentSelection = 0, totalScore = 0;
-
-        async function join() {
-            myName = document.getElementById('p-name').value.trim();
-            if (!myName) return alert("請輸入名字");
-            const { error } = await sbClient.from('players').insert({ name: myName });
-            if (error) return alert("名字可能被拿走囉，請換一個！");
-
-            document.getElementById('user-display').innerText = myName;
-            document.getElementById('login-ui').classList.add('hidden');
+    async function handleStateChange(status) {
+        if (status.state === 'waiting') {
+            stopTimer();
+            document.getElementById('game-ui').classList.add('hidden');
+            document.getElementById('end-ui').classList.add('hidden');
             document.getElementById('waiting-ui').classList.remove('hidden');
-            listenToHost(); // 開始監聽主持人廣播
         }
-
-        // 核心：監聽 game_status 表格的即時變更
-        function listenToHost() {
-            // 先抓一次當前狀態
-            checkCurrentStatus();
-
-            sbClient.channel('custom-all-channel')
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_status' }, (payload) => {
-                    handleStateChange(payload.new);
-                }).subscribe();
-        }
-
-        async function checkCurrentStatus() {
-            const { data } = await sbClient.from('game_status').select('*').eq('id', 1).single();
-            if (data) handleStateChange(data);
-        }
-
-        async function handleStateChange(status) {
-            if (status.state === 'waiting') {
-                clearInterval(timerInterval);
-                document.getElementById('game-ui').classList.add('hidden');
-                document.getElementById('end-ui').classList.add('hidden');
-                document.getElementById('waiting-ui').classList.remove('hidden');
+        else if (status.state === 'playing') {
+            // 避免重複載入同一題 (若已經在作答中)
+            if (currentQ && currentQ.id === status.current_q_id && !document.getElementById('game-ui').classList.contains('hidden')) {
+                return;
             }
-            else if (status.state === 'playing') {
-                // 主持人開放作答，載入題目
-                const { data: q } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
-                if (q) {
-                    currentQ = q;
-                    startTime = status.start_time; // 使用伺服器時間基準
-                    hasAnswered = false;
-                    currentSelection = 0;
 
+            const { data: q } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
+            if (q) {
+                currentQ = q;
+                startTime = status.start_time;
+                hasAnswered = false;
+                currentSelection = 0;
+
+                // 檢查是否中途進場且時間已過
+                const now = Date.now();
+                const elapsedSec = (now - startTime) / 1000;
+
+                if (elapsedSec >= FIXED_TIME) {
+                    showFeedback(false, "來晚了！本題作答時間已結束。");
+                    document.getElementById('waiting-ui').classList.add('hidden');
+                    document.getElementById('game-ui').classList.remove('hidden');
+                } else {
                     document.getElementById('waiting-ui').classList.add('hidden');
                     document.getElementById('game-ui').classList.remove('hidden');
                     resetUI();
                     refreshUI(q);
-                    startTimer(FIXED_TIME);
+                    startTimer(FIXED_TIME, startTime); // 傳入基準時間同步
                 }
             }
-            else if (status.state === 'ended') {
-                clearInterval(timerInterval);
-                document.getElementById('game-ui').classList.add('hidden');
-                document.getElementById('waiting-ui').classList.add('hidden');
-                document.getElementById('end-ui').classList.remove('hidden');
-                document.getElementById('final-score').innerText = totalScore;
-                confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#ffffff'] });
-            }
         }
-
-        function resetUI() {
-            document.getElementById('feedback').classList.add('hidden');
-            document.getElementById('options-grid').classList.remove('hidden');
-            document.getElementById('submit-btn').classList.add('hidden');
-            document.querySelectorAll('.option-btn').forEach(btn => {
-                btn.disabled = false;
-                btn.classList.remove('grayscale', 'selected-opt', 'dimmed-opt');
-            });
+        else if (status.state === 'ended') {
+            stopTimer();
+            document.getElementById('game-ui').classList.add('hidden');
+            document.getElementById('waiting-ui').classList.add('hidden');
+            document.getElementById('end-ui').classList.remove('hidden');
+            document.getElementById('final-score').innerText = totalScore;
+            confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#ffffff'] });
         }
+    }
 
-        function refreshUI(q) {
-            document.getElementById('q-category').innerText = `Question ${q.id}`;
-            document.getElementById('q-text').innerText = q.question;
-            document.getElementById('opt1').innerText = q.option_a;
-            document.getElementById('opt2').innerText = q.option_b;
-            document.getElementById('opt3').innerText = q.option_c;
-            document.getElementById('opt4').innerText = q.option_d;
-        }
+    function resetUI() {
+        document.getElementById('feedback').classList.add('hidden');
+        document.getElementById('options-grid').classList.remove('hidden');
+        document.getElementById('submit-btn').classList.add('hidden');
+        document.querySelectorAll('.option-btn').forEach(btn => {
+            btn.disabled = false;
+            btn.classList.remove('grayscale', 'selected-opt', 'dimmed-opt');
+        });
+    }
 
-        function startTimer(seconds) {
-            if (timerInterval) clearInterval(timerInterval);
-            const timerEl = document.getElementById('timer');
+    function refreshUI(q) {
+        document.getElementById('q-category').innerText = `Question ${q.id}`;
+        document.getElementById('q-text').innerText = q.question;
+        document.getElementById('opt1').innerText = q.option_a;
+        document.getElementById('opt2').innerText = q.option_b;
+        document.getElementById('opt3').innerText = q.option_c;
+        document.getElementById('opt4').innerText = q.option_d;
+    }
 
-            timerInterval = setInterval(() => {
-                const now = Date.now();
-                const remaining = Math.max(0, seconds - (now - startTime) / 1000);
-                timerEl.innerText = remaining.toFixed(1) + "s";
-                if (remaining <= 3) timerEl.classList.add('text-red-500', 'timer-flash');
-                else timerEl.classList.remove('text-red-500', 'timer-flash');
+    function startTimer(duration, syncStartTime) {
+        stopTimer();
+        const timerEl = document.getElementById('timer');
 
-                if (remaining <= 0) {
-                    clearInterval(timerInterval);
-                    if (!hasAnswered) processAnswer(0); // 逾時
-                }
-            }, 100);
-        }
+        timerInterval = setInterval(() => {
+            const now = Date.now();
+            const remaining = Math.max(0, duration - (now - syncStartTime) / 1000);
 
-        function selectOption(choice) {
-            if (hasAnswered) return;
-            currentSelection = choice;
-            for (let i = 1; i <= 4; i++) {
-                const btn = document.getElementById('opt' + i);
-                if (i === choice) { btn.classList.add('selected-opt'); btn.classList.remove('dimmed-opt'); }
-                else { btn.classList.remove('selected-opt'); btn.classList.add('dimmed-opt'); }
-            }
-            document.getElementById('submit-btn').classList.remove('hidden');
-        }
+            timerEl.innerText = remaining.toFixed(1) + "s";
 
-        function submitAnswer() {
-            if (currentSelection === 0 || hasAnswered) return;
-            processAnswer(currentSelection);
-        }
-
-        async function processAnswer(choice) {
-            if (hasAnswered) return;
-            hasAnswered = true;
-            clearInterval(timerInterval);
-            document.getElementById('submit-btn').classList.add('hidden');
-            document.querySelectorAll('.option-btn').forEach(btn => btn.disabled = true);
-
-            const elapsedMs = Date.now() - startTime;
-            const elapsedSec = elapsedMs / 1000;
-            const isCorrect = (choice === currentQ.answer);
-
-            let earnedScore = 0;
-            if (isCorrect) {
-                earnedScore = Math.max(0, Math.floor(currentQ.points * (1 - (elapsedSec / FIXED_TIME))));
-                totalScore += earnedScore;
-                document.getElementById('score-display').innerText = totalScore;
-                sbClient.rpc('increment_score', { player_name: myName, score_val: earnedScore }).then();
-                showFeedback(true, `答對了！+${earnedScore} 分`);
+            if (remaining <= 3) {
+                timerEl.classList.add('text-red-500', 'timer-flash');
             } else {
-                showFeedback(false, choice === 0 ? `時間到！正解: ${currentQ.answer}` : `答錯囉！正解: ${currentQ.answer}`);
+                timerEl.classList.remove('text-red-500', 'timer-flash');
             }
 
-            sbClient.from('responses').insert({
-                player_name: myName, question_id: currentQ.id, choice: choice, is_correct: isCorrect, response_time_ms: elapsedMs
-            }).then();
+            if (remaining <= 0) {
+                stopTimer();
+                if (!hasAnswered) processAnswer(0);
+            }
+        }, 100);
+    }
 
-            // 答完後不需要自動跳下一題了，等待主持人廣播 'waiting' 或下一題
-        }
+    function stopTimer() {
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = null;
+    }
 
-        function showFeedback(isSuccess, msg) {
-            const fb = document.getElementById('feedback');
-            document.getElementById('options-grid').classList.add('hidden');
-            fb.innerText = msg;
-            if (isSuccess) {
-                confetti({ particleCount: 200, spread: 80, origin: { y: 0.6 }, colors: ['#fbbf24', '#3b82f6'] });
-                fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-emerald-900/50 text-gold-200 border-2 border-emerald-500 block mt-6";
+    function selectOption(choice) {
+        if (hasAnswered) return;
+        currentSelection = choice;
+        for (let i = 1; i <= 4; i++) {
+            const btn = document.getElementById('opt' + i);
+            if (i === choice) {
+                btn.classList.add('selected-opt');
+                btn.classList.remove('dimmed-opt');
             } else {
-                fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-red-950/60 text-red-200 border-2 border-red-800 block mt-6";
+                btn.classList.remove('selected-opt');
+                btn.classList.add('dimmed-opt');
             }
         }
-    </script>
-</body>
+        document.getElementById('submit-btn').classList.remove('hidden');
+    }
 
-</html>
+    function submitAnswer() {
+        if (currentSelection === 0 || hasAnswered) return;
+        processAnswer(currentSelection);
+    }
+
+    async function processAnswer(choice) {
+        if (hasAnswered) return;
+        hasAnswered = true;
+        stopTimer();
+
+        document.getElementById('submit-btn').classList.add('hidden');
+        document.querySelectorAll('.option-btn').forEach(btn => btn.disabled = true);
+
+        const now = Date.now();
+        const elapsedMs = now - startTime;
+        const elapsedSec = elapsedMs / 1000;
+        const isCorrect = (choice === currentQ.answer);
+
+        let earnedScore = 0;
+        if (isCorrect) {
+            // 計分權重：速度越快分數越高
+            earnedScore = Math.max(0, Math.floor(currentQ.points * (1 - (elapsedSec / FIXED_TIME))));
+            totalScore += earnedScore;
+            document.getElementById('score-display').innerText = totalScore;
+
+            // 更新資料庫分數 (非同步)
+            sbClient.rpc('increment_score', { player_name: myName, score_val: earnedScore });
+            showFeedback(true, `答對了！+${earnedScore} 分`);
+        } else {
+            const correctLabel = ["", currentQ.option_a, currentQ.option_b, currentQ.option_c, currentQ.option_d][currentQ.answer];
+            showFeedback(false, choice === 0 ? `時間到！正解: ${correctLabel}` : `答錯囉！正解: ${correctLabel}`);
+        }
+
+        // 紀錄作答詳情
+        sbClient.from('responses').insert({
+            player_name: myName,
+            question_id: currentQ.id,
+            choice: choice,
+            is_correct: isCorrect,
+            response_time_ms: elapsedMs
+        }).then();
+    }
+
+    function showFeedback(isSuccess, msg) {
+        const fb = document.getElementById('feedback');
+        const grid = document.getElementById('options-grid');
+        grid.classList.add('hidden');
+        fb.innerText = msg;
+        fb.classList.remove('hidden');
+
+        if (isSuccess) {
+            confetti({ particleCount: 200, spread: 80, origin: { y: 0.6 }, colors: ['#fbbf24', '#3b82f6'] });
+            fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-emerald-900/50 text-gold-200 border-2 border-emerald-500 block mt-6 shadow-2xl";
+        } else {
+            fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-red-950/60 text-red-200 border-2 border-red-800 block mt-6 shadow-2xl";
+        }
+    }
+</script>
