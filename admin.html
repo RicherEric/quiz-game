@@ -671,27 +671,30 @@
                 const correctAnswer = q ? q.answer : null;
                 const responses = grouped[qId];
 
-                // 只顯示已結算過的題目（有 is_correct 被設定的）
-                const hasScored = responses.some(r => r.is_correct === true || r.is_correct === false);
-                if (!hasScored) continue;
+                // 判斷是否已結算（is_correct 從 null 變為 true/false 即為已結算）
+                const hasScored = responses.some(r => r.is_correct !== null);
 
                 const correctCount = responses.filter(r => r.is_correct).length;
                 const totalCount = responses.length;
+
+                const headerInfo = hasScored
+                    ? `正確答案：<span class="text-emerald-400 font-bold">${choiceLabels[correctAnswer] || '?'}</span>　答對：<span class="text-emerald-400 font-bold">${correctCount}</span> / ${totalCount} 人`
+                    : `<span class="text-yellow-400">尚未結算</span>　已作答：${totalCount} 人`;
 
                 html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 overflow-hidden">
                     <div class="px-6 py-4 bg-midnight-900/80 border-b border-gold-700/30 cursor-pointer flex justify-between items-center" onclick="this.nextElementSibling.classList.toggle('hidden')">
                         <div>
                             <h3 class="text-xl font-bold text-gold-200">${qLabel}</h3>
-                            <p class="text-sm text-gold-400/60 mt-1">正確答案：<span class="text-emerald-400 font-bold">${choiceLabels[correctAnswer] || '?'}</span>　答對：<span class="text-emerald-400 font-bold">${correctCount}</span> / ${totalCount} 人</p>
+                            <p class="text-sm text-gold-400/60 mt-1">${headerInfo}</p>
                         </div>
                         <span class="text-gold-400/50 text-2xl">▼</span>
                     </div>
                     <div class="hidden">
                         <div class="px-6 py-3 grid grid-cols-12 gap-4 text-gold-400/60 font-bold text-sm border-b border-gold-800/30">
                             <div class="col-span-1">#</div>
-                            <div class="col-span-5">玩家</div>
+                            <div class="${hasScored ? 'col-span-5' : 'col-span-8'}">玩家</div>
                             <div class="col-span-3 text-center">答案</div>
-                            <div class="col-span-3 text-center">結果</div>
+                            ${hasScored ? '<div class="col-span-3 text-center">結果</div>' : ''}
                         </div>
                         <div class="divide-y divide-gold-800/20">`;
 
@@ -707,18 +710,18 @@
                         ? '<span class="text-red-400">未答</span>'
                         : `<span class="font-bold">${choiceLabel}. ${optionText}</span>`;
 
-                    html += `<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center ${isCorrect ? 'bg-emerald-900/10' : ''}">
+                    html += `<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center ${hasScored && isCorrect ? 'bg-emerald-900/10' : ''}">
                             <div class="col-span-1 text-gold-400/50">${i + 1}</div>
-                            <div class="col-span-5 font-bold">${r.player_name}</div>
+                            <div class="${hasScored ? 'col-span-5' : 'col-span-8'} font-bold">${r.player_name}</div>
                             <div class="col-span-3 text-center text-sm">${choiceDisplay}</div>
-                            <div class="col-span-3 text-center">${resultBadge}</div>
+                            ${hasScored ? `<div class="col-span-3 text-center">${resultBadge}</div>` : ''}
                         </div>`;
                 });
 
                 html += `</div></div></div>`;
             }
 
-            container.innerHTML = html || '<div class="text-gold-400/50 text-center py-10">尚無已結算的答題紀錄</div>';
+            container.innerHTML = html || '<div class="text-gold-400/50 text-center py-10">尚無答題紀錄</div>';
         }
 
         // 分頁切換邏輯

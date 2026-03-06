@@ -356,7 +356,7 @@
 
             // 只記錄作答，不判斷對錯、不計算分數（由 admin 結算）
             sbClient.from('responses').insert({
-                player_name: myName, question_id: currentQ.id, choice: choice, is_correct: false, response_time_ms: elapsedMs
+                player_name: myName, question_id: currentQ.id, choice: choice, is_correct: null, response_time_ms: elapsedMs
             }).then();
 
             if (choice === 0) {
