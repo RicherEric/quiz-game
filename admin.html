@@ -179,6 +179,7 @@
         let questions = [];
         let selectedAnswer = 0;
         let statsInterval = null;
+        let adminChannel = null;
 
         async function initAdmin() {
             // 自動檢查並初始化 game_status 控制資料
@@ -235,6 +236,27 @@
             // 開始定時更新排行榜
             fetchLeaderboard();
             setInterval(fetchLeaderboard, 3000);
+
+            // 即時訂閱：玩家提交答案、新玩家加入、分數更新時立刻刷新
+            adminChannel = sbClient.channel('admin-realtime')
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'responses'
+                }, () => {
+                    fetchCurrentQuestionStats();
+                })
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'players'
+                }, () => {
+                    fetchCurrentQuestionStats();
+                    fetchLeaderboard();
+                })
+                .subscribe((status) => {
+                    console.log("Admin 即時訂閱狀態:", status);
+                });
         }
 
         let currentState = 'waiting';
