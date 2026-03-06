@@ -58,8 +58,9 @@
                 </h1>
             </div>
             <div class="bg-midnight-900/50 p-8 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm">
-                <input id="p-name" type="text" placeholder="請輸入您的暱稱"
+                <input id="p-name" type="text" placeholder="請輸入您的姓名（姓＋名）"
                     class="w-full p-5 rounded-2xl text-midnight-950 text-2xl text-center focus:ring-4 focus:ring-gold-500 outline-none shadow-inner bg-gold-100 placeholder-gold-800/50 font-bold border-2 border-gold-600/50">
+                <p class="mt-3 text-gold-300/80 text-base">請輸入您的真實姓名（姓＋名, 中英文皆可），名字只能輸入一次，請謹慎輸入完再送出</p>
                 <button onclick="join()"
                     class="w-full mt-6 bg-gradient-to-r from-gold-500 to-gold-700 py-5 rounded-2xl text-3xl font-black shadow-[0_0_25px_rgba(251,191,36,0.4)] text-midnight-950">登入挑戰</button>
             </div>
@@ -85,7 +86,8 @@
         </div>
 
         <div id="game-ui" class="hidden space-y-6">
-            <div class="flex justify-center items-center bg-midnight-900/70 p-5 rounded-3xl border-2 border-gold-600/40">
+            <div
+                class="flex justify-center items-center bg-midnight-900/70 p-5 rounded-3xl border-2 border-gold-600/40">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-12 opacity-80">
             </div>
@@ -99,8 +101,8 @@
                         <svg class="countdown-ring" width="64" height="64" viewBox="0 0 64 64">
                             <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(187,82,0,0.3)" stroke-width="5" />
                             <circle id="countdown-circle" cx="32" cy="32" r="28" fill="none" stroke="#ffaa1d"
-                                stroke-width="5" stroke-linecap="round"
-                                stroke-dasharray="175.93" stroke-dashoffset="0" />
+                                stroke-width="5" stroke-linecap="round" stroke-dasharray="175.93"
+                                stroke-dashoffset="0" />
                         </svg>
                         <span id="countdown-text" class="absolute text-xl font-black text-gold-300">15.0</span>
                     </div>

@@ -422,8 +422,13 @@
 
         // 正確答案選擇
         function selectCorrectAnswer(choice) {
-            selectedAnswer = choice;
-            highlightSelectedAnswer(choice);
+            if (selectedAnswer === choice) {
+                selectedAnswer = null;
+                highlightSelectedAnswer(null);
+            } else {
+                selectedAnswer = choice;
+                highlightSelectedAnswer(choice);
+            }
         }
 
         function highlightSelectedAnswer(choice) {
