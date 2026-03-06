@@ -36,3 +36,10 @@ CREATE TABLE public.responses (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT responses_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.users (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  username text NOT NULL UNIQUE,
+  password text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT users_pkey PRIMARY KEY (id)
+);
