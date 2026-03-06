@@ -36,22 +36,6 @@
         .text-gold-gradient {
             @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-200 to-gold-500;
         }
-
-        .timer-flash {
-            animation: flash 1s infinite;
-        }
-
-        @keyframes flash {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.3;
-            }
-        }
     </style>
 </head>
 
@@ -82,45 +66,24 @@
             </div>
         </div>
 
-        <div id="preview-ui" class="hidden text-center mt-16 space-y-8">
-            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
-                <div id="preview-q-category"
-                    class="text-lg text-gold-300 font-bold uppercase bg-midnight-800/80 px-6 py-2 rounded-full border-2 border-gold-600/50 inline-block">
-                    Question</div>
-                <h2 id="preview-q-text" class="text-3xl font-bold leading-tight text-gold-100">載入中...</h2>
-                <button onclick="startAnswering()"
-                    class="w-full mt-4 bg-gradient-to-r from-gold-500 to-gold-700 py-6 rounded-2xl text-3xl font-black shadow-[0_0_25px_rgba(251,191,36,0.4)] text-midnight-950 transform transition-all active:scale-95">
-                    開始作答
-                </button>
-            </div>
-        </div>
-
         <div id="scoring-ui" class="hidden text-center mt-20 space-y-8">
             <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                 class="h-28 mx-auto drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
-            <h1 class="text-5xl font-black text-gold-gradient">本輪結算</h1>
             <div class="bg-midnight-900/60 p-10 rounded-[3rem] border-4 border-gold-600/40">
-                <p class="text-3xl text-gold-200 font-bold">目前累積積分</p>
-                <div id="scoring-score" class="text-9xl font-black text-gold-gradient my-8">0</div>
+                <p class="text-3xl text-gold-200 font-bold">本題結算完成</p>
+                <p class="text-2xl text-gold-200/60 mt-4">等待主持人進入下一題...</p>
             </div>
-            <p class="text-2xl text-gold-200/60">等待主持人進入下一題...</p>
         </div>
 
         <div id="game-ui" class="hidden space-y-6">
-            <div
-                class="flex justify-between items-center bg-midnight-900/70 p-5 rounded-3xl border-2 border-gold-600/40">
-                <div class="flex flex-col"><span class="text-sm text-gold-400/80 font-bold">目前總分</span><span
-                        id="score-display" class="text-4xl font-black text-gold-gradient">0</span></div>
+            <div class="flex justify-center items-center bg-midnight-900/70 p-5 rounded-3xl border-2 border-gold-600/40">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-12 opacity-80">
-                <div class="text-right"><span class="text-sm text-gold-400/80 font-bold">剩餘時間</span>
-                    <div id="timer" class="text-4xl font-mono font-bold text-gold-200">10.0s</div>
-                </div>
             </div>
 
             <div class="py-6 text-center space-y-4 bg-midnight-900/40 rounded-3xl p-6 border border-gold-800/30">
                 <div id="q-category"
-                    class="text-lg text-gold-300 font-bold uppercase bg-midnight-800/80 px-6 py-2 rounded-full border-2 border-gold-600/50">
+                    class="text-lg text-gold-300 font-bold uppercase bg-midnight-800/80 px-6 py-2 rounded-full border-2 border-gold-600/50 inline-block">
                     Question</div>
                 <h2 id="q-text" class="text-3xl font-bold leading-tight text-gold-100">載入中...</h2>
             </div>
@@ -155,11 +118,9 @@
     <script>
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
-        const FIXED_TIME = 10;
 
-        let sbClient, myName = "", currentQ = null, startTime = 0, timerInterval = null, hasAnswered = false, currentSelection = 0, totalScore = 0, channel = null, inPreview = false, lastProcessedKey = '', pollInterval = null;
+        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null;
 
-        // 確保 SDK 載入後才初始化
         window.onload = () => {
             if (window.supabase) {
                 sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -223,66 +184,49 @@
         }
 
         function hideAllUI() {
-            ['waiting-ui', 'preview-ui', 'game-ui', 'scoring-ui', 'end-ui'].forEach(id =>
+            ['waiting-ui', 'game-ui', 'scoring-ui', 'end-ui'].forEach(id =>
                 document.getElementById(id).classList.add('hidden')
             );
         }
 
         async function handleStateChange(status) {
             if (status.state === 'waiting') {
-                stopTimer();
-                inPreview = false;
                 hideAllUI();
                 document.getElementById('waiting-ui').classList.remove('hidden');
             }
             else if (status.state === 'playing') {
-                // 如果已經在答這一題（preview 或 game-ui 顯示中），不要重複刷新
-                if (currentQ && currentQ.id === status.current_q_id && (inPreview || !document.getElementById('game-ui').classList.contains('hidden'))) return;
+                // 如果已經在答這一題，不要重複刷新
+                if (currentQ && currentQ.id === status.current_q_id && !document.getElementById('game-ui').classList.contains('hidden')) return;
 
                 const { data: q } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
                 if (q) {
                     currentQ = q;
                     hasAnswered = false;
                     currentSelection = 0;
-                    startTime = 0; // 會在 user 點「開始作答」時設定
-                    inPreview = true;
-
-                    // 顯示題目預覽
-                    document.getElementById('preview-q-category').innerText = `Question ${q.id}`;
-                    document.getElementById('preview-q-text').innerText = q.question;
+                    startTime = Date.now();
 
                     hideAllUI();
-                    document.getElementById('preview-ui').classList.remove('hidden');
+                    document.getElementById('game-ui').classList.remove('hidden');
+                    resetUI();
+                    refreshUI(q);
                 }
             }
             else if (status.state === 'stopped') {
-                // 停止作答：未答題者自動逾時
+                // 停止作答：未答題者自動提交
                 if (!hasAnswered) {
                     processAnswer(0);
                 }
-                // 如果還在 preview，切到 game-ui 顯示 feedback
-                if (inPreview) {
-                    inPreview = false;
-                    hideAllUI();
-                    document.getElementById('game-ui').classList.remove('hidden');
-                    if (currentQ) refreshUI(currentQ);
-                    document.getElementById('options-grid').classList.add('hidden');
-                }
-                stopTimer();
             }
             else if (status.state === 'scoring') {
-                stopTimer();
-                inPreview = false;
                 hideAllUI();
                 document.getElementById('scoring-ui').classList.remove('hidden');
-                document.getElementById('scoring-score').innerText = totalScore;
             }
             else if (status.state === 'ended') {
-                stopTimer();
-                inPreview = false;
                 hideAllUI();
                 document.getElementById('end-ui').classList.remove('hidden');
-                document.getElementById('final-score').innerText = totalScore;
+                // 從資料庫取得最終分數
+                const { data: player } = await sbClient.from('players').select('score').eq('name', myName).single();
+                document.getElementById('final-score').innerText = player ? player.score : 0;
                 confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#ffffff'] });
             }
         }
@@ -297,18 +241,6 @@
             });
         }
 
-        function startAnswering() {
-            if (!currentQ || hasAnswered) return;
-            inPreview = false;
-            startTime = Date.now(); // 個人計時從此刻開始
-
-            hideAllUI();
-            document.getElementById('game-ui').classList.remove('hidden');
-            resetUI();
-            refreshUI(currentQ);
-            startTimer(FIXED_TIME, startTime);
-        }
-
         function refreshUI(q) {
             document.getElementById('q-category').innerText = `Question ${q.id}`;
             document.getElementById('q-text').innerText = q.question;
@@ -316,28 +248,6 @@
             document.getElementById('opt2').innerText = q.option_b;
             document.getElementById('opt3').innerText = q.option_c;
             document.getElementById('opt4').innerText = q.option_d;
-        }
-
-        function startTimer(duration, syncStartTime) {
-            stopTimer();
-            const timerEl = document.getElementById('timer');
-            timerInterval = setInterval(() => {
-                const now = Date.now();
-                const remaining = Math.max(0, duration - (now - syncStartTime) / 1000);
-                timerEl.innerText = remaining.toFixed(1) + "s";
-                if (remaining <= 3) timerEl.classList.add('text-red-500', 'timer-flash');
-                else timerEl.classList.remove('text-red-500', 'timer-flash');
-
-                if (remaining <= 0) {
-                    stopTimer();
-                    if (!hasAnswered) processAnswer(0);
-                }
-            }, 100);
-        }
-
-        function stopTimer() {
-            if (timerInterval) clearInterval(timerInterval);
-            timerInterval = null;
         }
 
         function selectOption(choice) {
@@ -359,46 +269,29 @@
         async function processAnswer(choice) {
             if (hasAnswered) return;
             hasAnswered = true;
-            stopTimer();
             document.getElementById('submit-btn').classList.add('hidden');
             document.querySelectorAll('.option-btn').forEach(btn => btn.disabled = true);
 
-            const elapsedMs = Date.now() - startTime;
-            const isCorrect = (choice === currentQ.answer);
+            const elapsedMs = startTime ? Date.now() - startTime : 0;
 
-            let earnedScore = 0;
-            if (isCorrect) {
-                earnedScore = Math.max(0, Math.floor(currentQ.points * (1 - (elapsedMs / (FIXED_TIME * 1000)))));
-                totalScore += earnedScore;
-                document.getElementById('score-display').innerText = totalScore;
-                // 直接更新資料庫分數（不依賴 RPC 函數）
-                sbClient.from('players').select('score').eq('name', myName).single().then(({ data: pData }) => {
-                    if (pData) {
-                        sbClient.from('players').update({ score: pData.score + earnedScore }).eq('name', myName).then();
-                    }
-                });
-                showFeedback(true, `答對了！+${earnedScore} 分`);
-            } else {
-                const correctLabel = ["", "A", "B", "C", "D"][currentQ.answer];
-                showFeedback(false, choice === 0 ? `時間到！正解是 (${correctLabel})` : `答錯囉！正解是 (${correctLabel})`);
-            }
-
+            // 只記錄作答，不判斷對錯、不計算分數（由 admin 結算）
             sbClient.from('responses').insert({
-                player_name: myName, question_id: currentQ.id, choice: choice, is_correct: isCorrect, response_time_ms: elapsedMs
+                player_name: myName, question_id: currentQ.id, choice: choice, is_correct: false, response_time_ms: elapsedMs
             }).then();
+
+            if (choice === 0) {
+                showFeedback('未作答，已自動提交');
+            } else {
+                showFeedback('已成功提交！');
+            }
         }
 
-        function showFeedback(isSuccess, msg) {
+        function showFeedback(msg) {
             const fb = document.getElementById('feedback');
             document.getElementById('options-grid').classList.add('hidden');
             fb.innerText = msg;
             fb.classList.remove('hidden');
-            if (isSuccess) {
-                confetti({ particleCount: 200, spread: 80, origin: { y: 0.6 }, colors: ['#fbbf24', '#3b82f6'] });
-                fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-emerald-900/50 text-gold-200 border-2 border-emerald-500 block mt-6";
-            } else {
-                fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-red-950/60 text-red-200 border-2 border-red-800 block mt-6";
-            }
+            fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-midnight-900/50 text-gold-200 border-2 border-gold-600 block mt-6";
         }
     </script>
 </body>
