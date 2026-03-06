@@ -37,6 +37,7 @@
                     <h1 class="text-3xl font-black text-gold-gradient">中央控場台</h1>
                     <p class="text-gold-400/70">狀態：<span id="current-state-label"
                             class="text-slate-400 font-bold">讀取中...</span></p>
+                    <p class="text-gold-400/70">已加入玩家：<span id="header-player-count" class="text-emerald-400 font-bold text-lg">0</span> 人</p>
                 </div>
             </div>
 
@@ -234,9 +235,11 @@
                 select.dispatchEvent(new Event('change'));
             }
 
-            // 開始定時更新排行榜 & 統計資料
+            // 開始定時更新排行榜 & 統計資料 & 玩家列表
             fetchLeaderboard();
+            fetchPlayerList();
             setInterval(fetchLeaderboard, 3000);
+            setInterval(fetchPlayerList, 2000);
             startStatsPolling();
 
             // 即時訂閱：玩家提交答案、新玩家加入、分數更新時立刻刷新
@@ -253,6 +256,7 @@
                     schema: 'public',
                     table: 'players'
                 }, () => {
+                    fetchPlayerList();
                     fetchCurrentQuestionStats();
                     fetchLeaderboard();
                 })
@@ -485,6 +489,40 @@
                     </div>`;
                 });
                 document.getElementById('player-status-list').innerHTML = html || '<div class="text-gold-400/50 text-center py-4 col-span-full">尚無玩家</div>';
+            }
+        }
+
+        // 獨立的玩家列表刷新（不依賴題目選擇）
+        async function fetchPlayerList() {
+            try {
+                const { data: allPlayers, count } = await sbClient.from('players').select('*', { count: 'exact' }).order('name');
+                const total = count || 0;
+                document.getElementById('header-player-count').innerText = total;
+                document.getElementById('total-count').innerText = total;
+
+                if (allPlayers && allPlayers.length > 0) {
+                    // 取得當前題目的作答名單（如果有選題的話）
+                    const qId = document.getElementById('q-selector').value;
+                    let respondedNames = new Set();
+                    if (qId) {
+                        const { data: responses } = await sbClient.from('responses').select('player_name').eq('question_id', qId);
+                        if (responses) responses.forEach(r => respondedNames.add(r.player_name));
+                    }
+
+                    let html = '';
+                    allPlayers.forEach(p => {
+                        const submitted = respondedNames.has(p.name);
+                        html += `<div class="flex justify-between items-center px-3 py-2 rounded-lg text-sm ${submitted ? 'bg-emerald-900/30 border border-emerald-700/50' : 'bg-midnight-900/50 border border-gold-800/30'}">
+                            <span class="font-bold truncate mr-2">${p.name}</span>
+                            <span class="${submitted ? 'text-emerald-400' : 'text-gold-400/50'} font-bold whitespace-nowrap">${submitted ? '✓ 已提交' : '⏳ 等待中'}</span>
+                        </div>`;
+                    });
+                    document.getElementById('player-status-list').innerHTML = html;
+                } else {
+                    document.getElementById('player-status-list').innerHTML = '<div class="text-gold-400/50 text-center py-4 col-span-full">尚無玩家</div>';
+                }
+            } catch (err) {
+                console.error('fetchPlayerList 錯誤:', err);
             }
         }
 
