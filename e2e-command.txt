@@ -1,0 +1,2 @@
+cd e2e-test
+node load-test.mj

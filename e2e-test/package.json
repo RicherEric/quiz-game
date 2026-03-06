@@ -1,0 +1,12 @@
+{
+  "name": "quiz-game-e2e-test",
+  "version": "1.0.0",
+  "description": "E2E load test: 100 concurrent players + 1 admin",
+  "type": "module",
+  "scripts": {
+    "test": "node load-test.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1"
+  }
+}
