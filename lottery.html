@@ -31,6 +31,11 @@
             user-select: none;
             pointer-events: none;
             box-shadow: inset -3px -3px 8px rgba(0,0,0,0.3), inset 3px 3px 8px rgba(255,255,255,0.2), 0 2px 8px rgba(0,0,0,0.4);
+            overflow: hidden;
+            text-align: center;
+            line-height: 1.2;
+            padding: 2px;
+            word-break: break-all;
         }
 
         .ball.winner-ball {
@@ -183,6 +188,7 @@
             allWinners = data || [];
         }
 
+        let prizeSelectorBound = false;
         function populatePrizeSelector() {
             const sel = document.getElementById('prize-selector');
             sel.innerHTML = '';
@@ -193,7 +199,10 @@
             allPrizes.forEach(p => {
                 sel.innerHTML += `<option value="${p.id}">${p.name}（${p.winner_count} 名）</option>`;
             });
-            sel.addEventListener('change', onPrizeChange);
+            if (!prizeSelectorBound) {
+                sel.addEventListener('change', onPrizeChange);
+                prizeSelectorBound = true;
+            }
             sel.dispatchEvent(new Event('change'));
         }
 
@@ -657,8 +666,57 @@
             return new Promise(r => setTimeout(r, ms));
         }
 
+        // ===== Supabase Realtime Auto-Sync =====
+        function setupRealtimeSync() {
+            // Listen for prize changes (admin add/edit/delete prizes)
+            sbClient
+                .channel('lottery-prizes-sync')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_prizes' }, async () => {
+                    const oldSelectedId = document.getElementById('prize-selector').value;
+                    await loadPrizes();
+                    populatePrizeSelector();
+                    // Restore selection if prize still exists
+                    const sel = document.getElementById('prize-selector');
+                    if (oldSelectedId && allPrizes.find(p => p.id === parseInt(oldSelectedId))) {
+                        sel.value = oldSelectedId;
+                    }
+                    sel.dispatchEvent(new Event('change'));
+                })
+                .subscribe();
+
+            // Listen for winner changes (admin remove/redraw winners)
+            sbClient
+                .channel('lottery-winners-sync')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_winners' }, async () => {
+                    if (isDrawing) return; // Don't interrupt ongoing draw
+                    await loadWinners();
+                    renderWinnerHistory();
+                    updateEligibleCount();
+                })
+                .subscribe();
+
+            // Listen for group changes (probability, add/delete groups)
+            sbClient
+                .channel('lottery-groups-sync')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_groups' }, async () => {
+                    await loadGroups();
+                    updateEligibleCount();
+                })
+                .subscribe();
+
+            // Listen for member changes (add/delete members)
+            sbClient
+                .channel('lottery-members-sync')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_members' }, async () => {
+                    await loadGroups();
+                    updateEligibleCount();
+                })
+                .subscribe();
+        }
+
         // ===== Start =====
         initLottery();
+        setupRealtimeSync();
     </script>
 </body>
 
