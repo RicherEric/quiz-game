@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
         tailwind.config = { theme: { extend: { colors: { gold: { 100: '#ffedc6', 300: '#ffc24a', 400: '#ffaa1d', 500: '#f98c00', 700: '#bb5200' }, midnight: { 800: '#1e293b', 900: '#0f172a', 950: '#020617' } } } } }
     </script>
@@ -1698,8 +1699,12 @@
             container.innerHTML = html;
         }
 
-        function exportWinnersPDF() {
+        async function exportWinnersPDF() {
             if (!adminAllWinners || adminAllWinners.length === 0) return alert('尚無中獎紀錄可匯出');
+
+            // Build group lookup map (O(1) instead of O(n) per winner)
+            const groupMap = new Map();
+            adminAllGroups.forEach(g => groupMap.set(g.id, g.name));
 
             // Group winners by prize
             const byPrize = {};
@@ -1714,21 +1719,20 @@
             });
             const sortedKeys = Object.keys(byPrize).sort();
 
-            // Build print-friendly HTML content
+            // Build HTML content for pdf rendering
             let content = '';
             sortedKeys.forEach(key => {
                 const group = byPrize[key];
-                content += `<div class="prize-section">
-                    <div class="prize-header">${group.name}<span class="prize-count">（${group.winners.length} / ${group.winnerCount} 人）</span></div>
-                    <table class="winner-table">`;
+                content += `<div style="margin-bottom:18px;break-inside:avoid;">
+                    <div style="font-size:16px;font-weight:800;color:#8b6508;padding:8px 0 6px;border-bottom:2px solid #e5e5e5;">${group.name}<span style="font-weight:400;font-size:13px;color:#888;">（${group.winners.length} / ${group.winnerCount} 人）</span></div>
+                    <table style="width:100%;border-collapse:collapse;">`;
                 group.winners.forEach((w, i) => {
                     const memberName = w.lottery_members?.name || '未知';
-                    const groupObj = adminAllGroups.find(g => g.id === w.lottery_members?.group_id);
-                    const groupName = groupObj ? groupObj.name : '';
-                    content += `<tr>
-                        <td class="winner-idx">${i + 1}</td>
-                        <td class="winner-name">${memberName}</td>
-                        <td class="winner-group">${groupName}</td>
+                    const groupName = groupMap.get(w.lottery_members?.group_id) || '';
+                    content += `<tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:6px 8px;font-size:13px;width:30px;color:#aaa;text-align:center;">${i + 1}</td>
+                        <td style="padding:6px 8px;font-size:13px;font-weight:600;">${memberName}</td>
+                        <td style="padding:6px 8px;font-size:13px;color:#888;text-align:right;">${groupName}</td>
                     </tr>`;
                 });
                 content += `</table></div>`;
@@ -1737,37 +1741,32 @@
             const now = new Date();
             const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
 
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(`<!DOCTYPE html>
-<html lang="zh-Hant"><head><meta charset="UTF-8">
-<title>中獎紀錄</title>
-<style>
-    @page { size: A4; margin: 20mm; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: "Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif; color: #1a1a1a; padding: 0; }
-    .header { text-align: center; padding-bottom: 12px; border-bottom: 3px solid #b8860b; margin-bottom: 20px; }
-    .header h1 { font-size: 24px; font-weight: 900; color: #8b6508; }
-    .header .date { font-size: 12px; color: #888; margin-top: 4px; }
-    .prize-section { margin-bottom: 18px; break-inside: avoid; }
-    .prize-header { font-size: 16px; font-weight: 800; color: #8b6508; padding: 8px 0 6px; border-bottom: 2px solid #e5e5e5; }
-    .prize-count { font-weight: 400; font-size: 13px; color: #888; }
-    .winner-table { width: 100%; border-collapse: collapse; }
-    .winner-table tr { border-bottom: 1px solid #f0f0f0; }
-    .winner-table td { padding: 6px 8px; font-size: 13px; }
-    .winner-idx { width: 30px; color: #aaa; text-align: center; }
-    .winner-name { font-weight: 600; }
-    .winner-group { color: #888; text-align: right; }
-    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-</style>
-</head><body>
-<div class="header">
-    <h1>🏆 中獎紀錄</h1>
-    <div class="date">匯出日期：${dateStr}</div>
-</div>
-${content}
-</body></html>`);
-            printWindow.document.close();
-            setTimeout(() => printWindow.print(), 300);
+            // Create temporary hidden container for html2pdf
+            const container = document.createElement('div');
+            container.style.cssText = 'position:fixed;left:-9999px;top:0;width:190mm;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;color:#1a1a1a;';
+            container.innerHTML = `
+                <div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #b8860b;margin-bottom:20px;">
+                    <h1 style="font-size:24px;font-weight:900;color:#8b6508;margin:0;">🏆 中獎紀錄</h1>
+                    <div style="font-size:12px;color:#888;margin-top:4px;">匯出日期：${dateStr}</div>
+                </div>
+                ${content}`;
+            document.body.appendChild(container);
+
+            try {
+                await html2pdf().set({
+                    margin: [15, 10, 15, 10],
+                    filename: `中獎紀錄_${dateStr.replace(/\//g, '')}.pdf`,
+                    image: { type: 'jpeg', quality: 0.95 },
+                    html2canvas: { scale: 2, useCORS: true, logging: false },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                }).from(container).save();
+            } catch (e) {
+                console.error('PDF export error:', e);
+                alert('PDF 匯出失敗，請稍後再試');
+            } finally {
+                document.body.removeChild(container);
+            }
         }
 
         async function removeWinner(winnerId, memberName, groupName, prizeName) {
