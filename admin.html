@@ -1306,6 +1306,13 @@
         }
 
         // ===== 中獎紀錄管理 =====
+        const lotterySyncChannel = sbClient.channel('lottery-broadcast-sync', { config: { broadcast: { self: false } } });
+        lotterySyncChannel.subscribe();
+
+        function broadcastLotteryChange() {
+            lotterySyncChannel.send({ type: 'broadcast', event: 'winners-changed', payload: {} });
+        }
+
         let adminAllGroups = [];
         let adminAllMembers = [];
         let adminAllWinners = [];
@@ -1387,6 +1394,7 @@
             const { error } = await sbClient.from('lottery_winners').delete().eq('id', winnerId);
             if (error) return alert('移除失敗：' + error.message);
             fetchLotteryWinners();
+            broadcastLotteryChange();
         }
 
         async function redrawWinners(prizeId, count) {
@@ -1443,6 +1451,7 @@
             const winnerNames = winners.map(w => w.name).join('、');
             alert(`重抽完成！新中獎者：${winnerNames}`);
             fetchLotteryWinners();
+            broadcastLotteryChange();
         }
 
         // 登入驗證

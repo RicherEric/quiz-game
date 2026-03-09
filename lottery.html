@@ -712,6 +712,17 @@
                     updateEligibleCount();
                 })
                 .subscribe();
+
+            // Listen for admin broadcast (reliable sync when admin removes/redraws winners)
+            sbClient
+                .channel('lottery-broadcast-sync')
+                .on('broadcast', { event: 'winners-changed' }, async () => {
+                    if (isDrawing) return;
+                    await loadWinners();
+                    renderWinnerHistory();
+                    updateEligibleCount();
+                })
+                .subscribe();
         }
 
         // ===== Start =====
