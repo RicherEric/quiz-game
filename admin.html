@@ -1205,13 +1205,24 @@
 
         // ===== 獎項管理 =====
         async function fetchLotteryPrizes() {
-            const { data: prizes } = await sbClient.from('lottery_prizes').select('*').order('sort_order').order('id');
+            const [{ data: prizes }, { data: winners }, { data: groups }] = await Promise.all([
+                sbClient.from('lottery_prizes').select('*').order('sort_order').order('id'),
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_groups').select('*').order('id')
+            ]);
             const container = document.getElementById('lottery-prizes-container');
 
             if (!prizes || prizes.length === 0) {
                 container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無獎項，請新增</div>';
                 return;
             }
+
+            // Group winners by prize_id
+            const winnersByPrize = {};
+            (winners || []).forEach(w => {
+                if (!winnersByPrize[w.prize_id]) winnersByPrize[w.prize_id] = [];
+                winnersByPrize[w.prize_id].push(w);
+            });
 
             let html = `<div class="bg-midnight-900/80 px-6 py-3 rounded-t-2xl border-b border-gold-700/30 grid grid-cols-12 gap-4 text-gold-400/80 font-bold text-sm uppercase">
                 <div class="col-span-1">排序</div>
@@ -1221,15 +1232,37 @@
             </div>`;
 
             prizes.forEach(p => {
-                html += `<div class="px-6 py-4 grid grid-cols-12 gap-4 items-center bg-midnight-800/50 border border-gold-800/30 rounded-xl">
-                    <div class="col-span-1 text-gold-400/60 font-bold">${p.sort_order}</div>
-                    <div class="col-span-5 font-bold text-lg text-gold-200">${p.name}</div>
-                    <div class="col-span-2 text-center font-bold text-gold-300">${p.winner_count} 人</div>
-                    <div class="col-span-4 text-right space-x-2">
-                        <button onclick="openPrizeModal(${p.id},'${p.name.replace(/'/g, "\\'")}',${p.winner_count},${p.sort_order})" class="text-gold-400 hover:text-gold-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-gold-700/40">編輯</button>
-                        <button onclick="deletePrize(${p.id})" class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-red-700/40">刪除</button>
-                    </div>
-                </div>`;
+                const prizeWinners = winnersByPrize[p.id] || [];
+                const actualCount = prizeWinners.length;
+
+                html += `<div class="bg-midnight-800/50 border border-gold-800/30 rounded-xl overflow-hidden">
+                    <div class="px-6 py-4 grid grid-cols-12 gap-4 items-center">
+                        <div class="col-span-1 text-gold-400/60 font-bold">${p.sort_order}</div>
+                        <div class="col-span-5 font-bold text-lg text-gold-200">${p.name}</div>
+                        <div class="col-span-2 text-center font-bold text-gold-300">${actualCount} / ${p.winner_count} 人</div>
+                        <div class="col-span-4 text-right space-x-2">
+                            <button onclick="openPrizeModal(${p.id},'${p.name.replace(/'/g, "\\'")}',${p.winner_count},${p.sort_order})" class="text-gold-400 hover:text-gold-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-gold-700/40">編輯</button>
+                            <button onclick="deletePrize(${p.id})" class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-red-700/40">刪除</button>
+                        </div>
+                    </div>`;
+
+                if (prizeWinners.length > 0) {
+                    html += `<div class="border-t border-gold-800/20 px-6 py-3 bg-midnight-900/40">
+                        <div class="flex flex-wrap gap-2">`;
+                    prizeWinners.forEach(w => {
+                        const memberName = w.lottery_members?.name || '未知';
+                        const groupObj = (groups || []).find(g => g.id === w.lottery_members?.group_id);
+                        const groupName = groupObj ? groupObj.name : '';
+                        html += `<span class="inline-flex items-center gap-1 px-3 py-1.5 bg-midnight-800/80 border border-gold-700/30 rounded-lg text-sm">
+                            <span class="text-gold-400">🏆</span>
+                            <span class="text-gold-200 font-bold">${memberName}</span>
+                            ${groupName ? `<span class="text-gold-400/50 text-xs">(${groupName})</span>` : ''}
+                        </span>`;
+                    });
+                    html += `</div></div>`;
+                }
+
+                html += `</div>`;
             });
             container.innerHTML = html;
         }
