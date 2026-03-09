@@ -54,6 +54,11 @@
             opacity: 0.4;
             background: rgba(187, 82, 0, 0.2);
         }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 
@@ -103,6 +108,12 @@
                     <p class="text-gold-400/70">已加入玩家：<span id="header-player-count"
                             class="text-emerald-400 font-bold text-lg">0</span> 人</p>
                 </div>
+                <button onclick="refreshAll()" id="btn-refresh-all"
+                    class="ml-4 bg-midnight-800 hover:bg-midnight-950 text-gold-300 hover:text-gold-100 px-4 py-3 rounded-xl font-bold text-sm transition border border-gold-700/50 hover:border-gold-400 flex items-center space-x-2"
+                    title="手動刷新所有狀態">
+                    <span id="refresh-icon" class="text-lg">🔄</span>
+                    <span>更新狀態</span>
+                </button>
             </div>
 
             <div id="control-panel"
@@ -1232,6 +1243,44 @@
         }
 
         // 重置所有答題狀況
+        async function refreshAll() {
+            const icon = document.getElementById('refresh-icon');
+            const btn = document.getElementById('btn-refresh-all');
+            btn.disabled = true;
+            icon.style.display = 'inline-block';
+            icon.style.animation = 'spin 0.6s linear infinite';
+
+            try {
+                // 刷新遊戲狀態
+                const { data: gs } = await sbClient.from('game_status').select('*').eq('id', 1).single();
+                if (gs) {
+                    updateControlButtons(gs.state);
+                    const sel = document.getElementById('q-selector');
+                    if (gs.current_q_id) {
+                        sel.value = gs.current_q_id;
+                        sel.dispatchEvent(new Event('change'));
+                    }
+                }
+
+                // 刷新所有資料
+                await Promise.all([
+                    fetchCurrentQuestionStats(),
+                    fetchPlayerList(),
+                    fetchLeaderboard(),
+                    fetchLotteryGroups(),
+                    fetchLotteryPrizes(),
+                    fetchLotteryWinners(),
+                    fetchLotteryStats(),
+                    fetchLotteryWinnerStats(),
+                ]);
+            } catch (err) {
+                console.error('刷新失敗', err);
+            } finally {
+                icon.style.animation = '';
+                btn.disabled = false;
+            }
+        }
+
         async function resetAll() {
             if (!confirm('確定要重置所有答題紀錄嗎？\n\n這將會：\n• 清除所有作答紀錄\n• 將所有玩家積分歸零\n• 遊戲狀態回到待機中\n\n此操作無法復原！')) return;
 
