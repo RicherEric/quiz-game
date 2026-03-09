@@ -142,11 +142,17 @@
             <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                 class="h-32 mx-auto drop-shadow-[0_0_20px_rgba(251,191,36,0.4)]">
             <h1 class="text-6xl font-black text-gold-gradient">挑戰結束！</h1>
+            <!-- 自己的名次與分數 -->
             <div class="bg-midnight-900/60 p-10 rounded-[3rem] border-4 border-gold-600/40 space-y-4">
                 <div id="end-rank" class="text-5xl font-black text-gold-300"></div>
                 <div id="end-score" class="text-3xl text-gold-200 font-bold"></div>
-                <p class="text-xl text-gold-200/60 mt-4">感謝您的參與！</p>
             </div>
+            <!-- 前三名排行榜 -->
+            <div class="bg-midnight-900/60 p-8 rounded-[3rem] border-4 border-gold-600/40 space-y-4">
+                <h2 class="text-3xl font-black text-gold-300">🏆 排行榜</h2>
+                <div id="end-top3" class="space-y-3"></div>
+            </div>
+            <p class="text-xl text-gold-200/60">感謝您的參與！</p>
         </div>
     </div>
 
@@ -353,6 +359,28 @@
                     const crown = crownIcons[myRank] || '';
                     document.getElementById('end-rank').innerHTML = crown ? `${crown} 第 ${myRank} 名 ${crown}` : `第 ${myRank} 名`;
                     document.getElementById('end-score').innerText = `得分：${myScore} 分`;
+
+                    // 前三名排行榜 + 自己的名次（如果不在前三）
+                    const rankEmojis = ['🥇', '🥈', '🥉'];
+                    let top3Html = '';
+                    const top3 = allPlayers.slice(0, 3);
+                    top3.forEach((p, i) => {
+                        const isMe = p.name === myName;
+                        const highlight = isMe ? 'bg-gold-500/20 border border-gold-400/60' : '';
+                        top3Html += `<div class="flex items-center justify-between px-6 py-3 rounded-2xl ${highlight}">
+                            <span class="text-2xl font-bold text-gold-200">${rankEmojis[i]} ${p.name}${isMe ? '（你）' : ''}</span>
+                            <span class="text-2xl font-black text-gold-300">${p.score} 分</span>
+                        </div>`;
+                    });
+                    // 如果自己不在前三名，額外顯示自己的排名
+                    if (myRank > 3) {
+                        top3Html += `<div class="border-t border-gold-600/30 pt-3 mt-1"></div>`;
+                        top3Html += `<div class="flex items-center justify-between px-6 py-3 rounded-2xl bg-gold-500/20 border border-gold-400/60">
+                            <span class="text-2xl font-bold text-gold-200">#${myRank} ${myName}（你）</span>
+                            <span class="text-2xl font-black text-gold-300">${myScore} 分</span>
+                        </div>`;
+                    }
+                    document.getElementById('end-top3').innerHTML = top3Html;
                 }
 
                 confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#ffffff'] });
