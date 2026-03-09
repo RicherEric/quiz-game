@@ -121,27 +121,63 @@
 
         <!-- Right Panel (70%) -->
         <div class="flex-1 flex flex-col relative">
-            <!-- Ball Container -->
-            <div id="ball-container" class="flex-1 relative overflow-hidden bg-gradient-to-b from-midnight-950 via-midnight-900 to-midnight-950">
-                <div id="ball-area" class="absolute inset-4"></div>
-                <!-- Idle message -->
-                <div id="idle-message" class="absolute inset-0 flex items-center justify-center">
-                    <div class="text-center space-y-4">
-                        <p class="text-6xl">🎱</p>
-                        <p class="text-gold-400/40 text-2xl font-bold">選擇獎項後按下「開始抽獎」</p>
+            <!-- Tab Navigation -->
+            <div class="flex border-b border-gold-700/30 bg-midnight-900/60 px-4 shrink-0">
+                <button data-lottery-tab="draw" onclick="switchLotteryTab('draw')"
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-gold-400 text-gold-200">🎱 摸彩抽獎</button>
+                <button data-lottery-tab="group-view" onclick="switchLotteryTab('group-view')"
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">👥 群組檢視</button>
+                <button data-lottery-tab="member-stats" onclick="switchLotteryTab('member-stats')"
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">📊 群組人數統計</button>
+                <button data-lottery-tab="winner-stats" onclick="switchLotteryTab('winner-stats')"
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">🏆 中獎群組統計</button>
+            </div>
+
+            <!-- Tab: Draw (existing) -->
+            <div id="lottery-tab-draw" class="flex-1 flex flex-col relative">
+                <!-- Ball Container -->
+                <div id="ball-container" class="flex-1 relative overflow-hidden bg-gradient-to-b from-midnight-950 via-midnight-900 to-midnight-950">
+                    <div id="ball-area" class="absolute inset-4"></div>
+                    <!-- Idle message -->
+                    <div id="idle-message" class="absolute inset-0 flex items-center justify-center">
+                        <div class="text-center space-y-4">
+                            <p class="text-6xl">🎱</p>
+                            <p class="text-gold-400/40 text-2xl font-bold">選擇獎項後按下「開始抽獎」</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Winner reveal area -->
+                <div id="winner-reveal" class="hidden absolute inset-0 flex items-center justify-center z-20 bg-midnight-950/60 backdrop-blur-sm">
+                    <div class="text-center space-y-6 max-w-2xl">
+                        <h2 id="reveal-prize-name" class="text-4xl font-black text-gold-gradient"></h2>
+                        <div id="reveal-winners" class="flex flex-wrap justify-center gap-4"></div>
+                        <button onclick="closeReveal()"
+                            class="px-8 py-3 bg-gold-700 hover:bg-gold-600 text-midnight-950 font-bold rounded-xl text-lg transition mt-4">
+                            確認
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Winner reveal area -->
-            <div id="winner-reveal" class="hidden absolute inset-0 flex items-center justify-center z-20 bg-midnight-950/60 backdrop-blur-sm">
-                <div class="text-center space-y-6 max-w-2xl">
-                    <h2 id="reveal-prize-name" class="text-4xl font-black text-gold-gradient"></h2>
-                    <div id="reveal-winners" class="flex flex-wrap justify-center gap-4"></div>
-                    <button onclick="closeReveal()"
-                        class="px-8 py-3 bg-gold-700 hover:bg-gold-600 text-midnight-950 font-bold rounded-xl text-lg transition mt-4">
-                        確認
-                    </button>
+            <!-- Tab: Group View -->
+            <div id="lottery-tab-group-view" class="hidden flex-1 overflow-y-auto p-6 space-y-4 custom-scroll">
+                <div id="group-view-container">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
+
+            <!-- Tab: Member Stats -->
+            <div id="lottery-tab-member-stats" class="hidden flex-1 overflow-y-auto p-6 space-y-6 custom-scroll">
+                <div id="lottery-member-stats-container">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
+
+            <!-- Tab: Winner Stats -->
+            <div id="lottery-tab-winner-stats" class="hidden flex-1 overflow-y-auto p-6 space-y-6 custom-scroll">
+                <div id="lottery-winner-stats-container">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
                 </div>
             </div>
         </div>
@@ -669,6 +705,285 @@
             return new Promise(r => setTimeout(r, ms));
         }
 
+        // ===== Lottery Tab Switching =====
+        let currentLotteryTab = 'draw';
+
+        function switchLotteryTab(tabName) {
+            currentLotteryTab = tabName;
+            // Hide all tab contents
+            const tabIds = ['lottery-tab-draw', 'lottery-tab-group-view', 'lottery-tab-member-stats', 'lottery-tab-winner-stats'];
+            tabIds.forEach(id => document.getElementById(id).classList.add('hidden'));
+            // Show selected tab
+            document.getElementById('lottery-tab-' + tabName).classList.remove('hidden');
+
+            // Update button styles
+            document.querySelectorAll('.lottery-tab-btn').forEach(btn => {
+                if (btn.dataset.lotteryTab === tabName) {
+                    btn.className = 'lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-gold-400 text-gold-200';
+                } else {
+                    btn.className = 'lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300';
+                }
+            });
+
+            // Load data for selected tab
+            if (tabName === 'group-view') renderGroupView();
+            if (tabName === 'member-stats') renderMemberStats();
+            if (tabName === 'winner-stats') renderWinnerStats();
+        }
+
+        // ===== Group View =====
+        function renderGroupView() {
+            const container = document.getElementById('group-view-container');
+            if (allGroups.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無群組資料</div>';
+                return;
+            }
+
+            const wonMemberIds = new Set(allWinners.map(w => w.member_id));
+
+            let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+            allGroups.forEach(g => {
+                const gMembers = allMembers.filter(m => m.group_id === g.id);
+                const totalMembers = allMembers.length;
+                const pct = totalMembers > 0 ? (gMembers.length / totalMembers * 100).toFixed(1) : '0.0';
+
+                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-5 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gold-200">${g.name}</h3>
+                        <div class="text-gold-400/60 text-sm">${gMembers.length} 人 · ${pct}% · 機率 ${g.probability_pct}%</div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">`;
+
+                if (gMembers.length === 0) {
+                    html += '<span class="text-gold-400/40 text-sm">尚無成員</span>';
+                } else {
+                    gMembers.forEach(m => {
+                        const isWinner = wonMemberIds.has(m.id);
+                        if (isWinner) {
+                            html += `<span class="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-gold-500/20 to-gold-700/20 border border-gold-400/60 rounded-full text-sm font-bold text-gold-200">
+                                <span class="text-gold-400">🏆</span>${m.name}
+                            </span>`;
+                        } else {
+                            html += `<span class="inline-flex items-center px-3 py-1.5 bg-midnight-800/60 border border-gold-700/30 rounded-full text-sm font-bold text-gold-300">${m.name}</span>`;
+                        }
+                    });
+                }
+                html += '</div></div>';
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // ===== Member Stats (Group Count Statistics) =====
+        function renderMemberStats() {
+            const container = document.getElementById('lottery-member-stats-container');
+            if (allGroups.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無群組資料</div>';
+                return;
+            }
+
+            const groupStats = allGroups.map(g => {
+                const memberCount = allMembers.filter(m => m.group_id === g.id).length;
+                return { ...g, memberCount };
+            });
+            const totalMembers = groupStats.reduce((sum, g) => sum + g.memberCount, 0);
+            const maxCount = Math.max(...groupStats.map(g => g.memberCount), 1);
+
+            let html = '';
+
+            // Summary card
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold text-gold-200">總覽</h3>
+                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${allGroups.length}</span> 個群組，<span class="text-gold-300 font-bold text-lg">${totalMembers}</span> 人</div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">`;
+            groupStats.forEach(g => {
+                const pct = totalMembers > 0 ? (g.memberCount / totalMembers * 100).toFixed(1) : '0.0';
+                html += `<div class="bg-midnight-800/50 border border-gold-800/30 rounded-xl p-4 text-center">
+                    <p class="text-gold-400/60 text-sm mb-1">${g.name}</p>
+                    <p class="text-3xl font-black text-gold-200">${g.memberCount}</p>
+                    <p class="text-gold-400/50 text-xs mt-1">${pct}%</p>
+                </div>`;
+            });
+            html += '</div></div>';
+
+            // Bar chart
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">群組人數比較</h3>
+                <div class="space-y-3">`;
+            groupStats.forEach(g => {
+                const barWidth = maxCount > 0 ? (g.memberCount / maxCount * 100) : 0;
+                const pct = totalMembers > 0 ? (g.memberCount / totalMembers * 100).toFixed(1) : '0.0';
+                html += `<div class="space-y-1">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gold-200 font-bold">${g.name}</span>
+                        <span class="text-gold-400/60">${g.memberCount} 人（${pct}%）</span>
+                    </div>
+                    <div class="w-full bg-midnight-800/80 rounded-full h-6 overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-gold-500 to-gold-700 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+                            style="width: ${Math.max(barWidth, 2)}%">
+                            ${g.memberCount > 0 ? `<span class="text-midnight-950 text-xs font-bold">${g.memberCount}</span>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            });
+            html += '</div></div>';
+
+            // Table
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">詳細資料</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gold-800/50">
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">群組名稱</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">人數</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">佔比</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">機率設定</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+            groupStats.forEach(g => {
+                const pct = totalMembers > 0 ? (g.memberCount / totalMembers * 100).toFixed(1) : '0.0';
+                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                    <td class="text-gold-200 font-bold py-3 px-4">${g.name}</td>
+                    <td class="text-center text-gold-300 font-bold py-3 px-4">${g.memberCount}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${pct}%</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${g.probability_pct}%</td>
+                </tr>`;
+            });
+            html += `<tr class="border-t-2 border-gold-700/50 font-bold">
+                    <td class="text-gold-200 py-3 px-4">合計</td>
+                    <td class="text-center text-gold-300 py-3 px-4">${totalMembers}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">100%</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${groupStats.reduce((s, g) => s + g.probability_pct, 0)}%</td>
+                </tr>`;
+            html += '</tbody></table></div></div>';
+
+            container.innerHTML = html;
+        }
+
+        // ===== Winner Stats (Winner Group Statistics) =====
+        function renderWinnerStats() {
+            const container = document.getElementById('lottery-winner-stats-container');
+            if (allGroups.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無群組資料</div>';
+                return;
+            }
+            if (allWinners.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無中獎紀錄</div>';
+                return;
+            }
+
+            const totalMembers = allMembers.length;
+            const totalWinners = allWinners.length;
+
+            // Count winners per group
+            const groupWinMap = {};
+            const groupPrizeMap = {};
+            allGroups.forEach(g => { groupWinMap[g.id] = 0; groupPrizeMap[g.id] = {}; });
+
+            allWinners.forEach(w => {
+                const gId = w.lottery_members?.group_id;
+                if (gId != null) {
+                    groupWinMap[gId] = (groupWinMap[gId] || 0) + 1;
+                    const pName = w.lottery_prizes?.name || '未知';
+                    groupPrizeMap[gId] = groupPrizeMap[gId] || {};
+                    groupPrizeMap[gId][pName] = (groupPrizeMap[gId][pName] || 0) + 1;
+                }
+            });
+
+            const groupStats = allGroups.map(g => {
+                const memberCount = allMembers.filter(m => m.group_id === g.id).length;
+                const winCount = groupWinMap[g.id] || 0;
+                return { ...g, memberCount, winCount, prizes: groupPrizeMap[g.id] || {} };
+            });
+            const maxWinCount = Math.max(...groupStats.map(g => g.winCount), 1);
+
+            let html = '';
+
+            // Summary card
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold text-gold-200">中獎總覽</h3>
+                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${totalWinners}</span> 人中獎</div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">`;
+            groupStats.forEach(g => {
+                const pct = totalWinners > 0 ? (g.winCount / totalWinners * 100).toFixed(1) : '0.0';
+                html += `<div class="bg-midnight-800/50 border border-gold-800/30 rounded-xl p-4 text-center">
+                    <p class="text-gold-400/60 text-sm mb-1">${g.name}</p>
+                    <p class="text-3xl font-black text-gold-200">${g.winCount}</p>
+                    <p class="text-gold-400/50 text-xs mt-1">${pct}%</p>
+                </div>`;
+            });
+            html += '</div></div>';
+
+            // Bar chart (green gradient)
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">各群組中獎人數比較</h3>
+                <div class="space-y-3">`;
+            groupStats.forEach(g => {
+                const barWidth = maxWinCount > 0 ? (g.winCount / maxWinCount * 100) : 0;
+                const pct = totalWinners > 0 ? (g.winCount / totalWinners * 100).toFixed(1) : '0.0';
+                html += `<div class="space-y-1">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gold-200 font-bold">${g.name}</span>
+                        <span class="text-gold-400/60">${g.winCount} 人中獎（${pct}%）</span>
+                    </div>
+                    <div class="w-full bg-midnight-800/80 rounded-full h-6 overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-emerald-500 to-emerald-700 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+                            style="width: ${Math.max(barWidth, 2)}%">
+                            ${g.winCount > 0 ? `<span class="text-midnight-950 text-xs font-bold">${g.winCount}</span>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            });
+            html += '</div></div>';
+
+            // Detailed table
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">詳細資料</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gold-800/50">
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">群組名稱</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">群組人數</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎人數</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎佔比</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎率</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">獎項分布</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+            groupStats.forEach(g => {
+                const pct = totalWinners > 0 ? (g.winCount / totalWinners * 100).toFixed(1) : '0.0';
+                const winRate = g.memberCount > 0 ? (g.winCount / g.memberCount * 100).toFixed(1) : '0.0';
+                const prizeList = Object.entries(g.prizes).map(([p, c]) => `${p}×${c}`).join('、') || '-';
+                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                    <td class="text-gold-200 font-bold py-3 px-4">${g.name}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${g.memberCount}</td>
+                    <td class="text-center text-gold-300 font-bold py-3 px-4">${g.winCount}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${pct}%</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${winRate}%</td>
+                    <td class="text-gold-400/60 py-3 px-4 text-xs">${prizeList}</td>
+                </tr>`;
+            });
+            html += `<tr class="border-t-2 border-gold-700/50 font-bold">
+                    <td class="text-gold-200 py-3 px-4">合計</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${totalMembers}</td>
+                    <td class="text-center text-gold-300 py-3 px-4">${totalWinners}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">100%</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${totalMembers > 0 ? (totalWinners / totalMembers * 100).toFixed(1) : '0.0'}%</td>
+                    <td class="text-gold-400/60 py-3 px-4">-</td>
+                </tr>`;
+            html += '</tbody></table></div></div>';
+
+            container.innerHTML = html;
+        }
+
         // ===== Supabase Realtime Auto-Sync =====
         let pollInterval = null;
         let lastWinnerHash = '';
@@ -702,6 +1017,8 @@
                     await loadWinners();
                     renderWinnerHistory();
                     updateEligibleCount();
+                    if (currentLotteryTab === 'winner-stats') renderWinnerStats();
+                    if (currentLotteryTab === 'group-view') renderGroupView();
                 })
                 .subscribe();
 
@@ -711,6 +1028,8 @@
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_groups' }, async () => {
                     await loadGroups();
                     updateEligibleCount();
+                    if (currentLotteryTab === 'group-view') renderGroupView();
+                    if (currentLotteryTab === 'member-stats') renderMemberStats();
                 })
                 .subscribe();
 
@@ -720,6 +1039,8 @@
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_members' }, async () => {
                     await loadGroups();
                     updateEligibleCount();
+                    if (currentLotteryTab === 'group-view') renderGroupView();
+                    if (currentLotteryTab === 'member-stats') renderMemberStats();
                 })
                 .subscribe();
 
@@ -732,6 +1053,8 @@
                     lastWinnerHash = getWinnerHash();
                     renderWinnerHistory();
                     updateEligibleCount();
+                    if (currentLotteryTab === 'winner-stats') renderWinnerStats();
+                    if (currentLotteryTab === 'group-view') renderGroupView();
                 })
                 .subscribe();
 
@@ -756,6 +1079,11 @@
                         sel.value = oldSelectedId;
                     }
                     sel.dispatchEvent(new Event('change'));
+
+                    // Refresh active tab data
+                    if (currentLotteryTab === 'group-view') renderGroupView();
+                    if (currentLotteryTab === 'member-stats') renderMemberStats();
+                    if (currentLotteryTab === 'winner-stats') renderWinnerStats();
                 } catch (e) {
                     console.error('Polling sync error:', e);
                 }
