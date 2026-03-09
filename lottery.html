@@ -580,9 +580,12 @@
                     <div class="space-y-1">`;
                 group.winners.forEach(w => {
                     const memberName = w.lottery_members?.name || '未知';
+                    const groupObj = allGroups.find(g => g.id === w.lottery_members?.group_id);
+                    const groupName = groupObj ? groupObj.name : '';
                     html += `<div class="text-gold-200 text-sm font-bold flex items-center justify-between group">
                         <div class="flex items-center space-x-2">
                             <span class="text-gold-400">🏆</span><span>${memberName}</span>
+                            ${groupName ? `<span class="text-gold-400/50 text-xs">(${groupName})</span>` : ''}
                         </div>
                         <button onclick="removeWinner(${w.id})"
                             class="hidden group-hover:inline-block text-red-400 hover:text-red-200 text-xs font-bold px-1.5 py-0.5 rounded bg-red-900/40 border border-red-700/40">✕</button>
@@ -667,6 +670,13 @@
         }
 
         // ===== Supabase Realtime Auto-Sync =====
+        let pollInterval = null;
+        let lastWinnerHash = '';
+
+        function getWinnerHash() {
+            return allWinners.map(w => w.id).sort().join(',');
+        }
+
         function setupRealtimeSync() {
             // Listen for prize changes (admin add/edit/delete prizes)
             sbClient
@@ -719,10 +729,37 @@
                 .on('broadcast', { event: 'winners-changed' }, async () => {
                     if (isDrawing) return;
                     await loadWinners();
+                    lastWinnerHash = getWinnerHash();
                     renderWinnerHistory();
                     updateEligibleCount();
                 })
                 .subscribe();
+
+            // Polling fallback: check for winner changes every 5 seconds
+            lastWinnerHash = getWinnerHash();
+            pollInterval = setInterval(async () => {
+                if (isDrawing) return;
+                try {
+                    await loadWinners();
+                    const newHash = getWinnerHash();
+                    if (newHash !== lastWinnerHash) {
+                        lastWinnerHash = newHash;
+                        renderWinnerHistory();
+                        updateEligibleCount();
+                    }
+                    // Also refresh prizes and groups
+                    const oldSelectedId = document.getElementById('prize-selector').value;
+                    await Promise.all([loadPrizes(), loadGroups()]);
+                    populatePrizeSelector();
+                    const sel = document.getElementById('prize-selector');
+                    if (oldSelectedId && allPrizes.find(p => p.id === parseInt(oldSelectedId))) {
+                        sel.value = oldSelectedId;
+                    }
+                    sel.dispatchEvent(new Event('change'));
+                } catch (e) {
+                    console.error('Polling sync error:', e);
+                }
+            }, 5000);
         }
 
         // ===== Start =====

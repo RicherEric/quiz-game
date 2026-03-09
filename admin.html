@@ -161,6 +161,7 @@
             <button onclick="switchTab('tab-lottery-groups')" id="btn-tab-lottery-groups" class="tab-btn">🎱 群組管理</button>
             <button onclick="switchTab('tab-lottery-prizes')" id="btn-tab-lottery-prizes" class="tab-btn">🎁 獎項管理</button>
             <button onclick="switchTab('tab-lottery-winners')" id="btn-tab-lottery-winners" class="tab-btn">🏆 中獎紀錄</button>
+            <button onclick="switchTab('tab-lottery-stats')" id="btn-tab-lottery-stats" class="tab-btn">📊 群組統計</button>
         </div>
 
         <main
@@ -301,6 +302,14 @@
             <div id="tab-lottery-winners" class="hidden space-y-6">
                 <h2 class="text-3xl font-bold text-gold-100">中獎紀錄</h2>
                 <div id="lottery-winners-container" class="space-y-4">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
+
+            <!-- 群組統計 Tab -->
+            <div id="tab-lottery-stats" class="hidden space-y-6">
+                <h2 class="text-3xl font-bold text-gold-100">群組人數統計</h2>
+                <div id="lottery-stats-container" class="space-y-6">
                     <div class="text-gold-400/50 text-center py-10">載入中...</div>
                 </div>
             </div>
@@ -948,7 +957,7 @@
 
         // 分頁切換邏輯
         const qaTabs = ['tab-stats', 'tab-leaderboard', 'tab-history'];
-        const lotteryTabs = ['tab-lottery-groups', 'tab-lottery-prizes', 'tab-lottery-winners'];
+        const lotteryTabs = ['tab-lottery-groups', 'tab-lottery-prizes', 'tab-lottery-winners', 'tab-lottery-stats'];
         const allTabs = [...qaTabs, ...lotteryTabs];
 
         let currentSection = 'qa';
@@ -1001,6 +1010,7 @@
             if (tabId === 'tab-lottery-groups') fetchLotteryGroups();
             if (tabId === 'tab-lottery-prizes') fetchLotteryPrizes();
             if (tabId === 'tab-lottery-winners') fetchLotteryWinners();
+            if (tabId === 'tab-lottery-stats') fetchLotteryStats();
         }
 
         // 重置所有答題狀況
@@ -1452,6 +1462,103 @@
             alert(`重抽完成！新中獎者：${winnerNames}`);
             fetchLotteryWinners();
             broadcastLotteryChange();
+        }
+
+        // ===== 群組統計 =====
+        async function fetchLotteryStats() {
+            const [{ data: groups }, { data: members }] = await Promise.all([
+                sbClient.from('lottery_groups').select('*').order('id'),
+                sbClient.from('lottery_members').select('*').order('name')
+            ]);
+
+            const container = document.getElementById('lottery-stats-container');
+            if (!groups || groups.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無群組資料</div>';
+                return;
+            }
+
+            // Count members per group
+            const groupStats = groups.map(g => {
+                const memberCount = (members || []).filter(m => m.group_id === g.id).length;
+                return { ...g, memberCount };
+            });
+
+            const totalMembers = groupStats.reduce((sum, g) => sum + g.memberCount, 0);
+            const maxCount = Math.max(...groupStats.map(g => g.memberCount), 1);
+
+            let html = '';
+
+            // Summary card
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold text-gold-200">總覽</h3>
+                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${groups.length}</span> 個群組，<span class="text-gold-300 font-bold text-lg">${totalMembers}</span> 人</div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">`;
+            groupStats.forEach(g => {
+                const pct = totalMembers > 0 ? (g.memberCount / totalMembers * 100).toFixed(1) : '0.0';
+                html += `<div class="bg-midnight-800/50 border border-gold-800/30 rounded-xl p-4 text-center">
+                    <p class="text-gold-400/60 text-sm mb-1">${g.name}</p>
+                    <p class="text-3xl font-black text-gold-200">${g.memberCount}</p>
+                    <p class="text-gold-400/50 text-xs mt-1">${pct}%</p>
+                </div>`;
+            });
+            html += '</div></div>';
+
+            // Bar chart comparison
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">群組人數比較</h3>
+                <div class="space-y-3">`;
+            groupStats.forEach(g => {
+                const barWidth = maxCount > 0 ? (g.memberCount / maxCount * 100) : 0;
+                const pct = totalMembers > 0 ? (g.memberCount / totalMembers * 100).toFixed(1) : '0.0';
+                html += `<div class="space-y-1">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gold-200 font-bold">${g.name}</span>
+                        <span class="text-gold-400/60">${g.memberCount} 人（${pct}%）</span>
+                    </div>
+                    <div class="w-full bg-midnight-800/80 rounded-full h-6 overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-gold-500 to-gold-700 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+                            style="width: ${Math.max(barWidth, 2)}%">
+                            ${g.memberCount > 0 ? `<span class="text-midnight-950 text-xs font-bold">${g.memberCount}</span>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            });
+            html += '</div></div>';
+
+            // Detailed table
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">詳細資料</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gold-800/50">
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">群組名稱</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">人數</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">佔比</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">機率設定</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+            groupStats.forEach(g => {
+                const pct = totalMembers > 0 ? (g.memberCount / totalMembers * 100).toFixed(1) : '0.0';
+                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                    <td class="text-gold-200 font-bold py-3 px-4">${g.name}</td>
+                    <td class="text-center text-gold-300 font-bold py-3 px-4">${g.memberCount}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${pct}%</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${g.probability_pct}%</td>
+                </tr>`;
+            });
+            html += `<tr class="border-t-2 border-gold-700/50 font-bold">
+                    <td class="text-gold-200 py-3 px-4">合計</td>
+                    <td class="text-center text-gold-300 py-3 px-4">${totalMembers}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">100%</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${groupStats.reduce((s, g) => s + g.probability_pct, 0)}%</td>
+                </tr>`;
+            html += '</tbody></table></div></div>';
+
+            container.innerHTML = html;
         }
 
         // 登入驗證
