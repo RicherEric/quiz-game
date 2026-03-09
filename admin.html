@@ -147,7 +147,7 @@
                     class="hidden bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 text-white px-8 py-4 rounded-xl font-bold text-xl transition shadow-lg border border-emerald-400/50">
                     ➡️ 下一題
                 </button>
-                <button id="btn-end" onclick="changeState('ended')"
+                <button id="btn-end" onclick="endGame()"
                     class="hidden bg-red-800 hover:bg-red-700 text-white px-6 py-4 rounded-xl font-bold text-lg transition">
                     🏆 結束遊戲
                 </button>
@@ -907,6 +907,38 @@
             if (!error && data && data.length > 0) {
                 updateControlButtons('waiting');
             }
+        }
+
+        // 結束遊戲：先顯示成績，再詢問是否新一輪
+        async function endGame() {
+            await changeState('ended');
+
+            // 等一下讓玩家看到成績後，再詢問 admin
+            setTimeout(async () => {
+                const continueGame = confirm('是否進行新一輪問答？\n\n按「確定」→ 繼續下一輪（玩家回到等待畫面）\n按「取消」→ 結束活動（玩家回到首頁）');
+
+                if (continueGame) {
+                    // 重置到第一題，回到 waiting
+                    const selectEl = document.getElementById('q-selector');
+                    selectEl.selectedIndex = 0;
+                    selectEl.dispatchEvent(new Event('change'));
+                    const qId = selectEl.value;
+                    const { data, error } = await sbClient.from('game_status').update({
+                        current_q_id: parseInt(qId),
+                        state: 'waiting',
+                        start_time: 0
+                    }).eq('id', 1).select();
+                    if (!error && data && data.length > 0) {
+                        updateControlButtons('waiting');
+                    }
+                } else {
+                    // 踢回首頁：發送 dismissed 狀態
+                    await sbClient.from('game_status').update({
+                        state: 'dismissed',
+                        start_time: 0
+                    }).eq('id', 1).select();
+                }
+            }, 1500);
         }
 
         // 讀取當前題目的作答統計 + 提交狀況
@@ -1743,21 +1775,27 @@
 
             // Create temporary hidden container for html2pdf
             const container = document.createElement('div');
-            container.style.cssText = 'position:fixed;left:-9999px;top:0;width:190mm;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;color:#1a1a1a;';
+            container.style.cssText = 'width:190mm;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;color:#1a1a1a;background:#fff;';
             container.innerHTML = `
                 <div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #b8860b;margin-bottom:20px;">
                     <h1 style="font-size:24px;font-weight:900;color:#8b6508;margin:0;">🏆 中獎紀錄</h1>
                     <div style="font-size:12px;color:#888;margin-top:4px;">匯出日期：${dateStr}</div>
                 </div>
                 ${content}`;
-            document.body.appendChild(container);
+            // Wrap in a zero-height overflow-hidden div so it's in-flow but invisible to user
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'position:absolute;left:0;top:0;z-index:-9999;overflow:auto;opacity:0;pointer-events:none;';
+            wrapper.appendChild(container);
+            document.body.appendChild(wrapper);
 
             try {
+                // Wait for browser to layout the element before capturing
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
                 await html2pdf().set({
                     margin: [15, 10, 15, 10],
                     filename: `中獎紀錄_${dateStr.replace(/\//g, '')}.pdf`,
                     image: { type: 'jpeg', quality: 0.95 },
-                    html2canvas: { scale: 2, useCORS: true, logging: false },
+                    html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0 },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
                 }).from(container).save();
@@ -1765,7 +1803,7 @@
                 console.error('PDF export error:', e);
                 alert('PDF 匯出失敗，請稍後再試');
             } finally {
-                document.body.removeChild(container);
+                document.body.removeChild(wrapper);
             }
         }
 

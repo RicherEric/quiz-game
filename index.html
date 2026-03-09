@@ -386,6 +386,20 @@
 
                 confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#ffffff'] });
             }
+            else if (status.state === 'dismissed') {
+                // 被踢回首頁：清除狀態，回到輸入暱稱畫面
+                hideAllUI();
+                if (channel) { sbClient.removeChannel(channel); channel = null; }
+                if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+                stopCountdown();
+                myName = '';
+                currentQ = null;
+                hasAnswered = false;
+                currentSelection = 0;
+                lastProcessedKey = '';
+                document.getElementById('p-name').value = '';
+                document.getElementById('login-ui').classList.remove('hidden');
+            }
         }
 
         function resetUI() {
