@@ -7,6 +7,7 @@
     <title>滙智 10 週年 - 主持人控場台</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
     <script>
         tailwind.config = { theme: { extend: { colors: { gold: { 100: '#ffedc6', 300: '#ffc24a', 400: '#ffaa1d', 500: '#f98c00', 700: '#bb5200' }, midnight: { 800: '#1e293b', 900: '#0f172a', 950: '#020617' } } } } }
     </script>
@@ -38,6 +39,20 @@
         .reveal-row {
             animation: revealRow 0.35s ease-out forwards;
             opacity: 0;
+        }
+
+        .cursor-grab {
+            cursor: grab;
+            user-select: none;
+        }
+
+        .cursor-grab:active {
+            cursor: grabbing;
+        }
+
+        .sortable-ghost {
+            opacity: 0.4;
+            background: rgba(187, 82, 0, 0.2);
         }
     </style>
 </head>
@@ -285,6 +300,7 @@
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="bg-midnight-900/80 border-b border-gold-700/30">
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-1" style="width:2rem">排序</th>
                                 <th class="text-left text-gold-400/60 font-bold py-3 px-3">#</th>
                                 <th class="text-left text-gold-400/60 font-bold py-3 px-3">題目</th>
                                 <th class="text-center text-gold-400/60 font-bold py-3 px-3">A</th>
@@ -298,7 +314,7 @@
                             </tr>
                         </thead>
                         <tbody id="questions-table-body">
-                            <tr><td colspan="10" class="text-gold-400/50 text-center py-10">載入中...</td></tr>
+                            <tr><td colspan="11" class="text-gold-400/50 text-center py-10">載入中...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -580,7 +596,7 @@
             }
 
             // 載入題庫到下拉選單
-            const { data: qData } = await sbClient.from('questions').select('*').order('id', { ascending: true });
+            const { data: qData } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
             questions = qData;
             const select = document.getElementById('q-selector');
             select.innerHTML = '';
@@ -1954,16 +1970,17 @@
 
         // ===== 題目管理 =====
         async function fetchQuestionsTable() {
-            const { data: qs } = await sbClient.from('questions').select('*').order('id', { ascending: true });
+            const { data: qs } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
             const tbody = document.getElementById('questions-table-body');
             if (!qs || qs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-gold-400/50 text-center py-10">尚無題目</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="text-gold-400/50 text-center py-10">尚無題目</td></tr>';
                 return;
             }
             const answerLabels = { 1: 'A', 2: 'B', 3: 'C', 4: 'D' };
             let html = '';
             qs.forEach((q, i) => {
-                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30" data-id="${q.id}">
+                    <td class="cursor-grab text-center text-gold-400/40 py-3 px-1 text-lg">⠿</td>
                     <td class="text-gold-400/60 py-3 px-3">${i + 1}</td>
                     <td class="text-gold-200 font-bold py-3 px-3 max-w-[200px] truncate">${q.question}</td>
                     <td class="text-center text-gold-400/80 py-3 px-3 text-xs max-w-[80px] truncate">${q.option_a || '-'}</td>
@@ -1980,6 +1997,27 @@
                 </tr>`;
             });
             tbody.innerHTML = html;
+            initSortable(tbody);
+        }
+
+        function initSortable(tbody) {
+            if (tbody._sortable) tbody._sortable.destroy();
+            tbody._sortable = new Sortable(tbody, {
+                handle: '.cursor-grab',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                onEnd: async function () {
+                    const rows = tbody.querySelectorAll('tr[data-id]');
+                    const updates = [];
+                    rows.forEach((row, i) => {
+                        updates.push(
+                            sbClient.from('questions').update({ sort_order: i }).eq('id', row.dataset.id)
+                        );
+                    });
+                    await Promise.all(updates);
+                    await refreshQuestionsAndSelector();
+                }
+            });
         }
 
         function openQuestionModal(id) {
@@ -2035,6 +2073,9 @@
                 const { error } = await sbClient.from('questions').update(row).eq('id', id);
                 if (error) return alert('更新失敗：' + error.message);
             } else {
+                // 新增題目：sort_order 排在最後
+                const { data: maxRow } = await sbClient.from('questions').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
+                row.sort_order = (maxRow ? maxRow.sort_order : -1) + 1;
                 const { error } = await sbClient.from('questions').insert(row);
                 if (error) return alert('新增失敗：' + error.message);
             }
@@ -2091,6 +2132,11 @@
                 return;
             }
 
+            // 分配 sort_order：從現有最大值 +1 開始
+            const { data: maxRow } = await sbClient.from('questions').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
+            let nextOrder = (maxRow ? maxRow.sort_order : -1) + 1;
+            rows.forEach(r => { r.sort_order = nextOrder++; });
+
             const { error } = await sbClient.from('questions').insert(rows);
             if (error) {
                 alert('匯入失敗：' + error.message);
@@ -2132,7 +2178,7 @@
         }
 
         async function refreshQuestionsAndSelector() {
-            const { data: qData } = await sbClient.from('questions').select('*').order('id', { ascending: true });
+            const { data: qData } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
             questions = qData || [];
             const select = document.getElementById('q-selector');
             select.innerHTML = '';

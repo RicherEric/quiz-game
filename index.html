@@ -214,7 +214,7 @@
             }
 
             // 載入題目 ID 順序，用於顯示題號
-            const { data: qList } = await sbClient.from('questions').select('id').order('id', { ascending: true });
+            const { data: qList } = await sbClient.from('questions').select('id, sort_order').order('sort_order', { ascending: true }).order('id', { ascending: true });
             questionIdOrder = (qList || []).map(q => q.id);
 
             document.getElementById('user-display').innerText = myName;

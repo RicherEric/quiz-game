@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS public.questions (
   answer integer,
   points integer DEFAULT 1000,
   seconds integer DEFAULT 20,
+  sort_order integer NOT NULL DEFAULT 0,
   CONSTRAINT questions_pkey PRIMARY KEY (id)
 );
 
@@ -171,7 +172,19 @@ CREATE POLICY "Allow anon all qr_tokens" ON public.qr_tokens FOR ALL USING (true
 -- 初始資料
 -- ============================================================
 
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0;
+  -- Backfill existing rows with sequential sort_order based on current id order
+  WITH ordered AS (
+    SELECT id, ROW_NUMBER() OVER (ORDER BY id) - 1 AS new_order
+    FROM public.questions
+  )
+  UPDATE public.questions q SET sort_order = o.new_order
+  FROM ordered o WHERE q.id = o.id;
+
+
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
 VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')
 ON CONFLICT (id) DO NOTHING;
+
+
