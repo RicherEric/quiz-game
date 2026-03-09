@@ -206,10 +206,11 @@
                 player_name: myName
             });
             if (error) {
+                console.error("join_via_qr error:", error);
                 if (error.message && error.message.includes('Invalid QR token')) {
                     return alert("無效的 QR Code，請重新掃描！");
                 }
-                return alert("名字可能被拿走囉，請換一個！");
+                return alert("加入失敗：" + (error.message || "未知錯誤"));
             }
 
             // 載入題目 ID 順序，用於顯示題號
