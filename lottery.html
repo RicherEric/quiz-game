@@ -179,7 +179,7 @@
         }
 
         async function loadWinners() {
-            const { data } = await sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order)').order('drawn_at', { ascending: false });
+            const { data } = await sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count)').order('drawn_at', { ascending: false });
             allWinners = data || [];
         }
 
@@ -539,10 +539,12 @@
             // Group by prize
             const byPrize = {};
             allWinners.forEach(w => {
+                const prizeId = w.prize_id;
                 const prizeName = w.lottery_prizes?.name || '未知獎項';
                 const sortOrder = w.lottery_prizes?.sort_order ?? 999;
-                const key = sortOrder + '_' + prizeName;
-                if (!byPrize[key]) byPrize[key] = { name: prizeName, winners: [] };
+                const winnerCount = w.lottery_prizes?.winner_count ?? 0;
+                const key = sortOrder + '_' + prizeId;
+                if (!byPrize[key]) byPrize[key] = { prizeId, name: prizeName, winnerCount, winners: [] };
                 byPrize[key].winners.push(w);
             });
 
@@ -550,18 +552,89 @@
             let html = '';
             sortedKeys.forEach(key => {
                 const group = byPrize[key];
+                const currentCount = group.winners.length;
+                const expectedCount = group.winnerCount;
+                const deficit = expectedCount - currentCount;
+
                 html += `<div class="bg-midnight-800/50 rounded-xl border border-gold-700/30 p-3">
-                    <h4 class="text-gold-300 font-bold text-xs mb-2">${group.name}</h4>
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-gold-300 font-bold text-xs">${group.name} (${currentCount}/${expectedCount})</h4>
+                        ${deficit > 0 ? `<button onclick="redrawWinners(${group.prizeId}, ${deficit})"
+                            class="text-amber-400 hover:text-amber-200 text-xs font-bold px-2 py-0.5 rounded bg-amber-900/40 border border-amber-700/40">
+                            重抽${deficit}人
+                        </button>` : ''}
+                    </div>
                     <div class="space-y-1">`;
                 group.winners.forEach(w => {
                     const memberName = w.lottery_members?.name || '未知';
-                    html += `<div class="text-gold-200 text-sm font-bold flex items-center space-x-2">
-                        <span class="text-gold-400">🏆</span><span>${memberName}</span>
+                    html += `<div class="text-gold-200 text-sm font-bold flex items-center justify-between group">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-gold-400">🏆</span><span>${memberName}</span>
+                        </div>
+                        <button onclick="removeWinner(${w.id})"
+                            class="hidden group-hover:inline-block text-red-400 hover:text-red-200 text-xs font-bold px-1.5 py-0.5 rounded bg-red-900/40 border border-red-700/40">✕</button>
                     </div>`;
                 });
                 html += '</div></div>';
             });
             container.innerHTML = html;
+        }
+
+        async function removeWinner(winnerId) {
+            if (!confirm('確定要移除此中獎者嗎？')) return;
+            const { error } = await sbClient.from('lottery_winners').delete().eq('id', winnerId);
+            if (error) return alert('移除失敗：' + error.message);
+            await loadWinners();
+            renderWinnerHistory();
+            updateEligibleCount();
+        }
+
+        async function redrawWinners(prizeId, count) {
+            if (isDrawing) return;
+            if (!confirm(`確定要為此獎項重抽 ${count} 人嗎？`)) return;
+
+            // Get eligible members (exclude current winners)
+            const eligible = getEligibleMembers();
+            if (eligible.length === 0) return alert('沒有合格的成員可以抽獎');
+            if (eligible.length < count) {
+                if (!confirm(`合格人數僅 ${eligible.length} 人，少於需求 ${count} 人。是否抽取 ${eligible.length} 人？`)) return;
+                count = eligible.length;
+            }
+
+            isDrawing = true;
+            document.getElementById('btn-draw').disabled = true;
+            document.getElementById('idle-message').classList.add('hidden');
+            document.getElementById('winner-reveal').classList.add('hidden');
+
+            const winners = weightedRandomDraw(eligible, count);
+            const prize = allPrizes.find(p => p.id === prizeId);
+
+            // Ball animation
+            const area = document.getElementById('ball-area');
+            if (physics) physics.clear();
+            physics = new BallPhysics(area);
+            physics.init(eligible);
+            physics.start();
+
+            await sleep(3000);
+            await new Promise(resolve => physics.slowDown(3000, resolve));
+            physics.stop();
+
+            const winnerIds = winners.map(w => w.id);
+            physics.highlightWinners(winnerIds);
+
+            await sleep(2000);
+            fireConfetti();
+
+            await saveWinners(winners, prizeId);
+            await loadWinners();
+            renderWinnerHistory();
+            updateEligibleCount();
+
+            if (prize) showWinnerReveal(prize, winners);
+
+            isDrawing = false;
+            document.getElementById('btn-draw').disabled = false;
         }
 
         // ===== Confetti =====

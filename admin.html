@@ -127,12 +127,23 @@
             </div>
         </header>
 
-        <div class="flex space-x-2 border-b border-gold-800/50">
+        <!-- 頂層分區切換 -->
+        <div class="flex items-center space-x-4 mb-2">
+            <button onclick="switchSection('qa')" id="btn-section-qa"
+                class="px-8 py-3 font-black text-xl rounded-2xl transition border-2 bg-gradient-to-r from-emerald-600 to-emerald-800 text-white border-emerald-400/50 shadow-lg">
+                📝 問答管理
+            </button>
+            <button onclick="switchSection('lottery')" id="btn-section-lottery"
+                class="px-8 py-3 font-black text-xl rounded-2xl transition border-2 bg-midnight-900 text-gold-500/50 border-gold-800/30 hover:text-gold-300">
+                🎰 抽獎管理
+            </button>
+        </div>
+
+        <!-- 問答 Tabs -->
+        <div id="section-qa-tabs" class="flex space-x-2 border-b border-gold-800/50">
             <button onclick="switchTab('tab-stats')" id="btn-tab-stats" class="tab-btn tab-active">📊 作答監控</button>
             <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">🏆 總積分排行榜</button>
             <button onclick="switchTab('tab-history')" id="btn-tab-history" class="tab-btn">📝 答題紀錄</button>
-            <button onclick="switchTab('tab-lottery-groups')" id="btn-tab-lottery-groups" class="tab-btn">🎱 群組管理</button>
-            <button onclick="switchTab('tab-lottery-prizes')" id="btn-tab-lottery-prizes" class="tab-btn">🎁 獎項管理</button>
             <div class="ml-auto flex space-x-3">
                 <button onclick="resetAll()"
                     class="px-6 py-3 font-bold text-lg rounded-xl bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 transition">
@@ -143,6 +154,13 @@
                     📱 QR Code
                 </button>
             </div>
+        </div>
+
+        <!-- 抽獎 Tabs -->
+        <div id="section-lottery-tabs" class="hidden flex space-x-2 border-b border-gold-800/50">
+            <button onclick="switchTab('tab-lottery-groups')" id="btn-tab-lottery-groups" class="tab-btn">🎱 群組管理</button>
+            <button onclick="switchTab('tab-lottery-prizes')" id="btn-tab-lottery-prizes" class="tab-btn">🎁 獎項管理</button>
+            <button onclick="switchTab('tab-lottery-winners')" id="btn-tab-lottery-winners" class="tab-btn">🏆 中獎紀錄</button>
         </div>
 
         <main
@@ -275,6 +293,14 @@
                     </button>
                 </div>
                 <div id="lottery-prizes-container" class="space-y-3">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
+
+            <!-- 中獎紀錄 Tab -->
+            <div id="tab-lottery-winners" class="hidden space-y-6">
+                <h2 class="text-3xl font-bold text-gold-100">中獎紀錄</h2>
+                <div id="lottery-winners-container" class="space-y-4">
                     <div class="text-gold-400/50 text-center py-10">載入中...</div>
                 </div>
             </div>
@@ -921,9 +947,50 @@
         }
 
         // 分頁切換邏輯
-        const allTabs = ['tab-stats', 'tab-leaderboard', 'tab-history', 'tab-lottery-groups', 'tab-lottery-prizes'];
+        const qaTabs = ['tab-stats', 'tab-leaderboard', 'tab-history'];
+        const lotteryTabs = ['tab-lottery-groups', 'tab-lottery-prizes', 'tab-lottery-winners'];
+        const allTabs = [...qaTabs, ...lotteryTabs];
+
+        let currentSection = 'qa';
+        function switchSection(section) {
+            currentSection = section;
+            const qaBtn = document.getElementById('btn-section-qa');
+            const lotteryBtn = document.getElementById('btn-section-lottery');
+            const qaTabsEl = document.getElementById('section-qa-tabs');
+            const lotteryTabsEl = document.getElementById('section-lottery-tabs');
+
+            const controlPanel = document.getElementById('control-panel');
+
+            if (section === 'qa') {
+                qaBtn.className = 'px-8 py-3 font-black text-xl rounded-2xl transition border-2 bg-gradient-to-r from-emerald-600 to-emerald-800 text-white border-emerald-400/50 shadow-lg';
+                lotteryBtn.className = 'px-8 py-3 font-black text-xl rounded-2xl transition border-2 bg-midnight-900 text-gold-500/50 border-gold-800/30 hover:text-gold-300';
+                qaTabsEl.classList.remove('hidden');
+                lotteryTabsEl.classList.add('hidden');
+                controlPanel.classList.remove('hidden');
+                // Hide lottery tabs, show first QA tab
+                lotteryTabs.forEach(t => {
+                    document.getElementById(t).classList.add('hidden');
+                    document.getElementById('btn-' + t).classList.remove('tab-active');
+                });
+                switchTab('tab-stats');
+            } else {
+                lotteryBtn.className = 'px-8 py-3 font-black text-xl rounded-2xl transition border-2 bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 border-gold-400/50 shadow-lg';
+                qaBtn.className = 'px-8 py-3 font-black text-xl rounded-2xl transition border-2 bg-midnight-900 text-gold-500/50 border-gold-800/30 hover:text-gold-300';
+                lotteryTabsEl.classList.remove('hidden');
+                qaTabsEl.classList.add('hidden');
+                controlPanel.classList.add('hidden');
+                // Hide QA tabs, show first lottery tab
+                qaTabs.forEach(t => {
+                    document.getElementById(t).classList.add('hidden');
+                    document.getElementById('btn-' + t).classList.remove('tab-active');
+                });
+                switchTab('tab-lottery-groups');
+            }
+        }
+
         function switchTab(tabId) {
-            allTabs.forEach(t => {
+            const tabSet = qaTabs.includes(tabId) ? qaTabs : lotteryTabs;
+            tabSet.forEach(t => {
                 document.getElementById(t).classList.add('hidden');
                 document.getElementById('btn-' + t).classList.remove('tab-active');
             });
@@ -933,6 +1000,7 @@
             if (tabId === 'tab-history') fetchHistory();
             if (tabId === 'tab-lottery-groups') fetchLotteryGroups();
             if (tabId === 'tab-lottery-prizes') fetchLotteryPrizes();
+            if (tabId === 'tab-lottery-winners') fetchLotteryWinners();
         }
 
         // 重置所有答題狀況
@@ -1202,6 +1270,146 @@
             const { error } = await sbClient.from('lottery_prizes').delete().eq('id', id);
             if (error) return alert('刪除失敗：' + error.message);
             fetchLotteryPrizes();
+        }
+
+        // ===== 中獎紀錄管理 =====
+        let adminAllGroups = [];
+        let adminAllMembers = [];
+        let adminAllWinners = [];
+
+        async function fetchLotteryWinners() {
+            const [{ data: winners }, { data: prizes }, { data: groups }, { data: members }] = await Promise.all([
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_prizes').select('*').order('sort_order').order('id'),
+                sbClient.from('lottery_groups').select('*').order('id'),
+                sbClient.from('lottery_members').select('*').order('name')
+            ]);
+
+            adminAllGroups = groups || [];
+            adminAllMembers = members || [];
+            adminAllWinners = winners || [];
+
+            const container = document.getElementById('lottery-winners-container');
+            if (!winners || winners.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無中獎紀錄</div>';
+                return;
+            }
+
+            // Group by prize
+            const byPrize = {};
+            winners.forEach(w => {
+                const prizeId = w.prize_id;
+                const prizeName = w.lottery_prizes?.name || '未知獎項';
+                const sortOrder = w.lottery_prizes?.sort_order ?? 999;
+                const winnerCount = w.lottery_prizes?.winner_count ?? 0;
+                const key = sortOrder + '_' + prizeId;
+                if (!byPrize[key]) byPrize[key] = { prizeId, name: prizeName, winnerCount, winners: [] };
+                byPrize[key].winners.push(w);
+            });
+
+            const sortedKeys = Object.keys(byPrize).sort();
+            let html = '';
+            sortedKeys.forEach(key => {
+                const group = byPrize[key];
+                const currentCount = group.winners.length;
+                const expectedCount = group.winnerCount;
+                const deficit = expectedCount - currentCount;
+
+                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="text-xl font-bold text-gold-200">${group.name}</h3>
+                            <p class="text-gold-400/60 text-sm">設定 ${expectedCount} 人，目前 ${currentCount} 人</p>
+                        </div>
+                        ${deficit > 0 ? `<button onclick="redrawWinners(${group.prizeId}, ${deficit})"
+                            class="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-midnight-950 font-bold rounded-xl transition shadow-lg text-sm">
+                            🎱 重抽 ${deficit} 人
+                        </button>` : ''}
+                    </div>
+                    <div class="space-y-2">`;
+
+                group.winners.forEach(w => {
+                    const memberName = w.lottery_members?.name || '未知';
+                    const groupObj = adminAllGroups.find(g => g.id === w.lottery_members?.group_id);
+                    const groupName = groupObj ? groupObj.name : '';
+                    html += `<div class="flex items-center justify-between bg-midnight-800/50 border border-gold-800/30 rounded-xl px-5 py-3">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-gold-400">🏆</span>
+                            <span class="text-gold-200 font-bold text-lg">${memberName}</span>
+                            ${groupName ? `<span class="text-gold-400/50 text-sm">(${groupName})</span>` : ''}
+                        </div>
+                        <button onclick="removeWinner(${w.id})"
+                            class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-red-700/40 transition">
+                            ✕ 移除
+                        </button>
+                    </div>`;
+                });
+                html += '</div></div>';
+            });
+            container.innerHTML = html;
+        }
+
+        async function removeWinner(winnerId) {
+            if (!confirm('確定要移除此中獎者嗎？移除後可以重抽補位。')) return;
+            const { error } = await sbClient.from('lottery_winners').delete().eq('id', winnerId);
+            if (error) return alert('移除失敗：' + error.message);
+            fetchLotteryWinners();
+        }
+
+        async function redrawWinners(prizeId, count) {
+            if (!confirm(`確定要為此獎項重抽 ${count} 人嗎？`)) return;
+
+            // Get current winners to exclude
+            const { data: currentWinners } = await sbClient.from('lottery_winners').select('member_id');
+            const wonMemberIds = new Set((currentWinners || []).map(w => w.member_id));
+
+            // Get eligible members (exclude all current winners)
+            const eligible = adminAllMembers.filter(m => !wonMemberIds.has(m.id));
+            if (eligible.length === 0) return alert('沒有合格的成員可以抽獎');
+            if (eligible.length < count) {
+                if (!confirm(`合格人數僅 ${eligible.length} 人，少於需求 ${count} 人。是否抽取 ${eligible.length} 人？`)) return;
+                count = eligible.length;
+            }
+
+            // Weighted random draw (same logic as lottery.html)
+            const winners = [];
+            let pool = [...eligible];
+            for (let i = 0; i < count && pool.length > 0; i++) {
+                const groupMemberCounts = {};
+                pool.forEach(m => {
+                    groupMemberCounts[m.group_id] = (groupMemberCounts[m.group_id] || 0) + 1;
+                });
+                const weights = pool.map(m => {
+                    const group = adminAllGroups.find(g => g.id === m.group_id);
+                    const prob = group ? group.probability_pct : 0;
+                    const groupCount = groupMemberCounts[m.group_id] || 1;
+                    return prob / groupCount;
+                });
+                const totalWeight = weights.reduce((s, w) => s + w, 0);
+                if (totalWeight <= 0) {
+                    const idx = Math.floor(Math.random() * pool.length);
+                    winners.push(pool[idx]);
+                    pool.splice(idx, 1);
+                    continue;
+                }
+                let r = Math.random() * totalWeight;
+                let chosen = 0;
+                for (let j = 0; j < weights.length; j++) {
+                    r -= weights[j];
+                    if (r <= 0) { chosen = j; break; }
+                }
+                winners.push(pool[chosen]);
+                pool.splice(chosen, 1);
+            }
+
+            // Save to DB
+            const rows = winners.map(w => ({ member_id: w.id, prize_id: prizeId }));
+            const { error } = await sbClient.from('lottery_winners').insert(rows);
+            if (error) return alert('儲存重抽結果失敗：' + error.message);
+
+            const winnerNames = winners.map(w => w.name).join('、');
+            alert(`重抽完成！新中獎者：${winnerNames}`);
+            fetchLotteryWinners();
         }
 
         // 登入驗證
