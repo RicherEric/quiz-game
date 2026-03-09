@@ -186,6 +186,11 @@ ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS sort_order integer NOT NUL
 
 ALTER TABLE public.responses ADD COLUMN IF NOT EXISTS scored_points integer NOT NULL DEFAULT 0;
 
+-- lottery_winners: 備註欄位、群組抽獎支援
+ALTER TABLE public.lottery_winners ADD COLUMN IF NOT EXISTS note text;
+ALTER TABLE public.lottery_winners ADD COLUMN IF NOT EXISTS group_id integer REFERENCES public.lottery_groups(id) ON DELETE CASCADE;
+ALTER TABLE public.lottery_winners ALTER COLUMN member_id DROP NOT NULL;
+
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
 VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')

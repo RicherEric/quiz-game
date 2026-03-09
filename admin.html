@@ -1520,7 +1520,7 @@
         async function fetchLotteryPrizes() {
             const [{ data: prizes }, { data: winners }, { data: groups }] = await Promise.all([
                 sbClient.from('lottery_prizes').select('*').order('sort_order').order('id'),
-                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name), lottery_groups!lottery_winners_group_id_fkey(name)').order('drawn_at', { ascending: false }),
                 sbClient.from('lottery_groups').select('*').order('id')
             ]);
             const container = document.getElementById('lottery-prizes-container');
@@ -1565,12 +1565,15 @@
                     html += `<div class="border-t border-gold-800/20 px-6 py-3 bg-midnight-900/40">
                         <div class="flex flex-wrap gap-2">`;
                     prizeWinners.forEach(w => {
-                        const memberName = w.lottery_members?.name || '未知';
-                        const groupObj = (groups || []).find(g => g.id === w.lottery_members?.group_id);
-                        const groupName = groupObj ? groupObj.name : '';
+                        const isGroupWin = w.group_id != null && w.member_id == null;
+                        const displayName = isGroupWin
+                            ? (w.lottery_groups?.name || '未知群組')
+                            : (w.lottery_members?.name || '未知');
+                        const groupObj = isGroupWin ? null : (groups || []).find(g => g.id === w.lottery_members?.group_id);
+                        const groupName = isGroupWin ? '群組' : (groupObj ? groupObj.name : '');
                         html += `<span class="inline-flex items-center gap-1 px-3 py-1.5 bg-midnight-800/80 border border-gold-700/30 rounded-lg text-sm">
                             <span class="text-gold-400">🏆</span>
-                            <span class="text-gold-200 font-bold">${memberName}</span>
+                            <span class="text-gold-200 font-bold">${displayName}</span>
                             ${groupName ? `<span class="text-gold-400/50 text-xs">(${groupName})</span>` : ''}
                         </span>`;
                     });
@@ -1662,7 +1665,7 @@
 
         async function fetchLotteryWinners() {
             const [{ data: winners }, { data: prizes }, { data: groups }, { data: members }] = await Promise.all([
-                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count), lottery_groups!lottery_winners_group_id_fkey(name)').order('drawn_at', { ascending: false }),
                 sbClient.from('lottery_prizes').select('*').order('sort_order').order('id'),
                 sbClient.from('lottery_groups').select('*').order('id'),
                 sbClient.from('lottery_members').select('*').order('name')
@@ -1693,36 +1696,47 @@
             const sortedKeys = Object.keys(byPrize).sort();
             let html = '';
             sortedKeys.forEach(key => {
-                const group = byPrize[key];
-                const currentCount = group.winners.length;
-                const expectedCount = group.winnerCount;
+                const prizeGroup = byPrize[key];
+                const currentCount = prizeGroup.winners.length;
+                const expectedCount = prizeGroup.winnerCount;
                 const deficit = expectedCount - currentCount;
 
                 html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-3">
                     <div class="flex justify-between items-center">
                         <div>
-                            <h3 class="text-xl font-bold text-gold-200">${group.name}</h3>
+                            <h3 class="text-xl font-bold text-gold-200">${prizeGroup.name}</h3>
                             <p class="text-gold-400/60 text-sm">設定 ${expectedCount} 人，目前 ${currentCount} 人</p>
                         </div>
-                        ${deficit > 0 ? `<button onclick="redrawWinners(${group.prizeId}, ${deficit})"
+                        ${deficit > 0 ? `<button onclick="redrawWinners(${prizeGroup.prizeId}, ${deficit})"
                             class="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-midnight-950 font-bold rounded-xl transition shadow-lg text-sm">
                             🎱 重抽 ${deficit} 人
                         </button>` : ''}
                     </div>
                     <div class="space-y-2">`;
 
-                group.winners.forEach(w => {
-                    const memberName = w.lottery_members?.name || '未知';
-                    const groupObj = adminAllGroups.find(g => g.id === w.lottery_members?.group_id);
-                    const groupName = groupObj ? groupObj.name : '';
+                prizeGroup.winners.forEach(w => {
+                    const isGroupWin = w.group_id != null && w.member_id == null;
+                    const displayName = isGroupWin
+                        ? (w.lottery_groups?.name || '未知群組')
+                        : (w.lottery_members?.name || '未知');
+                    const groupObj = isGroupWin ? null : adminAllGroups.find(g => g.id === w.lottery_members?.group_id);
+                    const groupName = isGroupWin ? '群組' : (groupObj ? groupObj.name : '');
+                    const noteText = w.note || '';
+                    const escapedName = displayName.replace(/'/g, "\\'");
+                    const escapedGroup = groupName.replace(/'/g, "\\'");
+                    const escapedPrize = prizeGroup.name.replace(/'/g, "\\'");
+                    const escapedNote = (w.note || '').replace(/'/g, "\\'").replace(/\n/g, '\\n');
                     html += `<div class="flex items-center justify-between bg-midnight-800/50 border border-gold-800/30 rounded-xl px-5 py-3">
-                        <div class="flex items-center space-x-3">
+                        <div class="flex items-center space-x-3 flex-1 min-w-0">
                             <span class="text-gold-400">🏆</span>
-                            <span class="text-gold-200 font-bold text-lg">${memberName}</span>
+                            <span class="text-gold-200 font-bold text-lg">${displayName}</span>
                             ${groupName ? `<span class="text-gold-400/50 text-sm">(${groupName})</span>` : ''}
+                            ${noteText ? `<span class="text-gold-400/50 text-sm truncate">📝 ${noteText}</span>` : ''}
+                            <button onclick="editWinnerNote(${w.id}, '${escapedNote}')"
+                                class="text-gold-400/50 hover:text-gold-200 text-sm shrink-0" title="編輯備註">✏️</button>
                         </div>
-                        <button onclick="removeWinner(${w.id}, '${memberName.replace(/'/g, "\\'")}', '${groupName.replace(/'/g, "\\'")}', '${group.name.replace(/'/g, "\\'")}')"
-                            class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-red-700/40 transition">
+                        <button onclick="removeWinner(${w.id}, '${escapedName}', '${escapedGroup}', '${escapedPrize}')"
+                            class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-red-700/40 transition shrink-0">
                             ✕ 移除
                         </button>
                     </div>`;
@@ -1730,6 +1744,14 @@
                 html += '</div></div>';
             });
             container.innerHTML = html;
+        }
+
+        async function editWinnerNote(winnerId, currentNote) {
+            const note = prompt('請輸入備註（留空可清除）：', currentNote || '');
+            if (note === null) return;
+            const { error } = await sbClient.from('lottery_winners').update({ note: note || null }).eq('id', winnerId);
+            if (error) return alert('更新備註失敗：' + error.message);
+            fetchLotteryWinners();
         }
 
         async function exportWinnersPDF() {
@@ -1752,20 +1774,28 @@
             });
             const sortedKeys = Object.keys(byPrize).sort();
 
+            // Check if any winner has a note
+            const hasAnyNote = adminAllWinners.some(w => w.note);
+
             // Build HTML content for pdf rendering
             let content = '';
             sortedKeys.forEach(key => {
-                const group = byPrize[key];
+                const prizeGroup = byPrize[key];
                 content += `<div style="margin-bottom:18px;break-inside:avoid;">
-                    <div style="font-size:16px;font-weight:800;color:#8b6508;padding:8px 0 6px;border-bottom:2px solid #e5e5e5;">${group.name}<span style="font-weight:400;font-size:13px;color:#888;">（${group.winners.length} / ${group.winnerCount} 人）</span></div>
+                    <div style="font-size:16px;font-weight:800;color:#8b6508;padding:8px 0 6px;border-bottom:2px solid #e5e5e5;">${prizeGroup.name}<span style="font-weight:400;font-size:13px;color:#888;">（${prizeGroup.winners.length} / ${prizeGroup.winnerCount} 人）</span></div>
                     <table style="width:100%;border-collapse:collapse;">`;
-                group.winners.forEach((w, i) => {
-                    const memberName = w.lottery_members?.name || '未知';
-                    const groupName = groupMap.get(w.lottery_members?.group_id) || '';
+                prizeGroup.winners.forEach((w, i) => {
+                    const isGroupWin = w.group_id != null && w.member_id == null;
+                    const displayName = isGroupWin
+                        ? (w.lottery_groups?.name || '未知群組')
+                        : (w.lottery_members?.name || '未知');
+                    const groupName = isGroupWin ? '群組' : (groupMap.get(w.lottery_members?.group_id) || '');
+                    const noteText = w.note || '';
                     content += `<tr style="border-bottom:1px solid #f0f0f0;">
                         <td style="padding:6px 8px;font-size:13px;width:30px;color:#aaa;text-align:center;">${i + 1}</td>
-                        <td style="padding:6px 8px;font-size:13px;font-weight:600;">${memberName}</td>
-                        <td style="padding:6px 8px;font-size:13px;color:#888;text-align:right;">${groupName}</td>
+                        <td style="padding:6px 8px;font-size:13px;font-weight:600;">${displayName}</td>
+                        <td style="padding:6px 8px;font-size:13px;color:#888;">${groupName}</td>
+                        ${hasAnyNote ? `<td style="padding:6px 8px;font-size:12px;color:#666;">${noteText}</td>` : ''}
                     </tr>`;
                 });
                 content += `</table></div>`;
@@ -1976,7 +2006,7 @@
             const [{ data: groups }, { data: members }, { data: winners }, { data: prizes }] = await Promise.all([
                 sbClient.from('lottery_groups').select('*').order('id'),
                 sbClient.from('lottery_members').select('*').order('name'),
-                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order), lottery_groups!lottery_winners_group_id_fkey(name)').order('drawn_at', { ascending: false }),
                 sbClient.from('lottery_prizes').select('*').order('sort_order').order('id')
             ]);
 
@@ -1992,13 +2022,14 @@
 
             const totalMembers = (members || []).length;
 
-            // Count winners per group
+            // Count winners per group (both member wins and group wins)
             const groupWinMap = {};
             const groupPrizeMap = {};
             (groups || []).forEach(g => { groupWinMap[g.id] = 0; groupPrizeMap[g.id] = {}; });
 
             winners.forEach(w => {
-                const gId = w.lottery_members?.group_id;
+                // For member wins, use the member's group_id; for group wins, use group_id directly
+                const gId = (w.group_id != null && w.member_id == null) ? w.group_id : w.lottery_members?.group_id;
                 if (gId != null) {
                     groupWinMap[gId] = (groupWinMap[gId] || 0) + 1;
                     const pName = w.lottery_prizes?.name || '未知';
