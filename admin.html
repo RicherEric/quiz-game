@@ -968,6 +968,7 @@
         }
 
         // ===== 群組管理 =====
+        const manuallySetGroups = new Set(); // 追蹤手動編輯過機率的群組
         async function fetchLotteryGroups() {
             const { data: groups } = await sbClient.from('lottery_groups').select('*').order('id');
             const { data: members } = await sbClient.from('lottery_members').select('*').order('name');
@@ -1005,10 +1006,11 @@
                     </span>`
                 ).join('');
 
-                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                const isLocked = manuallySetGroups.has(g.id);
+                html += `<div class="bg-midnight-900/60 rounded-2xl border ${isLocked ? 'border-blue-500/60' : 'border-gold-700/30'} p-6 space-y-4">
                     <div class="flex justify-between items-start">
                         <div>
-                            <h3 class="text-xl font-bold text-gold-200">${g.name}</h3>
+                            <h3 class="text-xl font-bold text-gold-200">${g.name} ${isLocked ? '<span class="text-blue-400 text-sm">🔒 已鎖定</span>' : ''}</h3>
                             <p class="text-gold-400/60 text-sm">機率：<span class="text-gold-300 font-bold text-lg">${g.probability_pct}%</span>　成員：${gMembers.length} 人</p>
                         </div>
                         <div class="flex space-x-2">
@@ -1050,6 +1052,7 @@
             if (id) {
                 const { error } = await sbClient.from('lottery_groups').update({ name, probability_pct: prob }).eq('id', id);
                 if (error) return alert('更新失敗：' + error.message);
+                manuallySetGroups.add(parseInt(id));
             } else {
                 const { error } = await sbClient.from('lottery_groups').insert({ name, probability_pct: prob });
                 if (error) return alert('新增失敗：' + error.message);
@@ -1069,17 +1072,6 @@
             const { data: groups } = await sbClient.from('lottery_groups').select('id').order('id');
             if (!groups || groups.length === 0) return alert('目前沒有群組可分配');
 
-            for (const g of groups) {
-                const { error } = await sbClient.from('lottery_groups').update({ probability_pct: 100 }).eq('id', g.id);
-                if (error) return alert('初始化失敗：' + error.message);
-            }
-            fetchLotteryGroups();
-        }
-
-        async function distributeGroupsEvenly() {
-            const { data: groups } = await sbClient.from('lottery_groups').select('id').order('id');
-            if (!groups || groups.length === 0) return alert('目前沒有群組可分配');
-
             const count = groups.length;
             const base = Math.floor(100 / count);
             const remainder = 100 % count;
@@ -1087,6 +1079,37 @@
             const updates = groups.map((g, i) => ({
                 id: g.id,
                 probability_pct: base + (i < remainder ? 1 : 0)
+            }));
+
+            for (const u of updates) {
+                const { error } = await sbClient.from('lottery_groups').update({ probability_pct: u.probability_pct }).eq('id', u.id);
+                if (error) return alert('初始化失敗：' + error.message);
+            }
+            manuallySetGroups.clear();
+            fetchLotteryGroups();
+        }
+
+        async function distributeGroupsEvenly() {
+            const { data: groups } = await sbClient.from('lottery_groups').select('id, probability_pct').order('id');
+            if (!groups || groups.length === 0) return alert('目前沒有群組可分配');
+
+            const lockedGroups = groups.filter(g => manuallySetGroups.has(g.id));
+            const unlockedGroups = groups.filter(g => !manuallySetGroups.has(g.id));
+
+            if (unlockedGroups.length === 0) return alert('所有群組都已手動設定機率，沒有可分配的群組');
+
+            const lockedSum = lockedGroups.reduce((s, g) => s + g.probability_pct, 0);
+            const remaining = 100 - lockedSum;
+
+            if (remaining < 0) return alert(`已鎖定群組的機率總和 (${lockedSum}%) 超過 100%，請先調整後再分配`);
+
+            const count = unlockedGroups.length;
+            const base = Math.floor(remaining / count);
+            const rem = remaining % count;
+
+            const updates = unlockedGroups.map((g, i) => ({
+                id: g.id,
+                probability_pct: base + (i < rem ? 1 : 0)
             }));
 
             for (const u of updates) {
