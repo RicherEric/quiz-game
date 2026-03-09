@@ -190,6 +190,7 @@
             <button onclick="switchTab('tab-lottery-prizes')" id="btn-tab-lottery-prizes" class="tab-btn">🎁 獎項管理</button>
             <button onclick="switchTab('tab-lottery-winners')" id="btn-tab-lottery-winners" class="tab-btn">🏆 中獎紀錄</button>
             <button onclick="switchTab('tab-lottery-stats')" id="btn-tab-lottery-stats" class="tab-btn">📊 群組統計</button>
+            <button onclick="window.open('lottery.html', '_blank')" class="tab-btn">🎰 摸彩抽獎 ↗</button>
         </div>
 
         <main
@@ -2272,11 +2273,21 @@
                 return;
             }
 
-            // 登入成功：隱藏登入畫面，顯示管理介面
+            // 登入成功：記住登入狀態，隱藏登入畫面，顯示管理介面
+            localStorage.setItem('admin_logged_in', '1');
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('admin-panel').classList.remove('hidden');
             initAdmin();
         }
+
+        // 頁面載入時檢查是否已登入
+        window.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('admin_logged_in') === '1') {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('admin-panel').classList.remove('hidden');
+                initAdmin();
+            }
+        });
     </script>
 </body>
 
