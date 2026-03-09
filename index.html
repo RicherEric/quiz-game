@@ -358,7 +358,7 @@
 
                 const { data: myPlayer } = await sbClient.from('players').select('score').eq('name', myName).single();
                 const totalScore = myPlayer ? myPlayer.score : 0;
-                document.getElementById('scoring-total-score').innerText = `您的累計積分：${totalScore} 分`;
+                document.getElementById('scoring-total-score').innerHTML = `您的累計積分：<br><span style="color: orange;">${totalScore} 分</span>`;
             }
             else if (status.state === 'ended') {
                 hideAllUI();
