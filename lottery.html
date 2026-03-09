@@ -491,6 +491,12 @@
             const prize = allPrizes.find(p => p.id === prizeId);
             if (!prize) return alert('請選擇獎項');
 
+            // 若此獎項已有中獎紀錄，先確認是否重新抽獎
+            const existingWinners = allWinners.filter(w => w.prize_id === prizeId);
+            if (existingWinners.length > 0) {
+                if (!confirm('此獎項已有中獎紀錄，確定要重新抽獎嗎？\n這將會覆蓋現有的中獎紀錄。')) return;
+            }
+
             const eligible = getEligibleMembers();
             if (eligible.length === 0) return alert('沒有合格的成員可以抽獎');
 

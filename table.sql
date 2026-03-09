@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 );
 
 -- 抽獎群組
-CREATE TABLE public.lottery_groups (
+CREATE TABLE IF NOT EXISTS public.lottery_groups (
   id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
   name text NOT NULL,
   probability_pct integer NOT NULL DEFAULT 0,
@@ -61,7 +61,7 @@ CREATE TABLE public.lottery_groups (
 );
 
 -- 抽獎成員
-CREATE TABLE public.lottery_members (
+CREATE TABLE IF NOT EXISTS public.lottery_members (
   id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
   name text NOT NULL,
   group_id integer NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE public.lottery_members (
 );
 
 -- 獎項
-CREATE TABLE public.lottery_prizes (
+CREATE TABLE IF NOT EXISTS public.lottery_prizes (
   id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
   name text NOT NULL,
   winner_count integer NOT NULL DEFAULT 1,
@@ -81,7 +81,7 @@ CREATE TABLE public.lottery_prizes (
 );
 
 -- 中獎紀錄
-CREATE TABLE public.lottery_winners (
+CREATE TABLE IF NOT EXISTS public.lottery_winners (
   id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
   member_id integer NOT NULL,
   prize_id integer NOT NULL,
@@ -90,3 +90,88 @@ CREATE TABLE public.lottery_winners (
   CONSTRAINT lottery_winners_member_fk FOREIGN KEY (member_id) REFERENCES public.lottery_members(id) ON DELETE CASCADE,
   CONSTRAINT lottery_winners_prize_fk FOREIGN KEY (prize_id) REFERENCES public.lottery_prizes(id) ON DELETE CASCADE
 );
+
+-- ============================================================
+-- QR Code 驗證相關
+-- ============================================================
+
+-- QR token 資料表
+CREATE TABLE IF NOT EXISTS public.qr_tokens (
+  id integer NOT NULL,
+  token text NOT NULL,
+  CONSTRAINT qr_tokens_pkey PRIMARY KEY (id)
+);
+
+-- 已驗證玩家
+CREATE TABLE IF NOT EXISTS public.verified_players (
+  user_id uuid NOT NULL,
+  CONSTRAINT verified_players_pkey PRIMARY KEY (user_id)
+);
+
+-- ============================================================
+-- RPC 函數
+-- ============================================================
+
+-- 加入遊戲（驗證 QR token）
+CREATE OR REPLACE FUNCTION join_via_qr(qr_token text, player_name text)
+RETURNS json AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM qr_tokens WHERE token = qr_token) THEN
+    RAISE EXCEPTION 'Invalid QR token';
+  END IF;
+
+  INSERT INTO verified_players (user_id)
+  VALUES (auth.uid())
+  ON CONFLICT (user_id) DO NOTHING;
+
+  INSERT INTO players (name)
+  VALUES (player_name)
+  ON CONFLICT (name) DO NOTHING;
+
+  RETURN json_build_object('success', true);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 提交答案（驗證玩家身份）
+CREATE OR REPLACE FUNCTION submit_response(
+  p_player_name text,
+  p_question_id int,
+  p_choice int,
+  p_response_time_ms int
+)
+RETURNS json AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM verified_players WHERE user_id = auth.uid()) THEN
+    RAISE EXCEPTION 'Not a verified player';
+  END IF;
+
+  INSERT INTO responses (player_name, question_id, choice, is_correct, response_time_ms)
+  VALUES (p_player_name, p_question_id, p_choice, null, p_response_time_ms);
+
+  RETURN json_build_object('success', true);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================
+-- RLS 政策（允許匿名用戶透過 RPC 操作）
+-- ============================================================
+
+ALTER TABLE public.qr_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.verified_players ENABLE ROW LEVEL SECURITY;
+
+-- qr_tokens: 允許所有人讀取，允許寫入
+DROP POLICY IF EXISTS "Allow anon read qr_tokens" ON public.qr_tokens;
+CREATE POLICY "Allow anon read qr_tokens" ON public.qr_tokens FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow anon all qr_tokens" ON public.qr_tokens;
+CREATE POLICY "Allow anon all qr_tokens" ON public.qr_tokens FOR ALL USING (true) WITH CHECK (true);
+
+-- verified_players: 透過 SECURITY DEFINER 函數操作，不需額外 policy
+
+-- ============================================================
+-- 初始資料
+-- ============================================================
+
+-- 插入 QR token（若不存在）
+INSERT INTO public.qr_tokens (id, token)
+VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')
+ON CONFLICT (id) DO NOTHING;

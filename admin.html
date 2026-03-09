@@ -144,6 +144,8 @@
             <button onclick="switchTab('tab-stats')" id="btn-tab-stats" class="tab-btn tab-active">📊 作答監控</button>
             <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">🏆 總積分排行榜</button>
             <button onclick="switchTab('tab-history')" id="btn-tab-history" class="tab-btn">📝 答題紀錄</button>
+            <button onclick="switchTab('tab-questions')" id="btn-tab-questions" class="tab-btn">📚 題目管理</button>
+            <button onclick="switchTab('tab-players')" id="btn-tab-players" class="tab-btn">👥 玩家管理</button>
             <div class="ml-auto flex space-x-3">
                 <button onclick="resetAll()"
                     class="px-6 py-3 font-bold text-lg rounded-xl bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 transition">
@@ -256,6 +258,77 @@
                 <h2 class="text-3xl font-bold text-gold-100 mb-6">答題紀錄</h2>
                 <div id="history-container" class="space-y-4">
                     <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
+
+            <!-- 題目管理 Tab -->
+            <div id="tab-questions" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-gold-100">題目管理</h2>
+                    <div class="flex space-x-3">
+                        <button onclick="openQuestionModal()"
+                            class="px-6 py-3 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg">
+                            ＋ 新增題目
+                        </button>
+                        <button onclick="document.getElementById('csv-file-input').click()"
+                            class="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 hover:to-blue-700 text-white font-bold rounded-xl transition shadow-lg">
+                            📄 匯入 CSV
+                        </button>
+                        <button onclick="clearAllQuestions()"
+                            class="px-6 py-3 bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 font-bold rounded-xl transition">
+                            🗑️ 清空所有題目
+                        </button>
+                        <input type="file" id="csv-file-input" accept=".csv" class="hidden" onchange="importCSV(this)">
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-midnight-900/80 border-b border-gold-700/30">
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-3">#</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-3">題目</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-3">A</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-3">B</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-3">C</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-3">D</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-3">答案</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-3">分數</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-3">秒數</th>
+                                <th class="text-right text-gold-400/60 font-bold py-3 px-3">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="questions-table-body">
+                            <tr><td colspan="10" class="text-gold-400/50 text-center py-10">載入中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 玩家管理 Tab -->
+            <div id="tab-players" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-gold-100">玩家管理</h2>
+                    <div class="flex space-x-3">
+                        <button onclick="resetAllPlayers()"
+                            class="px-6 py-3 bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 font-bold rounded-xl transition">
+                            🗑️ 重置所有玩家
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-midnight-900/80 border-b border-gold-700/30">
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-3">#</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-3">玩家名稱</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-3">積分</th>
+                                <th class="text-right text-gold-400/60 font-bold py-3 px-3">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="players-table-body">
+                            <tr><td colspan="4" class="text-gold-400/50 text-center py-10">載入中...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -392,6 +465,65 @@
                 <button onclick="savePrize()"
                     class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-3 rounded-xl font-bold text-lg transition">儲存</button>
                 <button onclick="closePrizeModal()"
+                    class="px-6 py-3 bg-midnight-800 hover:bg-midnight-950 text-gold-300 font-bold rounded-xl text-lg transition border border-gold-700/50">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Question Modal -->
+    <div id="question-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+        onclick="if(event.target===this)closeQuestionModal()">
+        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-lg">
+            <h2 id="question-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增題目</h2>
+            <input type="hidden" id="question-edit-id">
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">題目文字</label>
+                <input id="question-text" type="text" placeholder="請輸入題目"
+                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">選項 A</label>
+                    <input id="question-opt-a" type="text" placeholder="選項 A"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">選項 B</label>
+                    <input id="question-opt-b" type="text" placeholder="選項 B"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">選項 C</label>
+                    <input id="question-opt-c" type="text" placeholder="選項 C"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">選項 D</label>
+                    <input id="question-opt-d" type="text" placeholder="選項 D"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">正確答案 (1-4)</label>
+                    <input id="question-answer" type="number" min="1" max="4" value="1"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">分數</label>
+                    <input id="question-points" type="number" min="0" value="1000"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">秒數</label>
+                    <input id="question-seconds" type="number" min="1" value="10"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="saveQuestion()"
+                    class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-3 rounded-xl font-bold text-lg transition">儲存</button>
+                <button onclick="closeQuestionModal()"
                     class="px-6 py-3 bg-midnight-800 hover:bg-midnight-950 text-gold-300 font-bold rounded-xl text-lg transition border border-gold-700/50">取消</button>
             </div>
         </div>
@@ -1008,7 +1140,7 @@
         }
 
         // 分頁切換邏輯
-        const qaTabs = ['tab-stats', 'tab-leaderboard', 'tab-history'];
+        const qaTabs = ['tab-stats', 'tab-leaderboard', 'tab-history', 'tab-questions', 'tab-players'];
         const lotteryTabs = ['tab-lottery-groups', 'tab-lottery-prizes', 'tab-lottery-winners', 'tab-lottery-stats'];
         const allTabs = [...qaTabs, ...lotteryTabs];
 
@@ -1063,6 +1195,8 @@
             if (lotteryTabs.includes(tabId)) currentLotteryTab = tabId;
 
             if (tabId === 'tab-history') fetchHistory();
+            if (tabId === 'tab-questions') fetchQuestionsTable();
+            if (tabId === 'tab-players') fetchPlayersTable();
             if (tabId === 'tab-lottery-groups') fetchLotteryGroups();
             if (tabId === 'tab-lottery-prizes') fetchLotteryPrizes();
             if (tabId === 'tab-lottery-winners') fetchLotteryWinners();
@@ -1754,6 +1888,262 @@
             html += '</tbody></table></div></div>';
 
             container.innerHTML = html;
+        }
+
+        // ===== 玩家管理 =====
+        async function fetchPlayersTable() {
+            const { data: players } = await sbClient.from('players').select('*').order('score', { ascending: false });
+            const tbody = document.getElementById('players-table-body');
+            if (!players || players.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-gold-400/50 text-center py-10">尚無玩家</td></tr>';
+                return;
+            }
+            let html = '';
+            players.forEach((p, i) => {
+                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                    <td class="text-gold-400/60 py-3 px-3">${i + 1}</td>
+                    <td class="text-gold-200 font-bold py-3 px-3">${p.name}</td>
+                    <td class="text-center text-gold-300 font-bold py-3 px-3">${p.score}</td>
+                    <td class="text-right py-3 px-3">
+                        <button onclick="deletePlayer('${p.name.replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-800 border border-red-700/40">刪除</button>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        async function deletePlayer(name) {
+            if (!confirm(`確定刪除玩家「${name}」？將同時刪除其作答紀錄。`)) return;
+            await sbClient.from('responses').delete().eq('player_name', name);
+            await sbClient.from('verified_players').delete().eq('name', name);
+            const { error } = await sbClient.from('players').delete().eq('name', name);
+            if (error) return alert('刪除失敗：' + error.message);
+            fetchPlayersTable();
+            fetchPlayerList();
+            fetchLeaderboard();
+        }
+
+        async function resetAllPlayers() {
+            if (!confirm('確定要重置所有玩家嗎？\n\n這將會：\n• 刪除所有玩家資料\n• 刪除所有已驗證玩家資料\n• 清除所有作答紀錄\n• 遊戲狀態回到待機中\n\n此操作無法復原！')) return;
+
+            try {
+                await sbClient.from('responses').delete().neq('id', 0);
+                await sbClient.from('verified_players').delete().neq('id', 0);
+                await sbClient.from('players').delete().neq('id', 0);
+
+                await sbClient.from('game_status').update({
+                    current_q_id: questions.length > 0 ? questions[0].id : 1,
+                    state: 'waiting',
+                    start_time: 0
+                }).eq('id', 1);
+
+                const select = document.getElementById('q-selector');
+                select.selectedIndex = 0;
+                select.dispatchEvent(new Event('change'));
+                updateControlButtons('waiting');
+                fetchLeaderboard();
+                fetchPlayerList();
+                fetchPlayersTable();
+
+                alert('已成功重置所有玩家！');
+            } catch (err) {
+                console.error('重置玩家失敗', err);
+                alert('重置失敗：' + err.message);
+            }
+        }
+
+        // ===== 題目管理 =====
+        async function fetchQuestionsTable() {
+            const { data: qs } = await sbClient.from('questions').select('*').order('id', { ascending: true });
+            const tbody = document.getElementById('questions-table-body');
+            if (!qs || qs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-gold-400/50 text-center py-10">尚無題目</td></tr>';
+                return;
+            }
+            const answerLabels = { 1: 'A', 2: 'B', 3: 'C', 4: 'D' };
+            let html = '';
+            qs.forEach((q, i) => {
+                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                    <td class="text-gold-400/60 py-3 px-3">${i + 1}</td>
+                    <td class="text-gold-200 font-bold py-3 px-3 max-w-[200px] truncate">${q.question}</td>
+                    <td class="text-center text-gold-400/80 py-3 px-3 text-xs max-w-[80px] truncate">${q.option_a || '-'}</td>
+                    <td class="text-center text-gold-400/80 py-3 px-3 text-xs max-w-[80px] truncate">${q.option_b || '-'}</td>
+                    <td class="text-center text-gold-400/80 py-3 px-3 text-xs max-w-[80px] truncate">${q.option_c || '-'}</td>
+                    <td class="text-center text-gold-400/80 py-3 px-3 text-xs max-w-[80px] truncate">${q.option_d || '-'}</td>
+                    <td class="text-center text-emerald-400 font-bold py-3 px-3">${answerLabels[q.answer] || q.answer}</td>
+                    <td class="text-center text-gold-300 py-3 px-3">${q.points || 0}</td>
+                    <td class="text-center text-gold-300 py-3 px-3">${q.seconds || 0}</td>
+                    <td class="text-right py-3 px-3 space-x-2 whitespace-nowrap">
+                        <button onclick="openQuestionModal(${q.id})" class="text-gold-400 hover:text-gold-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-800 border border-gold-700/40">編輯</button>
+                        <button onclick="deleteQuestion(${q.id})" class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-800 border border-red-700/40">刪除</button>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function openQuestionModal(id) {
+            document.getElementById('question-edit-id').value = '';
+            document.getElementById('question-text').value = '';
+            document.getElementById('question-opt-a').value = '';
+            document.getElementById('question-opt-b').value = '';
+            document.getElementById('question-opt-c').value = '';
+            document.getElementById('question-opt-d').value = '';
+            document.getElementById('question-answer').value = 1;
+            document.getElementById('question-points').value = 1000;
+            document.getElementById('question-seconds').value = 10;
+            document.getElementById('question-modal-title').textContent = '新增題目';
+
+            if (id) {
+                const q = questions.find(x => x.id === id);
+                if (q) {
+                    document.getElementById('question-edit-id').value = q.id;
+                    document.getElementById('question-text').value = q.question || '';
+                    document.getElementById('question-opt-a').value = q.option_a || '';
+                    document.getElementById('question-opt-b').value = q.option_b || '';
+                    document.getElementById('question-opt-c').value = q.option_c || '';
+                    document.getElementById('question-opt-d').value = q.option_d || '';
+                    document.getElementById('question-answer').value = q.answer || 1;
+                    document.getElementById('question-points').value = q.points || 1000;
+                    document.getElementById('question-seconds').value = q.seconds || 10;
+                    document.getElementById('question-modal-title').textContent = '編輯題目';
+                }
+            }
+            document.getElementById('question-modal').classList.remove('hidden');
+        }
+
+        function closeQuestionModal() {
+            document.getElementById('question-modal').classList.add('hidden');
+        }
+
+        async function saveQuestion() {
+            const id = document.getElementById('question-edit-id').value;
+            const question = document.getElementById('question-text').value.trim();
+            const option_a = document.getElementById('question-opt-a').value.trim();
+            const option_b = document.getElementById('question-opt-b').value.trim();
+            const option_c = document.getElementById('question-opt-c').value.trim();
+            const option_d = document.getElementById('question-opt-d').value.trim();
+            const answer = parseInt(document.getElementById('question-answer').value) || 1;
+            const points = parseInt(document.getElementById('question-points').value) || 1000;
+            const seconds = parseInt(document.getElementById('question-seconds').value) || 10;
+
+            if (!question) return alert('請輸入題目文字');
+
+            const row = { question, option_a, option_b, option_c, option_d, answer, points, seconds };
+
+            if (id) {
+                const { error } = await sbClient.from('questions').update(row).eq('id', id);
+                if (error) return alert('更新失敗：' + error.message);
+            } else {
+                const { error } = await sbClient.from('questions').insert(row);
+                if (error) return alert('新增失敗：' + error.message);
+            }
+            closeQuestionModal();
+            await refreshQuestionsAndSelector();
+        }
+
+        async function deleteQuestion(id) {
+            if (!confirm('確定刪除此題目？')) return;
+            const { error } = await sbClient.from('questions').delete().eq('id', id);
+            if (error) return alert('刪除失敗：' + error.message);
+            await refreshQuestionsAndSelector();
+        }
+
+        async function clearAllQuestions() {
+            if (!confirm('確定要清空所有題目嗎？此操作無法復原！')) return;
+            const { error } = await sbClient.from('questions').delete().neq('id', 0);
+            if (error) return alert('清空失敗：' + error.message);
+            await refreshQuestionsAndSelector();
+        }
+
+        async function importCSV(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const text = await file.text();
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+            if (lines.length < 2) {
+                alert('CSV 檔案格式錯誤或無資料');
+                input.value = '';
+                return;
+            }
+
+            // Skip header row
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const cols = parseCSVLine(lines[i]);
+                if (cols.length < 8) continue;
+                rows.push({
+                    question: cols[0],
+                    option_a: cols[1],
+                    option_b: cols[2],
+                    option_c: cols[3],
+                    option_d: cols[4],
+                    answer: parseInt(cols[5]) || 1,
+                    points: parseInt(cols[6]) || 1000,
+                    seconds: parseInt(cols[7]) || 10
+                });
+            }
+
+            if (rows.length === 0) {
+                alert('CSV 中無有效題目資料');
+                input.value = '';
+                return;
+            }
+
+            const { error } = await sbClient.from('questions').insert(rows);
+            if (error) {
+                alert('匯入失敗：' + error.message);
+            } else {
+                alert(`成功匯入 ${rows.length} 題！`);
+                await refreshQuestionsAndSelector();
+            }
+            input.value = '';
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (inQuotes) {
+                    if (ch === '"' && i + 1 < line.length && line[i + 1] === '"') {
+                        current += '"';
+                        i++;
+                    } else if (ch === '"') {
+                        inQuotes = false;
+                    } else {
+                        current += ch;
+                    }
+                } else {
+                    if (ch === '"') {
+                        inQuotes = true;
+                    } else if (ch === ',') {
+                        result.push(current);
+                        current = '';
+                    } else {
+                        current += ch;
+                    }
+                }
+            }
+            result.push(current);
+            return result;
+        }
+
+        async function refreshQuestionsAndSelector() {
+            const { data: qData } = await sbClient.from('questions').select('*').order('id', { ascending: true });
+            questions = qData || [];
+            const select = document.getElementById('q-selector');
+            select.innerHTML = '';
+            if (questions.length === 0) {
+                select.innerHTML = '<option value="">(無題目資料)</option>';
+            } else {
+                questions.forEach((q, idx) => {
+                    select.innerHTML += `<option value="${q.id}">Q${idx + 1}: ${q.question}</option>`;
+                });
+            }
+            fetchQuestionsTable();
         }
 
         // 登入驗證
