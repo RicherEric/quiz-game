@@ -481,8 +481,8 @@
             await sleep(2000);
             fireConfetti();
 
-            // Save winners to DB
-            await saveWinners(winners, prizeId);
+            // Save winners to DB (replace existing winners for this prize)
+            await saveWinners(winners, prizeId, true);
 
             // Reload winner data
             await loadWinners();
@@ -496,7 +496,11 @@
             document.getElementById('btn-draw').disabled = false;
         }
 
-        async function saveWinners(winners, prizeId) {
+        async function saveWinners(winners, prizeId, replaceExisting = false) {
+            if (replaceExisting) {
+                const { error: delError } = await sbClient.from('lottery_winners').delete().eq('prize_id', prizeId);
+                if (delError) console.error('清除舊中獎紀錄失敗：', delError);
+            }
             const rows = winners.map(w => ({ member_id: w.id, prize_id: prizeId }));
             const { error } = await sbClient.from('lottery_winners').insert(rows);
             if (error) console.error('儲存中獎紀錄失敗：', error);
