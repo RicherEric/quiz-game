@@ -639,7 +639,7 @@
                             <span class="text-gold-400">🏆</span><span>${memberName}</span>
                             ${groupName ? `<span class="text-gold-400/50 text-xs">(${groupName})</span>` : ''}
                         </div>
-                        <button onclick="removeWinner(${w.id})"
+                        <button onclick="removeWinner(${w.id}, '${memberName.replace(/'/g, "\\'")}', '${groupName.replace(/'/g, "\\'")}', '${group.name.replace(/'/g, "\\'")}')"
                             class="hidden group-hover:inline-block text-red-400 hover:text-red-200 text-xs font-bold px-1.5 py-0.5 rounded bg-red-900/40 border border-red-700/40">✕</button>
                     </div>`;
                 });
@@ -648,8 +648,9 @@
             container.innerHTML = html;
         }
 
-        async function removeWinner(winnerId) {
-            if (!confirm('確定要移除此中獎者嗎？')) return;
+        async function removeWinner(winnerId, memberName, groupName, prizeName) {
+            const info = `${memberName}${groupName ? '（' + groupName + '）' : ''}`;
+            if (!confirm(`確定要移除「${prizeName}」的中獎者 ${info} 嗎？\n移除後可以重抽補位。`)) return;
             const { error } = await sbClient.from('lottery_winners').delete().eq('id', winnerId);
             if (error) return alert('移除失敗：' + error.message);
             await loadWinners();

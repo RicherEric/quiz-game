@@ -401,7 +401,13 @@
 
             <!-- 中獎紀錄 Tab -->
             <div id="tab-lottery-winners" class="hidden space-y-6">
-                <h2 class="text-3xl font-bold text-gold-100">中獎紀錄</h2>
+                <div class="flex items-center justify-between">
+                    <h2 class="text-3xl font-bold text-gold-100">中獎紀錄</h2>
+                    <button onclick="exportWinnersPDF()"
+                        class="px-5 py-2 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg text-sm">
+                        📄 匯出 PDF
+                    </button>
+                </div>
                 <div id="lottery-winners-container" class="space-y-4">
                     <div class="text-gold-400/50 text-center py-10">載入中...</div>
                 </div>
@@ -482,11 +488,6 @@
             <div>
                 <label class="block text-gold-300 font-bold mb-1">中獎人數</label>
                 <input id="prize-winner-count" type="number" min="1" value="1"
-                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
-            </div>
-            <div>
-                <label class="block text-gold-300 font-bold mb-1">排序（數字小排前面）</label>
-                <input id="prize-sort" type="number" min="0" value="0"
                     class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
             </div>
             <div class="flex space-x-3">
@@ -1503,23 +1504,25 @@
             });
 
             let html = `<div class="bg-midnight-900/80 px-6 py-3 rounded-t-2xl border-b border-gold-700/30 grid grid-cols-12 gap-4 text-gold-400/80 font-bold text-sm uppercase">
-                <div class="col-span-1">排序</div>
-                <div class="col-span-5">獎項名稱</div>
+                <div class="col-span-1"></div>
+                <div class="col-span-1">順序</div>
+                <div class="col-span-4">獎項名稱</div>
                 <div class="col-span-2 text-center">中獎人數</div>
                 <div class="col-span-4 text-right">操作</div>
-            </div>`;
+            </div><div id="prize-sortable-list" class="space-y-3">`;
 
-            prizes.forEach(p => {
+            prizes.forEach((p, idx) => {
                 const prizeWinners = winnersByPrize[p.id] || [];
                 const actualCount = prizeWinners.length;
 
-                html += `<div class="bg-midnight-800/50 border border-gold-800/30 rounded-xl overflow-hidden">
+                html += `<div class="bg-midnight-800/50 border border-gold-800/30 rounded-xl overflow-hidden" data-id="${p.id}">
                     <div class="px-6 py-4 grid grid-cols-12 gap-4 items-center">
-                        <div class="col-span-1 text-gold-400/60 font-bold">${p.sort_order}</div>
-                        <div class="col-span-5 font-bold text-lg text-gold-200">${p.name}</div>
+                        <div class="col-span-1 cursor-grab text-center text-gold-400/40 text-lg">⠿</div>
+                        <div class="col-span-1 text-gold-400/60 font-bold prize-index">${idx + 1}</div>
+                        <div class="col-span-4 font-bold text-lg text-gold-200">${p.name}</div>
                         <div class="col-span-2 text-center font-bold text-gold-300">${actualCount} / ${p.winner_count} 人</div>
                         <div class="col-span-4 text-right space-x-2">
-                            <button onclick="openPrizeModal(${p.id},'${p.name.replace(/'/g, "\\'")}',${p.winner_count},${p.sort_order})" class="text-gold-400 hover:text-gold-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-gold-700/40">編輯</button>
+                            <button onclick="openPrizeModal(${p.id},'${p.name.replace(/'/g, "\\'")}',${p.winner_count})" class="text-gold-400 hover:text-gold-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-gold-700/40">編輯</button>
                             <button onclick="deletePrize(${p.id})" class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-red-700/40">刪除</button>
                         </div>
                     </div>`;
@@ -1542,14 +1545,15 @@
 
                 html += `</div>`;
             });
+            html += `</div>`;
             container.innerHTML = html;
+            initPrizeSortable();
         }
 
-        function openPrizeModal(id, name, winnerCount, sortOrder) {
+        function openPrizeModal(id, name, winnerCount) {
             document.getElementById('prize-edit-id').value = id || '';
             document.getElementById('prize-name').value = name || '';
             document.getElementById('prize-winner-count').value = winnerCount ?? 1;
-            document.getElementById('prize-sort').value = sortOrder ?? 0;
             document.getElementById('prize-modal-title').textContent = id ? '編輯獎項' : '新增獎項';
             document.getElementById('prize-modal').classList.remove('hidden');
         }
@@ -1562,18 +1566,21 @@
             const id = document.getElementById('prize-edit-id').value;
             const name = document.getElementById('prize-name').value.trim();
             const winner_count = parseInt(document.getElementById('prize-winner-count').value) || 1;
-            const sort_order = parseInt(document.getElementById('prize-sort').value) || 0;
             if (!name) return alert('請輸入獎項名稱');
 
             if (id) {
-                const { error } = await sbClient.from('lottery_prizes').update({ name, winner_count, sort_order }).eq('id', id);
+                const { error } = await sbClient.from('lottery_prizes').update({ name, winner_count }).eq('id', id);
                 if (error) return alert('更新失敗：' + error.message);
             } else {
+                // Auto-assign sort_order to the end
+                const { data: existing } = await sbClient.from('lottery_prizes').select('sort_order').order('sort_order', { ascending: false }).limit(1);
+                const sort_order = (existing && existing.length > 0) ? existing[0].sort_order + 1 : 0;
                 const { error } = await sbClient.from('lottery_prizes').insert({ name, winner_count, sort_order });
                 if (error) return alert('新增失敗：' + error.message);
             }
             closePrizeModal();
             fetchLotteryPrizes();
+            broadcastLotteryChange();
         }
 
         async function deletePrize(id) {
@@ -1581,6 +1588,30 @@
             const { error } = await sbClient.from('lottery_prizes').delete().eq('id', id);
             if (error) return alert('刪除失敗：' + error.message);
             fetchLotteryPrizes();
+            broadcastLotteryChange();
+        }
+
+        function initPrizeSortable() {
+            const list = document.getElementById('prize-sortable-list');
+            if (!list) return;
+            if (list._sortable) list._sortable.destroy();
+            list._sortable = new Sortable(list, {
+                handle: '.cursor-grab',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                onEnd: async function () {
+                    const items = list.querySelectorAll('[data-id]');
+                    const updates = [];
+                    items.forEach((item, i) => {
+                        item.querySelector('.prize-index').textContent = i + 1;
+                        updates.push(
+                            sbClient.from('lottery_prizes').update({ sort_order: i }).eq('id', item.dataset.id)
+                        );
+                    });
+                    await Promise.all(updates);
+                    broadcastLotteryChange();
+                }
+            });
         }
 
         // ===== 中獎紀錄管理 =====
@@ -1656,7 +1687,7 @@
                             <span class="text-gold-200 font-bold text-lg">${memberName}</span>
                             ${groupName ? `<span class="text-gold-400/50 text-sm">(${groupName})</span>` : ''}
                         </div>
-                        <button onclick="removeWinner(${w.id})"
+                        <button onclick="removeWinner(${w.id}, '${memberName.replace(/'/g, "\\'")}', '${groupName.replace(/'/g, "\\'")}', '${group.name.replace(/'/g, "\\'")}')"
                             class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-red-700/40 transition">
                             ✕ 移除
                         </button>
@@ -1667,8 +1698,81 @@
             container.innerHTML = html;
         }
 
-        async function removeWinner(winnerId) {
-            if (!confirm('確定要移除此中獎者嗎？移除後可以重抽補位。')) return;
+        function exportWinnersPDF() {
+            if (!adminAllWinners || adminAllWinners.length === 0) return alert('尚無中獎紀錄可匯出');
+
+            // Group winners by prize
+            const byPrize = {};
+            adminAllWinners.forEach(w => {
+                const prizeId = w.prize_id;
+                const prizeName = w.lottery_prizes?.name || '未知獎項';
+                const sortOrder = w.lottery_prizes?.sort_order ?? 999;
+                const winnerCount = w.lottery_prizes?.winner_count ?? 0;
+                const key = String(sortOrder).padStart(5, '0') + '_' + prizeId;
+                if (!byPrize[key]) byPrize[key] = { prizeId, name: prizeName, winnerCount, winners: [] };
+                byPrize[key].winners.push(w);
+            });
+            const sortedKeys = Object.keys(byPrize).sort();
+
+            // Build print-friendly HTML content
+            let content = '';
+            sortedKeys.forEach(key => {
+                const group = byPrize[key];
+                content += `<div class="prize-section">
+                    <div class="prize-header">${group.name}<span class="prize-count">（${group.winners.length} / ${group.winnerCount} 人）</span></div>
+                    <table class="winner-table">`;
+                group.winners.forEach((w, i) => {
+                    const memberName = w.lottery_members?.name || '未知';
+                    const groupObj = adminAllGroups.find(g => g.id === w.lottery_members?.group_id);
+                    const groupName = groupObj ? groupObj.name : '';
+                    content += `<tr>
+                        <td class="winner-idx">${i + 1}</td>
+                        <td class="winner-name">${memberName}</td>
+                        <td class="winner-group">${groupName}</td>
+                    </tr>`;
+                });
+                content += `</table></div>`;
+            });
+
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="UTF-8">
+<title>中獎紀錄</title>
+<style>
+    @page { size: A4; margin: 20mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif; color: #1a1a1a; padding: 0; }
+    .header { text-align: center; padding-bottom: 12px; border-bottom: 3px solid #b8860b; margin-bottom: 20px; }
+    .header h1 { font-size: 24px; font-weight: 900; color: #8b6508; }
+    .header .date { font-size: 12px; color: #888; margin-top: 4px; }
+    .prize-section { margin-bottom: 18px; break-inside: avoid; }
+    .prize-header { font-size: 16px; font-weight: 800; color: #8b6508; padding: 8px 0 6px; border-bottom: 2px solid #e5e5e5; }
+    .prize-count { font-weight: 400; font-size: 13px; color: #888; }
+    .winner-table { width: 100%; border-collapse: collapse; }
+    .winner-table tr { border-bottom: 1px solid #f0f0f0; }
+    .winner-table td { padding: 6px 8px; font-size: 13px; }
+    .winner-idx { width: 30px; color: #aaa; text-align: center; }
+    .winner-name { font-weight: 600; }
+    .winner-group { color: #888; text-align: right; }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head><body>
+<div class="header">
+    <h1>🏆 中獎紀錄</h1>
+    <div class="date">匯出日期：${dateStr}</div>
+</div>
+${content}
+</body></html>`);
+            printWindow.document.close();
+            setTimeout(() => printWindow.print(), 300);
+        }
+
+        async function removeWinner(winnerId, memberName, groupName, prizeName) {
+            const info = `${memberName}${groupName ? '（' + groupName + '）' : ''}`;
+            if (!confirm(`確定要移除「${prizeName}」的中獎者 ${info} 嗎？\n移除後可以重抽補位。`)) return;
             const { error } = await sbClient.from('lottery_winners').delete().eq('id', winnerId);
             if (error) return alert('移除失敗：' + error.message);
             fetchLotteryWinners();
