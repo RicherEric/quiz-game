@@ -216,6 +216,9 @@
                 if (error.message && error.message.includes('Invalid QR token')) {
                     return alert("無效的 QR Code，請重新掃描！");
                 }
+                if (error.message && (error.message.includes('duplicate') || error.message.includes('already') || error.message.includes('unique') || error.message.includes('已存在'))) {
+                    return alert("此暱稱已被使用，請換一個暱稱再試！");
+                }
                 return alert("加入失敗：" + (error.message || "未知錯誤"));
             }
 
