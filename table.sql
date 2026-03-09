@@ -125,9 +125,11 @@ BEGIN
   VALUES (auth.uid())
   ON CONFLICT (user_id) DO NOTHING;
 
-  INSERT INTO players (name)
-  VALUES (player_name)
-  ON CONFLICT (name) DO NOTHING;
+  IF EXISTS (SELECT 1 FROM players WHERE name = player_name) THEN
+    RAISE EXCEPTION '此暱稱已存在，請換一個暱稱再試！';
+  END IF;
+
+  INSERT INTO players (name) VALUES (player_name);
 
   RETURN json_build_object('success', true);
 END;
