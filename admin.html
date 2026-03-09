@@ -861,19 +861,20 @@
                 const isCorrect = (r.choice === selectedAnswer && r.choice !== 0);
                 if (isCorrect) correctCount++;
 
-                // 更新 response 的 is_correct
-                await sbClient.from('responses').update({ is_correct: isCorrect }).eq('id', r.id);
-
                 // 答對的加分（依答題速度加成）
+                let earnedScore = 0;
                 if (isCorrect) {
                     const remainingMs = Math.max(0, 15000 - (r.response_time_ms || 15000));
-                    const score = Math.round(points * (1 + (remainingMs / 15000) * 0.75));
+                    earnedScore = Math.round(points * (1 + (remainingMs / 15000) * 0.75));
 
                     const { data: player } = await sbClient.from('players').select('score').eq('name', r.player_name).single();
                     if (player) {
-                        await sbClient.from('players').update({ score: player.score + score }).eq('name', r.player_name);
+                        await sbClient.from('players').update({ score: player.score + earnedScore }).eq('name', r.player_name);
                     }
                 }
+
+                // 更新 response 的 is_correct 與 scored_points
+                await sbClient.from('responses').update({ is_correct: isCorrect, scored_points: earnedScore }).eq('id', r.id);
             }
 
             // 如果 admin 改了答案，同步更新題庫

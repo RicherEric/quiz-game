@@ -182,6 +182,8 @@ ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS sort_order integer NOT NUL
   FROM ordered o WHERE q.id = o.id;
 
 
+ALTER TABLE public.responses ADD COLUMN IF NOT EXISTS scored_points integer NOT NULL DEFAULT 0;
+
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
 VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')
