@@ -244,10 +244,20 @@
             <div id="tab-lottery-groups" class="hidden space-y-6">
                 <div class="flex justify-between items-center">
                     <h2 class="text-3xl font-bold text-gold-100">抽獎群組管理</h2>
-                    <button onclick="openGroupModal()"
-                        class="px-6 py-3 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg">
-                        ＋ 新增群組
-                    </button>
+                    <div class="flex space-x-3">
+                        <button onclick="initAllProbabilities()"
+                            class="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 hover:to-blue-700 text-white font-bold rounded-xl transition shadow-lg">
+                            🔄 初始化所有機率
+                        </button>
+                        <button onclick="distributeGroupsEvenly()"
+                            class="px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 text-white font-bold rounded-xl transition shadow-lg">
+                            ⚖ 平均分配機率
+                        </button>
+                        <button onclick="openGroupModal()"
+                            class="px-6 py-3 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg">
+                            ＋ 新增群組
+                        </button>
+                    </div>
                 </div>
                 <div id="prob-warning" class="hidden bg-red-900/50 border border-red-500/50 text-red-200 px-6 py-3 rounded-xl font-bold text-center"></div>
                 <div id="lottery-groups-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1052,6 +1062,37 @@
             if (!confirm('確定刪除此群組？（群組內的成員也會被刪除）')) return;
             const { error } = await sbClient.from('lottery_groups').delete().eq('id', id);
             if (error) return alert('刪除失敗：' + error.message);
+            fetchLotteryGroups();
+        }
+
+        async function initAllProbabilities() {
+            const { data: groups } = await sbClient.from('lottery_groups').select('id').order('id');
+            if (!groups || groups.length === 0) return alert('目前沒有群組可分配');
+
+            for (const g of groups) {
+                const { error } = await sbClient.from('lottery_groups').update({ probability_pct: 100 }).eq('id', g.id);
+                if (error) return alert('初始化失敗：' + error.message);
+            }
+            fetchLotteryGroups();
+        }
+
+        async function distributeGroupsEvenly() {
+            const { data: groups } = await sbClient.from('lottery_groups').select('id').order('id');
+            if (!groups || groups.length === 0) return alert('目前沒有群組可分配');
+
+            const count = groups.length;
+            const base = Math.floor(100 / count);
+            const remainder = 100 % count;
+
+            const updates = groups.map((g, i) => ({
+                id: g.id,
+                probability_pct: base + (i < remainder ? 1 : 0)
+            }));
+
+            for (const u of updates) {
+                const { error } = await sbClient.from('lottery_groups').update({ probability_pct: u.probability_pct }).eq('id', u.id);
+                if (error) return alert('分配失敗：' + error.message);
+            }
             fetchLotteryGroups();
         }
 
