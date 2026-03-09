@@ -131,6 +131,8 @@
             <button onclick="switchTab('tab-stats')" id="btn-tab-stats" class="tab-btn tab-active">📊 作答監控</button>
             <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">🏆 總積分排行榜</button>
             <button onclick="switchTab('tab-history')" id="btn-tab-history" class="tab-btn">📝 答題紀錄</button>
+            <button onclick="switchTab('tab-lottery-groups')" id="btn-tab-lottery-groups" class="tab-btn">🎱 群組管理</button>
+            <button onclick="switchTab('tab-lottery-prizes')" id="btn-tab-lottery-prizes" class="tab-btn">🎁 獎項管理</button>
             <div class="ml-auto flex space-x-3">
                 <button onclick="resetAll()"
                     class="px-6 py-3 font-bold text-lg rounded-xl bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 transition">
@@ -238,6 +240,35 @@
                 </div>
             </div>
 
+            <!-- 群組管理 Tab -->
+            <div id="tab-lottery-groups" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-gold-100">抽獎群組管理</h2>
+                    <button onclick="openGroupModal()"
+                        class="px-6 py-3 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg">
+                        ＋ 新增群組
+                    </button>
+                </div>
+                <div id="prob-warning" class="hidden bg-red-900/50 border border-red-500/50 text-red-200 px-6 py-3 rounded-xl font-bold text-center"></div>
+                <div id="lottery-groups-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="text-gold-400/50 text-center py-10 col-span-2">載入中...</div>
+                </div>
+            </div>
+
+            <!-- 獎項管理 Tab -->
+            <div id="tab-lottery-prizes" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-gold-100">獎項管理</h2>
+                    <button onclick="openPrizeModal()"
+                        class="px-6 py-3 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg">
+                        ＋ 新增獎項
+                    </button>
+                </div>
+                <div id="lottery-prizes-container" class="space-y-3">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
+
         </main>
     </div><!-- /admin-panel -->
 
@@ -253,6 +284,61 @@
             <p id="qr-url" class="text-gold-300 text-lg font-mono break-all"></p>
             <button onclick="closeQRCode()"
                 class="px-8 py-3 bg-gold-700 hover:bg-gold-600 text-midnight-950 font-bold rounded-xl text-lg transition">關閉</button>
+        </div>
+    </div>
+
+    <!-- Group Modal -->
+    <div id="group-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+        onclick="if(event.target===this)closeGroupModal()">
+        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-md">
+            <h2 id="group-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增群組</h2>
+            <input type="hidden" id="group-edit-id">
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">群組名稱</label>
+                <input id="group-name" type="text" placeholder="例如：VIP、一般員工"
+                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">機率 %</label>
+                <input id="group-prob" type="number" min="0" max="100" value="0"
+                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="saveGroup()"
+                    class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-3 rounded-xl font-bold text-lg transition">儲存</button>
+                <button onclick="closeGroupModal()"
+                    class="px-6 py-3 bg-midnight-800 hover:bg-midnight-950 text-gold-300 font-bold rounded-xl text-lg transition border border-gold-700/50">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Prize Modal -->
+    <div id="prize-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+        onclick="if(event.target===this)closePrizeModal()">
+        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-md">
+            <h2 id="prize-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增獎項</h2>
+            <input type="hidden" id="prize-edit-id">
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">獎項名稱</label>
+                <input id="prize-name" type="text" placeholder="例如：頭獎、二獎"
+                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">中獎人數</label>
+                <input id="prize-winner-count" type="number" min="1" value="1"
+                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">排序（數字小排前面）</label>
+                <input id="prize-sort" type="number" min="0" value="0"
+                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="savePrize()"
+                    class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-3 rounded-xl font-bold text-lg transition">儲存</button>
+                <button onclick="closePrizeModal()"
+                    class="px-6 py-3 bg-midnight-800 hover:bg-midnight-950 text-gold-300 font-bold rounded-xl text-lg transition border border-gold-700/50">取消</button>
+            </div>
         </div>
     </div>
 
@@ -825,18 +911,18 @@
         }
 
         // 分頁切換邏輯
+        const allTabs = ['tab-stats', 'tab-leaderboard', 'tab-history', 'tab-lottery-groups', 'tab-lottery-prizes'];
         function switchTab(tabId) {
-            document.getElementById('tab-stats').classList.add('hidden');
-            document.getElementById('tab-leaderboard').classList.add('hidden');
-            document.getElementById('tab-history').classList.add('hidden');
-            document.getElementById('btn-tab-stats').classList.remove('tab-active');
-            document.getElementById('btn-tab-leaderboard').classList.remove('tab-active');
-            document.getElementById('btn-tab-history').classList.remove('tab-active');
-
+            allTabs.forEach(t => {
+                document.getElementById(t).classList.add('hidden');
+                document.getElementById('btn-' + t).classList.remove('tab-active');
+            });
             document.getElementById(tabId).classList.remove('hidden');
             document.getElementById('btn-' + tabId).classList.add('tab-active');
 
             if (tabId === 'tab-history') fetchHistory();
+            if (tabId === 'tab-lottery-groups') fetchLotteryGroups();
+            if (tabId === 'tab-lottery-prizes') fetchLotteryPrizes();
         }
 
         // 重置所有答題狀況
@@ -869,6 +955,189 @@
                 console.error('重置失敗', err);
                 alert('重置失敗：' + err.message);
             }
+        }
+
+        // ===== 群組管理 =====
+        async function fetchLotteryGroups() {
+            const { data: groups } = await sbClient.from('lottery_groups').select('*').order('id');
+            const { data: members } = await sbClient.from('lottery_members').select('*').order('name');
+            const container = document.getElementById('lottery-groups-container');
+
+            if (!groups || groups.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10 col-span-2">尚無群組，請新增</div>';
+                document.getElementById('prob-warning').classList.add('hidden');
+                return;
+            }
+
+            // 機率總和驗證
+            const totalProb = groups.reduce((s, g) => s + g.probability_pct, 0);
+            const warnEl = document.getElementById('prob-warning');
+            if (totalProb !== 100) {
+                warnEl.textContent = `⚠️ 機率總和為 ${totalProb}%，應為 100%`;
+                warnEl.classList.remove('hidden');
+            } else {
+                warnEl.classList.add('hidden');
+            }
+
+            const membersByGroup = {};
+            (members || []).forEach(m => {
+                if (!membersByGroup[m.group_id]) membersByGroup[m.group_id] = [];
+                membersByGroup[m.group_id].push(m);
+            });
+
+            let html = '';
+            groups.forEach(g => {
+                const gMembers = membersByGroup[g.id] || [];
+                const memberTags = gMembers.map(m =>
+                    `<span class="inline-flex items-center bg-midnight-950 border border-gold-700/40 text-gold-200 px-3 py-1 rounded-full text-sm font-bold mr-2 mb-2">
+                        ${m.name}
+                        <button onclick="deleteMember(${m.id})" class="ml-2 text-red-400 hover:text-red-300 font-black">✕</button>
+                    </span>`
+                ).join('');
+
+                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-xl font-bold text-gold-200">${g.name}</h3>
+                            <p class="text-gold-400/60 text-sm">機率：<span class="text-gold-300 font-bold text-lg">${g.probability_pct}%</span>　成員：${gMembers.length} 人</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="openGroupModal(${g.id},'${g.name.replace(/'/g, "\\'")}',${g.probability_pct})" class="text-gold-400 hover:text-gold-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-800 border border-gold-700/40">編輯</button>
+                            <button onclick="deleteGroup(${g.id})" class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-800 border border-red-700/40">刪除</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap">${memberTags || '<span class="text-gold-400/40 text-sm">尚無成員</span>'}</div>
+                    <div class="flex space-x-2">
+                        <input id="add-member-${g.id}" type="text" placeholder="輸入成員名稱"
+                            class="flex-1 bg-midnight-800 text-gold-200 px-4 py-2 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm"
+                            onkeydown="if(event.key==='Enter')addMember(${g.id})">
+                        <button onclick="addMember(${g.id})"
+                            class="px-4 py-2 bg-gold-700/80 hover:bg-gold-600 text-midnight-950 font-bold rounded-xl text-sm transition">新增</button>
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function openGroupModal(id, name, prob) {
+            document.getElementById('group-edit-id').value = id || '';
+            document.getElementById('group-name').value = name || '';
+            document.getElementById('group-prob').value = prob ?? 0;
+            document.getElementById('group-modal-title').textContent = id ? '編輯群組' : '新增群組';
+            document.getElementById('group-modal').classList.remove('hidden');
+        }
+
+        function closeGroupModal() {
+            document.getElementById('group-modal').classList.add('hidden');
+        }
+
+        async function saveGroup() {
+            const id = document.getElementById('group-edit-id').value;
+            const name = document.getElementById('group-name').value.trim();
+            const prob = parseInt(document.getElementById('group-prob').value) || 0;
+            if (!name) return alert('請輸入群組名稱');
+
+            if (id) {
+                const { error } = await sbClient.from('lottery_groups').update({ name, probability_pct: prob }).eq('id', id);
+                if (error) return alert('更新失敗：' + error.message);
+            } else {
+                const { error } = await sbClient.from('lottery_groups').insert({ name, probability_pct: prob });
+                if (error) return alert('新增失敗：' + error.message);
+            }
+            closeGroupModal();
+            fetchLotteryGroups();
+        }
+
+        async function deleteGroup(id) {
+            if (!confirm('確定刪除此群組？（群組內的成員也會被刪除）')) return;
+            const { error } = await sbClient.from('lottery_groups').delete().eq('id', id);
+            if (error) return alert('刪除失敗：' + error.message);
+            fetchLotteryGroups();
+        }
+
+        async function addMember(groupId) {
+            const input = document.getElementById('add-member-' + groupId);
+            const name = input.value.trim();
+            if (!name) return;
+            const { error } = await sbClient.from('lottery_members').insert({ name, group_id: groupId });
+            if (error) return alert('新增失敗：' + error.message);
+            input.value = '';
+            fetchLotteryGroups();
+        }
+
+        async function deleteMember(id) {
+            const { error } = await sbClient.from('lottery_members').delete().eq('id', id);
+            if (error) return alert('刪除失敗：' + error.message);
+            fetchLotteryGroups();
+        }
+
+        // ===== 獎項管理 =====
+        async function fetchLotteryPrizes() {
+            const { data: prizes } = await sbClient.from('lottery_prizes').select('*').order('sort_order').order('id');
+            const container = document.getElementById('lottery-prizes-container');
+
+            if (!prizes || prizes.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無獎項，請新增</div>';
+                return;
+            }
+
+            let html = `<div class="bg-midnight-900/80 px-6 py-3 rounded-t-2xl border-b border-gold-700/30 grid grid-cols-12 gap-4 text-gold-400/80 font-bold text-sm uppercase">
+                <div class="col-span-1">排序</div>
+                <div class="col-span-5">獎項名稱</div>
+                <div class="col-span-2 text-center">中獎人數</div>
+                <div class="col-span-4 text-right">操作</div>
+            </div>`;
+
+            prizes.forEach(p => {
+                html += `<div class="px-6 py-4 grid grid-cols-12 gap-4 items-center bg-midnight-800/50 border border-gold-800/30 rounded-xl">
+                    <div class="col-span-1 text-gold-400/60 font-bold">${p.sort_order}</div>
+                    <div class="col-span-5 font-bold text-lg text-gold-200">${p.name}</div>
+                    <div class="col-span-2 text-center font-bold text-gold-300">${p.winner_count} 人</div>
+                    <div class="col-span-4 text-right space-x-2">
+                        <button onclick="openPrizeModal(${p.id},'${p.name.replace(/'/g, "\\'")}',${p.winner_count},${p.sort_order})" class="text-gold-400 hover:text-gold-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-gold-700/40">編輯</button>
+                        <button onclick="deletePrize(${p.id})" class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-900 border border-red-700/40">刪除</button>
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function openPrizeModal(id, name, winnerCount, sortOrder) {
+            document.getElementById('prize-edit-id').value = id || '';
+            document.getElementById('prize-name').value = name || '';
+            document.getElementById('prize-winner-count').value = winnerCount ?? 1;
+            document.getElementById('prize-sort').value = sortOrder ?? 0;
+            document.getElementById('prize-modal-title').textContent = id ? '編輯獎項' : '新增獎項';
+            document.getElementById('prize-modal').classList.remove('hidden');
+        }
+
+        function closePrizeModal() {
+            document.getElementById('prize-modal').classList.add('hidden');
+        }
+
+        async function savePrize() {
+            const id = document.getElementById('prize-edit-id').value;
+            const name = document.getElementById('prize-name').value.trim();
+            const winner_count = parseInt(document.getElementById('prize-winner-count').value) || 1;
+            const sort_order = parseInt(document.getElementById('prize-sort').value) || 0;
+            if (!name) return alert('請輸入獎項名稱');
+
+            if (id) {
+                const { error } = await sbClient.from('lottery_prizes').update({ name, winner_count, sort_order }).eq('id', id);
+                if (error) return alert('更新失敗：' + error.message);
+            } else {
+                const { error } = await sbClient.from('lottery_prizes').insert({ name, winner_count, sort_order });
+                if (error) return alert('新增失敗：' + error.message);
+            }
+            closePrizeModal();
+            fetchLotteryPrizes();
+        }
+
+        async function deletePrize(id) {
+            if (!confirm('確定刪除此獎項？')) return;
+            const { error } = await sbClient.from('lottery_prizes').delete().eq('id', id);
+            if (error) return alert('刪除失敗：' + error.message);
+            fetchLotteryPrizes();
         }
 
         // 登入驗證
