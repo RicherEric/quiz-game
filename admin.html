@@ -419,6 +419,7 @@
                 <div class="flex space-x-2 border-b border-gold-800/50 mb-2">
                     <button onclick="switchStatsSubTab('sub-member-stats')" id="btn-sub-member-stats" class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-200 bg-gold-700/40 border border-gold-600/50 border-b-0">👥 群組人數統計</button>
                     <button onclick="switchStatsSubTab('sub-winner-stats')" id="btn-sub-winner-stats" class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-400/60 hover:text-gold-300">🏆 中獎群組統計</button>
+                    <button onclick="switchStatsSubTab('sub-individual-stats')" id="btn-sub-individual-stats" class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-400/60 hover:text-gold-300">👤 個人中獎統計</button>
                 </div>
                 <div id="sub-member-stats" class="space-y-6">
                     <div id="lottery-stats-container" class="space-y-6">
@@ -427,6 +428,11 @@
                 </div>
                 <div id="sub-winner-stats" class="hidden space-y-6">
                     <div id="lottery-winner-stats-container" class="space-y-6">
+                        <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                    </div>
+                </div>
+                <div id="sub-individual-stats" class="hidden space-y-6">
+                    <div id="lottery-individual-stats-container" class="space-y-6">
                         <div class="text-gold-400/50 text-center py-10">載入中...</div>
                     </div>
                 </div>
@@ -679,7 +685,7 @@
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_winners' }, () => {
                     if (currentSection !== 'lottery') return;
                     if (currentLotteryTab === 'tab-lottery-winners') fetchLotteryWinners();
-                    if (currentLotteryTab === 'tab-lottery-stats') fetchLotteryWinnerStats();
+                    if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
                     if (currentLotteryTab === 'tab-lottery-prizes') fetchLotteryPrizes();
                 })
                 .subscribe();
@@ -688,7 +694,7 @@
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_groups' }, () => {
                     if (currentSection !== 'lottery') return;
                     if (currentLotteryTab === 'tab-lottery-groups') fetchLotteryGroups();
-                    if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); }
+                    if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
                 })
                 .subscribe();
 
@@ -696,7 +702,7 @@
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_members' }, () => {
                     if (currentSection !== 'lottery') return;
                     if (currentLotteryTab === 'tab-lottery-groups') fetchLotteryGroups();
-                    if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); }
+                    if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
                 })
                 .subscribe();
 
@@ -713,7 +719,7 @@
                 if (currentLotteryTab === 'tab-lottery-groups') fetchLotteryGroups();
                 if (currentLotteryTab === 'tab-lottery-prizes') fetchLotteryPrizes();
                 if (currentLotteryTab === 'tab-lottery-winners') fetchLotteryWinners();
-                if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); }
+                if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
             }, 5000);
         }
 
@@ -1263,11 +1269,11 @@
             if (tabId === 'tab-lottery-groups') fetchLotteryGroups();
             if (tabId === 'tab-lottery-prizes') fetchLotteryPrizes();
             if (tabId === 'tab-lottery-winners') fetchLotteryWinners();
-            if (tabId === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); }
+            if (tabId === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
         }
 
         function switchStatsSubTab(subId) {
-            const subs = ['sub-member-stats', 'sub-winner-stats'];
+            const subs = ['sub-member-stats', 'sub-winner-stats', 'sub-individual-stats'];
             subs.forEach(s => {
                 document.getElementById(s).classList.add('hidden');
                 const btn = document.getElementById('btn-' + s);
@@ -1308,6 +1314,7 @@
                     fetchLotteryWinners(),
                     fetchLotteryStats(),
                     fetchLotteryWinnerStats(),
+                    fetchLotteryIndividualStats(),
                 ]);
             } catch (err) {
                 console.error('刷新失敗', err);
@@ -1520,7 +1527,7 @@
         async function fetchLotteryPrizes() {
             const [{ data: prizes }, { data: winners }, { data: groups }] = await Promise.all([
                 sbClient.from('lottery_prizes').select('*').order('sort_order').order('id'),
-                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name), lottery_groups!lottery_winners_group_id_fkey(name)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name)').order('drawn_at', { ascending: false }),
                 sbClient.from('lottery_groups').select('*').order('id')
             ]);
             const container = document.getElementById('lottery-prizes-container');
@@ -1566,8 +1573,9 @@
                         <div class="flex flex-wrap gap-2">`;
                     prizeWinners.forEach(w => {
                         const isGroupWin = w.group_id != null && w.member_id == null;
+                        const groupForWin = isGroupWin ? (groups || []).find(g => g.id === w.group_id) : null;
                         const displayName = isGroupWin
-                            ? (w.lottery_groups?.name || '未知群組')
+                            ? (groupForWin?.name || '未知群組')
                             : (w.lottery_members?.name || '未知');
                         const groupObj = isGroupWin ? null : (groups || []).find(g => g.id === w.lottery_members?.group_id);
                         const groupName = isGroupWin ? '群組' : (groupObj ? groupObj.name : '');
@@ -1665,7 +1673,7 @@
 
         async function fetchLotteryWinners() {
             const [{ data: winners }, { data: prizes }, { data: groups }, { data: members }] = await Promise.all([
-                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count), lottery_groups!lottery_winners_group_id_fkey(name)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count)').order('drawn_at', { ascending: false }),
                 sbClient.from('lottery_prizes').select('*').order('sort_order').order('id'),
                 sbClient.from('lottery_groups').select('*').order('id'),
                 sbClient.from('lottery_members').select('*').order('name')
@@ -1716,8 +1724,9 @@
 
                 prizeGroup.winners.forEach(w => {
                     const isGroupWin = w.group_id != null && w.member_id == null;
+                    const groupForWin = isGroupWin ? adminAllGroups.find(g => g.id === w.group_id) : null;
                     const displayName = isGroupWin
-                        ? (w.lottery_groups?.name || '未知群組')
+                        ? (groupForWin?.name || '未知群組')
                         : (w.lottery_members?.name || '未知');
                     const groupObj = isGroupWin ? null : adminAllGroups.find(g => g.id === w.lottery_members?.group_id);
                     const groupName = isGroupWin ? '群組' : (groupObj ? groupObj.name : '');
@@ -1787,7 +1796,7 @@
                 prizeGroup.winners.forEach((w, i) => {
                     const isGroupWin = w.group_id != null && w.member_id == null;
                     const displayName = isGroupWin
-                        ? (w.lottery_groups?.name || '未知群組')
+                        ? (groupMap.get(w.group_id) || '未知群組')
                         : (w.lottery_members?.name || '未知');
                     const groupName = isGroupWin ? '群組' : (groupMap.get(w.lottery_members?.group_id) || '');
                     const noteText = w.note || '';
@@ -2006,7 +2015,7 @@
             const [{ data: groups }, { data: members }, { data: winners }, { data: prizes }] = await Promise.all([
                 sbClient.from('lottery_groups').select('*').order('id'),
                 sbClient.from('lottery_members').select('*').order('name'),
-                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order), lottery_groups!lottery_winners_group_id_fkey(name)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order)').order('drawn_at', { ascending: false }),
                 sbClient.from('lottery_prizes').select('*').order('sort_order').order('id')
             ]);
 
@@ -2125,6 +2134,83 @@
                     <td class="text-gold-400/60 py-3 px-4">-</td>
                 </tr>`;
             html += '</tbody></table></div></div>';
+
+            container.innerHTML = html;
+        }
+
+        // ===== 個人中獎統計 =====
+        async function fetchLotteryIndividualStats() {
+            const [{ data: groups }, { data: members }, { data: winners }] = await Promise.all([
+                sbClient.from('lottery_groups').select('*').order('id'),
+                sbClient.from('lottery_members').select('*').order('name'),
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order)').order('drawn_at', { ascending: false })
+            ]);
+
+            const container = document.getElementById('lottery-individual-stats-container');
+            if (!winners || winners.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無中獎紀錄</div>';
+                return;
+            }
+
+            const groupMap = {};
+            (groups || []).forEach(g => { groupMap[g.id] = g.name; });
+
+            // Group winners by prize
+            const byPrize = {};
+            winners.forEach(w => {
+                const prizeId = w.prize_id;
+                const prizeName = w.lottery_prizes?.name || '未知獎項';
+                const sortOrder = w.lottery_prizes?.sort_order ?? 999;
+                const key = sortOrder + '_' + prizeId;
+                if (!byPrize[key]) byPrize[key] = { name: prizeName, winners: [] };
+                byPrize[key].winners.push(w);
+            });
+
+            const sortedKeys = Object.keys(byPrize).sort();
+            let html = `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 mb-2">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-gold-200">個人中獎統計</h3>
+                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${winners.length}</span> 人中獎</div>
+                </div>
+            </div>`;
+
+            sortedKeys.forEach(key => {
+                const prizeGroup = byPrize[key];
+                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-gold-200">🏆 ${prizeGroup.name}</h3>
+                        <span class="text-gold-400/60 text-sm">${prizeGroup.winners.length} 人</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gold-800/50">
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">#</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">姓名</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">群組</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">備註</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">抽獎時間</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                prizeGroup.winners.forEach((w, i) => {
+                    const isGroupWin = w.group_id != null && w.member_id == null;
+                    const displayName = isGroupWin
+                        ? (groupMap[w.group_id] || '未知群組')
+                        : (w.lottery_members?.name || '未知');
+                    const groupName = isGroupWin ? '群組中獎' : (groupMap[w.lottery_members?.group_id] || '');
+                    const noteText = w.note || '';
+                    const drawnAt = w.drawn_at ? new Date(w.drawn_at).toLocaleString('zh-TW') : '';
+                    html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                        <td class="text-gold-400/60 py-2 px-4">${i + 1}</td>
+                        <td class="text-gold-200 font-bold py-2 px-4">${isGroupWin ? '👥 ' : ''}${displayName}</td>
+                        <td class="text-gold-400/60 py-2 px-4">${groupName}</td>
+                        <td class="text-gold-400/60 py-2 px-4 text-xs">${noteText ? '📝 ' + noteText : '-'}</td>
+                        <td class="text-gold-400/60 py-2 px-4 text-xs">${drawnAt}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table></div></div>';
+            });
 
             container.innerHTML = html;
         }

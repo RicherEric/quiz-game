@@ -150,6 +150,8 @@
                     class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">📊 群組人數統計</button>
                 <button data-lottery-tab="winner-stats" onclick="switchLotteryTab('winner-stats')"
                     class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">🏆 中獎群組統計</button>
+                <button data-lottery-tab="individual-stats" onclick="switchLotteryTab('individual-stats')"
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">👤 個人中獎統計</button>
             </div>
 
             <!-- Tab: Draw (existing) -->
@@ -199,6 +201,13 @@
                     <div class="text-gold-400/50 text-center py-10">載入中...</div>
                 </div>
             </div>
+
+            <!-- Tab: Individual Stats -->
+            <div id="lottery-tab-individual-stats" class="hidden flex-1 overflow-y-auto p-6 space-y-6 custom-scroll">
+                <div id="lottery-individual-stats-container">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -240,7 +249,8 @@
         }
 
         async function loadWinners() {
-            const { data } = await sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count), lottery_groups!lottery_winners_group_id_fkey(name)').order('drawn_at', { ascending: false });
+            const { data, error } = await sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count)').order('drawn_at', { ascending: false });
+            if (error) console.error('載入中獎紀錄失敗：', error);
             allWinners = data || [];
         }
 
@@ -703,8 +713,9 @@
                     <div class="space-y-1">`;
                 prizeGroup.winners.forEach(w => {
                     const isGroupWin = w.group_id != null && w.member_id == null;
+                    const groupForWin = isGroupWin ? allGroups.find(g => g.id === w.group_id) : null;
                     const displayName = isGroupWin
-                        ? (w.lottery_groups?.name || '未知群組')
+                        ? (groupForWin?.name || '未知群組')
                         : (w.lottery_members?.name || '未知');
                     const groupObj = isGroupWin ? null : allGroups.find(g => g.id === w.lottery_members?.group_id);
                     const groupName = isGroupWin ? '群組' : (groupObj ? groupObj.name : '');
@@ -824,7 +835,7 @@
         function switchLotteryTab(tabName) {
             currentLotteryTab = tabName;
             // Hide all tab contents
-            const tabIds = ['lottery-tab-draw', 'lottery-tab-group-view', 'lottery-tab-member-stats', 'lottery-tab-winner-stats'];
+            const tabIds = ['lottery-tab-draw', 'lottery-tab-group-view', 'lottery-tab-member-stats', 'lottery-tab-winner-stats', 'lottery-tab-individual-stats'];
             tabIds.forEach(id => document.getElementById(id).classList.add('hidden'));
             // Show selected tab
             document.getElementById('lottery-tab-' + tabName).classList.remove('hidden');
@@ -842,6 +853,7 @@
             if (tabName === 'group-view') renderGroupView();
             if (tabName === 'member-stats') renderMemberStats();
             if (tabName === 'winner-stats') renderWinnerStats();
+            if (tabName === 'individual-stats') renderIndividualStats();
         }
 
         // ===== Group View =====
@@ -1096,6 +1108,75 @@
             container.innerHTML = html;
         }
 
+        // ===== Individual Winner Stats =====
+        function renderIndividualStats() {
+            const container = document.getElementById('lottery-individual-stats-container');
+            if (allWinners.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無中獎紀錄</div>';
+                return;
+            }
+
+            // Group winners by prize (sorted by sort_order)
+            const byPrize = {};
+            allWinners.forEach(w => {
+                const prizeId = w.prize_id;
+                const prizeName = w.lottery_prizes?.name || '未知獎項';
+                const sortOrder = w.lottery_prizes?.sort_order ?? 999;
+                const key = sortOrder + '_' + prizeId;
+                if (!byPrize[key]) byPrize[key] = { name: prizeName, winners: [] };
+                byPrize[key].winners.push(w);
+            });
+
+            const sortedKeys = Object.keys(byPrize).sort();
+            let html = `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 mb-2">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-gold-200">個人中獎統計</h3>
+                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${allWinners.length}</span> 人中獎</div>
+                </div>
+            </div>`;
+
+            sortedKeys.forEach(key => {
+                const prizeGroup = byPrize[key];
+                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-gold-200">🏆 ${prizeGroup.name}</h3>
+                        <span class="text-gold-400/60 text-sm">${prizeGroup.winners.length} 人</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gold-800/50">
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">#</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">姓名</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">群組</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">備註</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">抽獎時間</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                prizeGroup.winners.forEach((w, i) => {
+                    const isGroupWin = w.group_id != null && w.member_id == null;
+                    const groupForWin = isGroupWin ? allGroups.find(g => g.id === w.group_id) : null;
+                    const displayName = isGroupWin
+                        ? (groupForWin?.name || '未知群組')
+                        : (w.lottery_members?.name || '未知');
+                    const groupName = isGroupWin ? '群組中獎' : (allGroups.find(g => g.id === w.lottery_members?.group_id)?.name || '');
+                    const noteText = w.note || '';
+                    const drawnAt = w.drawn_at ? new Date(w.drawn_at).toLocaleString('zh-TW') : '';
+                    html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                        <td class="text-gold-400/60 py-2 px-4">${i + 1}</td>
+                        <td class="text-gold-200 font-bold py-2 px-4">${isGroupWin ? '👥 ' : ''}${displayName}</td>
+                        <td class="text-gold-400/60 py-2 px-4">${groupName}</td>
+                        <td class="text-gold-400/60 py-2 px-4 text-xs">${noteText ? '📝 ' + noteText : '-'}</td>
+                        <td class="text-gold-400/60 py-2 px-4 text-xs">${drawnAt}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table></div></div>';
+            });
+
+            container.innerHTML = html;
+        }
+
         // ===== Supabase Realtime Auto-Sync =====
         let pollInterval = null;
         let lastWinnerHash = '';
@@ -1130,6 +1211,7 @@
                     renderWinnerHistory();
                     updateEligibleCount();
                     if (currentLotteryTab === 'winner-stats') renderWinnerStats();
+                    if (currentLotteryTab === 'individual-stats') renderIndividualStats();
                     if (currentLotteryTab === 'group-view') renderGroupView();
                 })
                 .subscribe();
@@ -1166,6 +1248,7 @@
                     renderWinnerHistory();
                     updateEligibleCount();
                     if (currentLotteryTab === 'winner-stats') renderWinnerStats();
+                    if (currentLotteryTab === 'individual-stats') renderIndividualStats();
                     if (currentLotteryTab === 'group-view') renderGroupView();
                 })
                 .subscribe();
@@ -1196,6 +1279,7 @@
                     if (currentLotteryTab === 'group-view') renderGroupView();
                     if (currentLotteryTab === 'member-stats') renderMemberStats();
                     if (currentLotteryTab === 'winner-stats') renderWinnerStats();
+                    if (currentLotteryTab === 'individual-stats') renderIndividualStats();
                 } catch (e) {
                     console.error('Polling sync error:', e);
                 }
