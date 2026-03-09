@@ -43,3 +43,44 @@ CREATE TABLE public.users (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT users_pkey PRIMARY KEY (id)
 );
+
+-- 抽獎群組
+CREATE TABLE public.lottery_groups (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name text NOT NULL,
+  probability_pct integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lottery_groups_pkey PRIMARY KEY (id),
+  CONSTRAINT lottery_groups_prob_check CHECK (probability_pct >= 0 AND probability_pct <= 100)
+);
+
+-- 抽獎成員
+CREATE TABLE public.lottery_members (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name text NOT NULL,
+  group_id integer NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lottery_members_pkey PRIMARY KEY (id),
+  CONSTRAINT lottery_members_group_fk FOREIGN KEY (group_id) REFERENCES public.lottery_groups(id) ON DELETE CASCADE
+);
+
+-- 獎項
+CREATE TABLE public.lottery_prizes (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name text NOT NULL,
+  winner_count integer NOT NULL DEFAULT 1,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lottery_prizes_pkey PRIMARY KEY (id)
+);
+
+-- 中獎紀錄
+CREATE TABLE public.lottery_winners (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  member_id integer NOT NULL,
+  prize_id integer NOT NULL,
+  drawn_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lottery_winners_pkey PRIMARY KEY (id),
+  CONSTRAINT lottery_winners_member_fk FOREIGN KEY (member_id) REFERENCES public.lottery_members(id) ON DELETE CASCADE,
+  CONSTRAINT lottery_winners_prize_fk FOREIGN KEY (prize_id) REFERENCES public.lottery_prizes(id) ON DELETE CASCADE
+);
