@@ -2181,6 +2181,7 @@
             const { data: qData } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
             questions = qData || [];
             const select = document.getElementById('q-selector');
+            const prevValue = select.value;
             select.innerHTML = '';
             if (questions.length === 0) {
                 select.innerHTML = '<option value="">(無題目資料)</option>';
@@ -2189,6 +2190,12 @@
                     select.innerHTML += `<option value="${q.id}">Q${idx + 1}: ${q.question}</option>`;
                 });
             }
+            // 還原先前選取的題目（若仍存在）
+            if (prevValue && questions.some(q => q.id == prevValue)) {
+                select.value = prevValue;
+            }
+            // 觸發 change 事件，同步更新作答監控的題目顯示
+            select.dispatchEvent(new Event('change'));
             fetchQuestionsTable();
         }
 
