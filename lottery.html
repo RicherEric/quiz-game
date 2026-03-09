@@ -988,40 +988,36 @@
             container.innerHTML = html;
         }
 
-        // ===== Winner Stats (Winner Group Statistics) =====
+        // ===== Winner Stats (Group Lottery Statistics - only group draws) =====
         function renderWinnerStats() {
             const container = document.getElementById('lottery-winner-stats-container');
-            if (allGroups.length === 0) {
-                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無群組資料</div>';
-                return;
-            }
-            if (allWinners.length === 0) {
-                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無中獎紀錄</div>';
+
+            // Filter to group wins only (group_id set, member_id null)
+            const groupWins = allWinners.filter(w => w.group_id != null && w.member_id == null);
+
+            if (groupWins.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無群組中獎紀錄</div>';
                 return;
             }
 
-            const totalMembers = allMembers.length;
-            const totalWinners = allWinners.length;
+            const totalGroupWins = groupWins.length;
 
-            // Count winners per group
+            // Count wins per group
             const groupWinMap = {};
             const groupPrizeMap = {};
             allGroups.forEach(g => { groupWinMap[g.id] = 0; groupPrizeMap[g.id] = {}; });
 
-            allWinners.forEach(w => {
-                const gId = w.lottery_members?.group_id;
-                if (gId != null) {
-                    groupWinMap[gId] = (groupWinMap[gId] || 0) + 1;
-                    const pName = w.lottery_prizes?.name || '未知';
-                    groupPrizeMap[gId] = groupPrizeMap[gId] || {};
-                    groupPrizeMap[gId][pName] = (groupPrizeMap[gId][pName] || 0) + 1;
-                }
+            groupWins.forEach(w => {
+                const gId = w.group_id;
+                groupWinMap[gId] = (groupWinMap[gId] || 0) + 1;
+                const pName = w.lottery_prizes?.name || '未知';
+                groupPrizeMap[gId] = groupPrizeMap[gId] || {};
+                groupPrizeMap[gId][pName] = (groupPrizeMap[gId][pName] || 0) + 1;
             });
 
             const groupStats = allGroups.map(g => {
-                const memberCount = allMembers.filter(m => m.group_id === g.id).length;
                 const winCount = groupWinMap[g.id] || 0;
-                return { ...g, memberCount, winCount, prizes: groupPrizeMap[g.id] || {} };
+                return { ...g, winCount, prizes: groupPrizeMap[g.id] || {} };
             });
             const maxWinCount = Math.max(...groupStats.map(g => g.winCount), 1);
 
@@ -1030,12 +1026,12 @@
             // Summary card
             html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-xl font-bold text-gold-200">中獎總覽</h3>
-                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${totalWinners}</span> 人中獎</div>
+                    <h3 class="text-xl font-bold text-gold-200">群組中獎總覽</h3>
+                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${totalGroupWins}</span> 組中獎</div>
                 </div>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">`;
             groupStats.forEach(g => {
-                const pct = totalWinners > 0 ? (g.winCount / totalWinners * 100).toFixed(1) : '0.0';
+                const pct = totalGroupWins > 0 ? (g.winCount / totalGroupWins * 100).toFixed(1) : '0.0';
                 html += `<div class="bg-midnight-800/50 border border-gold-800/30 rounded-xl p-4 text-center">
                     <p class="text-gold-400/60 text-sm mb-1">${g.name}</p>
                     <p class="text-3xl font-black text-gold-200">${g.winCount}</p>
@@ -1046,15 +1042,15 @@
 
             // Bar chart (green gradient)
             html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
-                <h3 class="text-xl font-bold text-gold-200">各群組中獎人數比較</h3>
+                <h3 class="text-xl font-bold text-gold-200">各群組中獎次數比較</h3>
                 <div class="space-y-3">`;
             groupStats.forEach(g => {
                 const barWidth = maxWinCount > 0 ? (g.winCount / maxWinCount * 100) : 0;
-                const pct = totalWinners > 0 ? (g.winCount / totalWinners * 100).toFixed(1) : '0.0';
+                const pct = totalGroupWins > 0 ? (g.winCount / totalGroupWins * 100).toFixed(1) : '0.0';
                 html += `<div class="space-y-1">
                     <div class="flex justify-between items-center text-sm">
                         <span class="text-gold-200 font-bold">${g.name}</span>
-                        <span class="text-gold-400/60">${g.winCount} 人中獎（${pct}%）</span>
+                        <span class="text-gold-400/60">${g.winCount} 次中獎（${pct}%）</span>
                     </div>
                     <div class="w-full bg-midnight-800/80 rounded-full h-6 overflow-hidden">
                         <div class="h-full bg-gradient-to-r from-emerald-500 to-emerald-700 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
@@ -1074,51 +1070,91 @@
                         <thead>
                             <tr class="border-b border-gold-800/50">
                                 <th class="text-left text-gold-400/60 font-bold py-3 px-4">群組名稱</th>
-                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">群組人數</th>
-                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎人數</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎次數</th>
                                 <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎佔比</th>
-                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎率</th>
                                 <th class="text-left text-gold-400/60 font-bold py-3 px-4">獎項分布</th>
                             </tr>
                         </thead>
                         <tbody>`;
             groupStats.forEach(g => {
-                const pct = totalWinners > 0 ? (g.winCount / totalWinners * 100).toFixed(1) : '0.0';
-                const winRate = g.memberCount > 0 ? (g.winCount / g.memberCount * 100).toFixed(1) : '0.0';
+                const pct = totalGroupWins > 0 ? (g.winCount / totalGroupWins * 100).toFixed(1) : '0.0';
                 const prizeList = Object.entries(g.prizes).map(([p, c]) => `${p}×${c}`).join('、') || '-';
                 html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
                     <td class="text-gold-200 font-bold py-3 px-4">${g.name}</td>
-                    <td class="text-center text-gold-400/60 py-3 px-4">${g.memberCount}</td>
                     <td class="text-center text-gold-300 font-bold py-3 px-4">${g.winCount}</td>
                     <td class="text-center text-gold-400/60 py-3 px-4">${pct}%</td>
-                    <td class="text-center text-gold-400/60 py-3 px-4">${winRate}%</td>
                     <td class="text-gold-400/60 py-3 px-4 text-xs">${prizeList}</td>
                 </tr>`;
             });
             html += `<tr class="border-t-2 border-gold-700/50 font-bold">
                     <td class="text-gold-200 py-3 px-4">合計</td>
-                    <td class="text-center text-gold-400/60 py-3 px-4">${totalMembers}</td>
-                    <td class="text-center text-gold-300 py-3 px-4">${totalWinners}</td>
+                    <td class="text-center text-gold-300 py-3 px-4">${totalGroupWins}</td>
                     <td class="text-center text-gold-400/60 py-3 px-4">100%</td>
-                    <td class="text-center text-gold-400/60 py-3 px-4">${totalMembers > 0 ? (totalWinners / totalMembers * 100).toFixed(1) : '0.0'}%</td>
                     <td class="text-gold-400/60 py-3 px-4">-</td>
                 </tr>`;
             html += '</tbody></table></div></div>';
 
+            // Group wins by prize
+            const byPrize = {};
+            groupWins.forEach(w => {
+                const prizeId = w.prize_id;
+                const prizeName = w.lottery_prizes?.name || '未知獎項';
+                const sortOrder = w.lottery_prizes?.sort_order ?? 999;
+                const key = sortOrder + '_' + prizeId;
+                if (!byPrize[key]) byPrize[key] = { name: prizeName, winners: [] };
+                const groupName = allGroups.find(g => g.id === w.group_id)?.name || '未知群組';
+                byPrize[key].winners.push({ groupName, note: w.note, drawnAt: w.drawn_at });
+            });
+
+            const sortedKeys = Object.keys(byPrize).sort();
+            sortedKeys.forEach(key => {
+                const prizeGroup = byPrize[key];
+                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-gold-200">🏆 ${prizeGroup.name}</h3>
+                        <span class="text-gold-400/60 text-sm">${prizeGroup.winners.length} 組</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gold-800/50">
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">#</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">群組名稱</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">備註</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">抽獎時間</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                prizeGroup.winners.forEach((w, i) => {
+                    const drawnAt = w.drawnAt ? new Date(w.drawnAt).toLocaleString('zh-TW') : '';
+                    html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                        <td class="text-gold-400/60 py-2 px-4">${i + 1}</td>
+                        <td class="text-gold-200 font-bold py-2 px-4">👥 ${w.groupName}</td>
+                        <td class="text-gold-400/60 py-2 px-4 text-xs">${w.note ? '📝 ' + w.note : '-'}</td>
+                        <td class="text-gold-400/60 py-2 px-4 text-xs">${drawnAt}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table></div></div>';
+            });
+
             container.innerHTML = html;
         }
 
-        // ===== Individual Winner Stats =====
+        // ===== Individual Winner Stats (individual draws only) =====
         function renderIndividualStats() {
             const container = document.getElementById('lottery-individual-stats-container');
-            if (allWinners.length === 0) {
-                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無中獎紀錄</div>';
+
+            // Filter to individual wins only (member_id is set)
+            const individualWinners = allWinners.filter(w => w.member_id != null);
+
+            if (individualWinners.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無個人中獎紀錄</div>';
                 return;
             }
 
             // Group winners by prize (sorted by sort_order)
             const byPrize = {};
-            allWinners.forEach(w => {
+            individualWinners.forEach(w => {
                 const prizeId = w.prize_id;
                 const prizeName = w.lottery_prizes?.name || '未知獎項';
                 const sortOrder = w.lottery_prizes?.sort_order ?? 999;
@@ -1131,7 +1167,7 @@
             let html = `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 mb-2">
                 <div class="flex items-center justify-between">
                     <h3 class="text-xl font-bold text-gold-200">個人中獎統計</h3>
-                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${allWinners.length}</span> 人中獎</div>
+                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${individualWinners.length}</span> 人中獎</div>
                 </div>
             </div>`;
 
@@ -1155,17 +1191,13 @@
                             </thead>
                             <tbody>`;
                 prizeGroup.winners.forEach((w, i) => {
-                    const isGroupWin = w.group_id != null && w.member_id == null;
-                    const groupForWin = isGroupWin ? allGroups.find(g => g.id === w.group_id) : null;
-                    const displayName = isGroupWin
-                        ? (groupForWin?.name || '未知群組')
-                        : (w.lottery_members?.name || '未知');
-                    const groupName = isGroupWin ? '群組中獎' : (allGroups.find(g => g.id === w.lottery_members?.group_id)?.name || '');
+                    const displayName = w.lottery_members?.name || '未知';
+                    const groupName = allGroups.find(g => g.id === w.lottery_members?.group_id)?.name || '';
                     const noteText = w.note || '';
                     const drawnAt = w.drawn_at ? new Date(w.drawn_at).toLocaleString('zh-TW') : '';
                     html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
                         <td class="text-gold-400/60 py-2 px-4">${i + 1}</td>
-                        <td class="text-gold-200 font-bold py-2 px-4">${isGroupWin ? '👥 ' : ''}${displayName}</td>
+                        <td class="text-gold-200 font-bold py-2 px-4">${displayName}</td>
                         <td class="text-gold-400/60 py-2 px-4">${groupName}</td>
                         <td class="text-gold-400/60 py-2 px-4 text-xs">${noteText ? '📝 ' + noteText : '-'}</td>
                         <td class="text-gold-400/60 py-2 px-4 text-xs">${drawnAt}</td>
