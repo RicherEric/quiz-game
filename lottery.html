@@ -1205,7 +1205,7 @@
             container.innerHTML = html;
         }
 
-        // ===== Individual Winner Stats (individual draws only) =====
+        // ===== Individual Winner Stats (individual draws only - group statistics) =====
         function renderIndividualStats() {
             const container = document.getElementById('lottery-individual-stats-container');
 
@@ -1217,59 +1217,109 @@
                 return;
             }
 
-            // Group winners by prize (sorted by sort_order)
-            const byPrize = {};
+            const totalIndividualWins = individualWinners.length;
+
+            // Count wins per group
+            const groupWinMap = {};
+            const groupPrizeMap = {};
+            allGroups.forEach(g => { groupWinMap[g.id] = 0; groupPrizeMap[g.id] = {}; });
+
             individualWinners.forEach(w => {
-                const prizeId = w.prize_id;
-                const prizeName = w.lottery_prizes?.name || '未知獎項';
-                const sortOrder = w.lottery_prizes?.sort_order ?? 999;
-                const key = sortOrder + '_' + prizeId;
-                if (!byPrize[key]) byPrize[key] = { name: prizeName, winners: [] };
-                byPrize[key].winners.push(w);
+                const gId = w.lottery_members?.group_id;
+                if (gId != null) {
+                    groupWinMap[gId] = (groupWinMap[gId] || 0) + 1;
+                    const pName = w.lottery_prizes?.name || '未知';
+                    groupPrizeMap[gId] = groupPrizeMap[gId] || {};
+                    groupPrizeMap[gId][pName] = (groupPrizeMap[gId][pName] || 0) + 1;
+                }
             });
 
-            const sortedKeys = Object.keys(byPrize).sort();
-            let html = `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 mb-2">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-xl font-bold text-gold-200">個人中獎統計</h3>
-                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${individualWinners.length}</span> 人中獎</div>
+            const groupStats = allGroups.map(g => {
+                const memberCount = allMembers.filter(m => m.group_id === g.id).length;
+                const winCount = groupWinMap[g.id] || 0;
+                return { ...g, memberCount, winCount, prizes: groupPrizeMap[g.id] || {} };
+            });
+            const maxWinCount = Math.max(...groupStats.map(g => g.winCount), 1);
+
+            let html = '';
+
+            // Summary card
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold text-gold-200">個人中獎總覽</h3>
+                    <div class="text-gold-400/60 text-sm">共 <span class="text-gold-300 font-bold text-lg">${totalIndividualWins}</span> 人中獎</div>
                 </div>
-            </div>`;
-
-            sortedKeys.forEach(key => {
-                const prizeGroup = byPrize[key];
-                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-3">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-lg font-bold text-gold-200">🏆 ${prizeGroup.name}</h3>
-                        <span class="text-gold-400/60 text-sm">${prizeGroup.winners.length} 人</span>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="border-b border-gold-800/50">
-                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">#</th>
-                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">姓名</th>
-                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">群組</th>
-                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">備註</th>
-                                    <th class="text-left text-gold-400/60 font-bold py-2 px-4">抽獎時間</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                prizeGroup.winners.forEach((w, i) => {
-                    const displayName = w.lottery_members?.name || '未知';
-                    const groupName = allGroups.find(g => g.id === w.lottery_members?.group_id)?.name || '';
-                    const noteText = w.note || '';
-                    const drawnAt = w.drawn_at ? new Date(w.drawn_at).toLocaleString('zh-TW') : '';
-                    html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
-                        <td class="text-gold-400/60 py-2 px-4">${i + 1}</td>
-                        <td class="text-gold-200 font-bold py-2 px-4">${displayName}</td>
-                        <td class="text-gold-400/60 py-2 px-4">${groupName}</td>
-                        <td class="text-gold-400/60 py-2 px-4 text-xs">${noteText ? '📝 ' + noteText : '-'}</td>
-                        <td class="text-gold-400/60 py-2 px-4 text-xs">${drawnAt}</td>
-                    </tr>`;
-                });
-                html += '</tbody></table></div></div>';
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">`;
+            groupStats.forEach(g => {
+                const pct = totalIndividualWins > 0 ? (g.winCount / totalIndividualWins * 100).toFixed(1) : '0.0';
+                html += `<div class="bg-midnight-800/50 border border-gold-800/30 rounded-xl p-4 text-center">
+                    <p class="text-gold-400/60 text-sm mb-1">${g.name}</p>
+                    <p class="text-3xl font-black text-gold-200">${g.winCount}</p>
+                    <p class="text-gold-400/50 text-xs mt-1">${pct}%</p>
+                </div>`;
             });
+            html += '</div></div>';
+
+            // Bar chart
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">各群組個人中獎人數比較</h3>
+                <div class="space-y-3">`;
+            groupStats.forEach(g => {
+                const barWidth = maxWinCount > 0 ? (g.winCount / maxWinCount * 100) : 0;
+                const pct = totalIndividualWins > 0 ? (g.winCount / totalIndividualWins * 100).toFixed(1) : '0.0';
+                html += `<div class="space-y-1">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gold-200 font-bold">${g.name}</span>
+                        <span class="text-gold-400/60">${g.winCount} 人中獎（${pct}%）</span>
+                    </div>
+                    <div class="w-full bg-midnight-800/80 rounded-full h-6 overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-sky-500 to-sky-700 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+                            style="width: ${Math.max(barWidth, 2)}%">
+                            ${g.winCount > 0 ? `<span class="text-midnight-950 text-xs font-bold">${g.winCount}</span>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            });
+            html += '</div></div>';
+
+            // Detailed table
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">詳細資料</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gold-800/50">
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">群組名稱</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">群組人數</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎人數</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎佔比</th>
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4">中獎率</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">獎項分布</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+            groupStats.forEach(g => {
+                const pct = totalIndividualWins > 0 ? (g.winCount / totalIndividualWins * 100).toFixed(1) : '0.0';
+                const winRate = g.memberCount > 0 ? (g.winCount / g.memberCount * 100).toFixed(1) : '0.0';
+                const prizeList = Object.entries(g.prizes).map(([p, c]) => `${p}×${c}`).join('、') || '-';
+                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                    <td class="text-gold-200 font-bold py-3 px-4">${g.name}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${g.memberCount}</td>
+                    <td class="text-center text-gold-300 font-bold py-3 px-4">${g.winCount}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${pct}%</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${winRate}%</td>
+                    <td class="text-gold-400/60 py-3 px-4 text-xs">${prizeList}</td>
+                </tr>`;
+            });
+            html += `<tr class="border-t-2 border-gold-700/50 font-bold">
+                    <td class="text-gold-200 py-3 px-4">合計</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${allMembers.length}</td>
+                    <td class="text-center text-gold-300 py-3 px-4">${totalIndividualWins}</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">100%</td>
+                    <td class="text-center text-gold-400/60 py-3 px-4">${allMembers.length > 0 ? (totalIndividualWins / allMembers.length * 100).toFixed(1) : '0.0'}%</td>
+                    <td class="text-gold-400/60 py-3 px-4">-</td>
+                </tr>`;
+            html += '</tbody></table></div></div>';
 
             container.innerHTML = html;
         }
