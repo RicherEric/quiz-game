@@ -366,10 +366,13 @@
         }
 
         function updateEligibleCount() {
-            const eligible = drawMode === 'member' ? getEligibleMembers() : getEligibleGroups();
-            document.getElementById('eligible-count').textContent = eligible.length;
             const prizeId = parseInt(document.getElementById('prize-selector').value);
             const prize = allPrizes.find(p => p.id === prizeId);
+            // If the selected prize already has winners, they should be eligible for re-draw
+            const hasExistingWinners = prize && allWinners.some(w => w.prize_id === prizeId);
+            const redrawId = hasExistingWinners ? prizeId : null;
+            const eligible = drawMode === 'member' ? getEligibleMembers(redrawId) : getEligibleGroups(redrawId);
+            document.getElementById('eligible-count').textContent = eligible.length;
             const btn = document.getElementById('btn-draw');
             btn.disabled = !prize || eligible.length === 0 || isDrawing;
         }
@@ -635,7 +638,9 @@
                 if (!confirm('此獎項已有中獎紀錄，確定要重新抽獎嗎？\n這將會覆蓋現有的中獎紀錄。')) return;
             }
 
-            const eligible = drawMode === 'member' ? getEligibleMembers() : getEligibleGroups();
+            // When re-drawing the same prize, same-prize winners should be eligible
+            const redrawId = existingWinners.length > 0 ? prizeId : null;
+            const eligible = drawMode === 'member' ? getEligibleMembers(redrawId) : getEligibleGroups(redrawId);
             const emptyMsg = drawMode === 'member' ? '沒有合格的成員可以抽獎' : '沒有合格的群組可以抽獎';
             if (eligible.length === 0) return alert(emptyMsg);
 
