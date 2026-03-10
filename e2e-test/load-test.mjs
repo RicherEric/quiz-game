@@ -136,15 +136,13 @@ const admin = newClient();
 
 async function adminLogin() {
   const t0 = Date.now();
-  const { data, error } = await admin
-    .from('users')
-    .select('id')
-    .eq('username', ADMIN_USERNAME)
-    .eq('password', ADMIN_PASSWORD)
-    .maybeSingle();
-  trackDbOp('admin-login', 'users', Date.now() - t0, !error && !!data);
+  const { data, error } = await admin.rpc('admin_login', {
+    p_username: ADMIN_USERNAME,
+    p_password: ADMIN_PASSWORD,
+  });
+  trackDbOp('admin-login', 'users', Date.now() - t0, !error && data?.success);
 
-  if (error || !data) {
+  if (error || !data?.success) {
     throw new Error(`Admin login failed: ${error?.message || 'invalid credentials'}`);
   }
   console.log('  Admin logged in successfully.');
@@ -169,6 +167,15 @@ async function cleanTestData() {
   trackDbOp('clean-players', 'players', Date.now() - t0, !e2);
   if (e2) recordError('clean-players', e2);
 
+  // Delete verified_players created by anonymous test sessions
+  t0 = Date.now();
+  const { error: e4 } = await admin
+    .from('verified_players')
+    .delete()
+    .neq('user_id', '00000000-0000-0000-0000-000000000000');
+  trackDbOp('clean-verified-players', 'verified_players', Date.now() - t0, !e4);
+  if (e4) recordError('clean-verified-players', e4);
+
   // Reset game status
   t0 = Date.now();
   const { error: e3 } = await admin
@@ -181,11 +188,24 @@ async function cleanTestData() {
   console.log('  Old test data cleaned.');
 }
 
+async function fetchQrToken() {
+  const t0 = Date.now();
+  const { data, error } = await admin
+    .from('qr_tokens')
+    .select('token')
+    .limit(1)
+    .single();
+  trackDbOp('fetch-qr-token', 'qr_tokens', Date.now() - t0, !error && !!data);
+  if (error || !data) throw new Error(`Failed to fetch QR token: ${error?.message || 'no token found'}`);
+  return data.token;
+}
+
 async function fetchQuestions() {
   const t0 = Date.now();
   const { data, error } = await admin
     .from('questions')
     .select('*')
+    .order('sort_order', { ascending: true })
     .order('id', { ascending: true });
   trackDbOp('fetch-questions', 'questions', Date.now() - t0, !error && !!data);
   if (error) throw new Error(`Failed to fetch questions: ${error.message}`);
@@ -222,17 +242,11 @@ async function adminScoreQuestion(questionId, correctAnswer, points) {
   for (const r of responses || []) {
     const isCorrect = r.choice === correctAnswer && r.choice !== 0;
 
-    const t1 = Date.now();
-    const { error: ue } = await admin
-      .from('responses')
-      .update({ is_correct: isCorrect })
-      .eq('id', r.id);
-    trackDbOp('score-update-response', 'responses', Date.now() - t1, !ue);
-    if (ue) recordError(`update-response(${r.id})`, ue);
-
+    // 答對的加分（依答題速度加成）
+    let earnedScore = 0;
     if (isCorrect) {
       const remainingMs = Math.max(0, COUNTDOWN_MS - (r.response_time_ms || COUNTDOWN_MS));
-      const score = Math.round(points * (1 + (remainingMs / COUNTDOWN_MS) * 0.75));
+      earnedScore = Math.round(points * (1 + (remainingMs / COUNTDOWN_MS) * 0.75));
 
       const t2 = Date.now();
       const { data: player } = await admin
@@ -246,12 +260,21 @@ async function adminScoreQuestion(questionId, correctAnswer, points) {
         const t3 = Date.now();
         const { error: se } = await admin
           .from('players')
-          .update({ score: player.score + score })
+          .update({ score: player.score + earnedScore })
           .eq('name', r.player_name);
         trackDbOp('score-update-player', 'players', Date.now() - t3, !se);
         if (se) recordError(`update-player-score(${r.player_name})`, se);
       }
     }
+
+    // 更新 response 的 is_correct 與 scored_points
+    const t1 = Date.now();
+    const { error: ue } = await admin
+      .from('responses')
+      .update({ is_correct: isCorrect, scored_points: earnedScore })
+      .eq('id', r.id);
+    trackDbOp('score-update-response', 'responses', Date.now() - t1, !ue);
+    if (ue) recordError(`update-response(${r.id})`, ue);
   }
 }
 
@@ -261,7 +284,7 @@ async function adminScoreQuestion(questionId, correctAnswer, points) {
  * Creates a single simulated player.
  * Returns an object with methods to act on behalf of the player.
  */
-function createPlayer(index) {
+function createPlayer(index, qrToken) {
   const name = `test_user_${padNum(index)}`;
   const client = newClient();
   let currentState = null;
@@ -273,11 +296,24 @@ function createPlayer(index) {
   return {
     name,
 
-    /** Register player in the database. */
+    /** Register player in the database via QR token RPC. */
     async join() {
       await randomSleep(0, 2000);
+
+      // Anonymous sign-in (same as actual index.html)
+      const { error: authError } = await client.auth.signInAnonymously();
+      if (authError) {
+        stats.playersFailed++;
+        stats.playerLogs[name].joinSuccess = false;
+        recordError(`player-auth(${name})`, authError);
+        return false;
+      }
+
       const t0 = Date.now();
-      const { error } = await client.from('players').insert({ name });
+      const { data, error } = await client.rpc('join_via_qr', {
+        qr_token: qrToken,
+        player_name: name,
+      });
       const joinTime = Date.now() - t0;
 
       stats.playerLogs[name].joinTimeMs = joinTime;
@@ -333,12 +369,11 @@ function createPlayer(index) {
       const responseTimeMs = thinkTime + randomInt(200, 800);
 
       const t0 = Date.now();
-      const { error } = await client.from('responses').insert({
-        player_name: name,
-        question_id: questionId,
-        choice,
-        is_correct: null,
-        response_time_ms: responseTimeMs,
+      const { error } = await client.rpc('submit_response', {
+        p_player_name: name,
+        p_question_id: questionId,
+        p_choice: choice,
+        p_response_time_ms: responseTimeMs,
       });
       const apiTime = Date.now() - t0;
 
@@ -889,11 +924,13 @@ async function main() {
   await adminLogin();
   await cleanTestData();
   const questions = await fetchQuestions();
-  console.log(`  Found ${questions.length} questions.\n`);
+  console.log(`  Found ${questions.length} questions.`);
+  const qrToken = await fetchQrToken();
+  console.log(`  QR token loaded.\n`);
 
   // ── Phase 1: Players join ──────────────────────────────────────────────────
   console.log(`[Phase 1] ${NUM_PLAYERS} players joining...`);
-  const players = Array.from({ length: NUM_PLAYERS }, (_, i) => createPlayer(i + 1));
+  const players = Array.from({ length: NUM_PLAYERS }, (_, i) => createPlayer(i + 1, qrToken));
 
   const joinResults = await Promise.all(players.map((p) => p.join()));
   const activePlayers = players.filter((_, i) => joinResults[i]);

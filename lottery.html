@@ -95,7 +95,17 @@
 
             <!-- Prize selector -->
             <div class="space-y-2">
-                <label class="text-gold-300 font-bold text-sm">選擇獎項</label>
+                <div class="flex items-center justify-between">
+                    <label class="text-gold-300 font-bold text-sm">選擇獎項</label>
+                    <div class="flex items-center space-x-1">
+                        <button onclick="openLotteryPrizeModal()" title="新增獎項"
+                            class="w-7 h-7 flex items-center justify-center text-gold-400 hover:text-gold-200 bg-midnight-800 hover:bg-midnight-700 rounded-lg border border-gold-700/40 transition text-sm font-bold">＋</button>
+                        <button id="btn-edit-prize" onclick="editCurrentPrize()" title="編輯獎項"
+                            class="hidden w-7 h-7 flex items-center justify-center text-gold-400 hover:text-gold-200 bg-midnight-800 hover:bg-midnight-700 rounded-lg border border-gold-700/40 transition text-xs">✏️</button>
+                        <button id="btn-delete-prize" onclick="deleteCurrentPrize()" title="刪除獎項"
+                            class="hidden w-7 h-7 flex items-center justify-center text-red-400 hover:text-red-200 bg-midnight-800 hover:bg-midnight-700 rounded-lg border border-red-700/40 transition text-xs">🗑️</button>
+                    </div>
+                </div>
                 <select id="prize-selector"
                     class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold text-lg border border-gold-700/50 cursor-pointer">
                     <option value="">載入中...</option>
@@ -221,6 +231,31 @@
         </div>
     </div>
 
+    <!-- Lottery Prize Modal -->
+    <div id="lottery-prize-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+        onclick="if(event.target===this)closeLotteryPrizeModal()">
+        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-md">
+            <h2 id="lottery-prize-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增獎項</h2>
+            <input type="hidden" id="lottery-prize-edit-id">
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">獎項名稱</label>
+                <input id="lottery-prize-name" type="text" placeholder="例如：頭獎、二獎"
+                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">中獎人數</label>
+                <input id="lottery-prize-wc-input" type="number" min="1" value="1"
+                    class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="saveLotteryPrize()"
+                    class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-3 rounded-xl font-bold text-lg transition">儲存</button>
+                <button onclick="closeLotteryPrizeModal()"
+                    class="px-6 py-3 bg-midnight-800 hover:bg-midnight-950 text-gold-300 font-bold rounded-xl text-lg transition border border-gold-700/50">取消</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
@@ -289,6 +324,7 @@
             const prize = allPrizes.find(p => p.id === prizeId);
             document.getElementById('prize-winner-count').textContent = prize ? prize.winner_count : '-';
             updateEligibleCount();
+            updatePrizeActionButtons();
         }
 
         function setDrawMode(mode) {
@@ -1474,6 +1510,84 @@
                     console.error('Polling sync error:', e);
                 }
             }, 5000);
+        }
+
+        // ===== Prize Management (Frontend) =====
+        function openLotteryPrizeModal(id, name, winnerCount) {
+            document.getElementById('lottery-prize-edit-id').value = id || '';
+            document.getElementById('lottery-prize-name').value = name || '';
+            document.getElementById('lottery-prize-wc-input').value = winnerCount ?? 1;
+            document.getElementById('lottery-prize-modal-title').textContent = id ? '編輯獎項' : '新增獎項';
+            document.getElementById('lottery-prize-modal').classList.remove('hidden');
+        }
+
+        function closeLotteryPrizeModal() {
+            document.getElementById('lottery-prize-modal').classList.add('hidden');
+        }
+
+        async function saveLotteryPrize() {
+            const id = document.getElementById('lottery-prize-edit-id').value;
+            const name = document.getElementById('lottery-prize-name').value.trim();
+            const winner_count = parseInt(document.getElementById('lottery-prize-wc-input').value) || 1;
+            if (!name) return alert('請輸入獎項名稱');
+
+            if (id) {
+                const { error } = await sbClient.from('lottery_prizes').update({ name, winner_count }).eq('id', id);
+                if (error) return alert('更新失敗：' + error.message);
+            } else {
+                const { data: existing } = await sbClient.from('lottery_prizes').select('sort_order').order('sort_order', { ascending: false }).limit(1);
+                const sort_order = (existing && existing.length > 0) ? existing[0].sort_order + 1 : 0;
+                const { error } = await sbClient.from('lottery_prizes').insert({ name, winner_count, sort_order });
+                if (error) return alert('新增失敗：' + error.message);
+            }
+            closeLotteryPrizeModal();
+            await loadPrizes();
+            const oldSelectedId = document.getElementById('prize-selector').value;
+            populatePrizeSelector();
+            const sel = document.getElementById('prize-selector');
+            if (oldSelectedId && allPrizes.find(p => p.id === parseInt(oldSelectedId))) {
+                sel.value = oldSelectedId;
+            }
+            sel.dispatchEvent(new Event('change'));
+            broadcastPrizesChanged();
+        }
+
+        function editCurrentPrize() {
+            const prizeId = parseInt(document.getElementById('prize-selector').value);
+            const prize = allPrizes.find(p => p.id === prizeId);
+            if (!prize) return;
+            openLotteryPrizeModal(prize.id, prize.name, prize.winner_count);
+        }
+
+        async function deleteCurrentPrize() {
+            const prizeId = parseInt(document.getElementById('prize-selector').value);
+            const prize = allPrizes.find(p => p.id === prizeId);
+            if (!prize) return;
+            if (!confirm(`確定刪除獎項「${prize.name}」？相關中獎紀錄也會被刪除。`)) return;
+            // Delete related winners first
+            await sbClient.from('lottery_winners').delete().eq('prize_id', prizeId);
+            const { error } = await sbClient.from('lottery_prizes').delete().eq('id', prizeId);
+            if (error) return alert('刪除失敗：' + error.message);
+            await Promise.all([loadPrizes(), loadWinners()]);
+            populatePrizeSelector();
+            renderWinnerHistory();
+            updateEligibleCount();
+            broadcastPrizesChanged();
+        }
+
+        function broadcastPrizesChanged() {
+            try {
+                const ch = sbClient.channel('lottery-broadcast-sync');
+                ch.send({ type: 'broadcast', event: 'winners-changed', payload: {} });
+            } catch (e) { /* ignore */ }
+        }
+
+        // Show/hide edit & delete buttons based on prize selection
+        function updatePrizeActionButtons() {
+            const prizeId = document.getElementById('prize-selector').value;
+            const show = !!prizeId;
+            document.getElementById('btn-edit-prize').classList.toggle('hidden', !show);
+            document.getElementById('btn-delete-prize').classList.toggle('hidden', !show);
         }
 
         // ===== Login Guard =====
