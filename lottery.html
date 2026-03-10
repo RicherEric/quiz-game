@@ -123,6 +123,16 @@
                 </div>
             </div>
 
+            <!-- Group Selector -->
+            <div class="bg-midnight-800/50 p-4 rounded-xl border border-gold-700/30 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-gold-400/60 text-sm font-bold">參與群組</span>
+                    <button id="btn-toggle-all-groups" onclick="toggleAllGroups()"
+                        class="text-xs text-gold-400 hover:text-gold-200 underline transition">取消全選</button>
+                </div>
+                <div id="group-selector-panel" class="grid grid-cols-2 gap-1"></div>
+            </div>
+
             <!-- Draw button -->
             <button id="btn-draw" onclick="startDraw()" disabled
                 class="w-full bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 disabled:opacity-40 disabled:cursor-not-allowed text-midnight-950 px-8 py-5 rounded-2xl font-black text-2xl transition shadow-lg border-2 border-gold-400/50">
@@ -223,6 +233,7 @@
         let isDrawing = false;
         let animationId = null;
         let drawMode = 'member'; // 'member' | 'group'
+        let selectedGroupIds = new Set();
 
         // ===== Init =====
         async function initLottery() {
@@ -232,6 +243,7 @@
                 loadWinners()
             ]);
             populatePrizeSelector();
+            renderGroupSelector();
             updateEligibleCount();
             renderWinnerHistory();
         }
@@ -291,18 +303,58 @@
             updateEligibleCount();
         }
 
+        function renderGroupSelector() {
+            selectedGroupIds = new Set(allGroups.map(g => g.id));
+            const panel = document.getElementById('group-selector-panel');
+            panel.innerHTML = allGroups.map(g => {
+                const count = allMembers.filter(m => m.group_id === g.id).length;
+                return `<label class="flex items-center space-x-1.5 cursor-pointer py-0.5">
+                    <input type="checkbox" class="w-4 h-4 accent-gold-500 group-cb" data-gid="${g.id}" checked>
+                    <span class="text-gold-200 text-xs truncate">${g.name} (${count})</span>
+                </label>`;
+            }).join('');
+            panel.querySelectorAll('.group-cb').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const gid = parseInt(cb.dataset.gid);
+                    if (cb.checked) selectedGroupIds.add(gid); else selectedGroupIds.delete(gid);
+                    updateToggleAllBtn();
+                    updateEligibleCount();
+                });
+            });
+            updateToggleAllBtn();
+        }
+
+        function toggleAllGroups() {
+            const allSelected = selectedGroupIds.size === allGroups.length;
+            const panel = document.getElementById('group-selector-panel');
+            panel.querySelectorAll('.group-cb').forEach(cb => {
+                cb.checked = !allSelected;
+                const gid = parseInt(cb.dataset.gid);
+                if (!allSelected) selectedGroupIds.add(gid); else selectedGroupIds.delete(gid);
+            });
+            updateToggleAllBtn();
+            updateEligibleCount();
+        }
+
+        function updateToggleAllBtn() {
+            const btn = document.getElementById('btn-toggle-all-groups');
+            btn.textContent = selectedGroupIds.size === allGroups.length ? '取消全選' : '全選';
+        }
+
         function getEligibleMembers() {
             const allowRepeat = document.getElementById('allow-repeat').checked;
-            if (allowRepeat) return [...allMembers];
+            let pool = allMembers.filter(m => selectedGroupIds.has(m.group_id));
+            if (allowRepeat) return pool;
             const wonMemberIds = new Set(allWinners.map(w => w.member_id));
-            return allMembers.filter(m => !wonMemberIds.has(m.id));
+            return pool.filter(m => !wonMemberIds.has(m.id));
         }
 
         function getEligibleGroups() {
             const allowRepeat = document.getElementById('allow-repeat').checked;
-            if (allowRepeat) return [...allGroups];
+            let pool = allGroups.filter(g => selectedGroupIds.has(g.id));
+            if (allowRepeat) return pool;
             const wonGroupIds = new Set(allWinners.filter(w => w.group_id != null).map(w => w.group_id));
-            return allGroups.filter(g => !wonGroupIds.has(g.id));
+            return pool.filter(g => !wonGroupIds.has(g.id));
         }
 
         function updateEligibleCount() {
