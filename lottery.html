@@ -1417,7 +1417,7 @@
                 .channel('lottery-prizes-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_prizes' }, async () => {
                     const oldSelectedId = document.getElementById('prize-selector').value;
-                    await loadPrizes();
+                    await Promise.all([loadPrizes(), loadWinners()]);
                     populatePrizeSelector();
                     // Restore selection if prize still exists
                     const sel = document.getElementById('prize-selector');
@@ -1425,6 +1425,10 @@
                         sel.value = oldSelectedId;
                     }
                     sel.dispatchEvent(new Event('change'));
+                    renderWinnerHistory();
+                    if (currentLotteryTab === 'winner-stats') renderWinnerStats();
+                    if (currentLotteryTab === 'individual-stats') renderIndividualStats();
+                    if (currentLotteryTab === 'group-view') renderGroupView();
                 })
                 .subscribe();
 
