@@ -341,19 +341,27 @@
             btn.textContent = selectedGroupIds.size === allGroups.length ? '取消全選' : '全選';
         }
 
-        function getEligibleMembers() {
+        function getEligibleMembers(redrawPrizeId = null) {
             const allowRepeat = document.getElementById('allow-repeat').checked;
             let pool = allMembers.filter(m => selectedGroupIds.has(m.group_id));
             if (allowRepeat) return pool;
-            const wonMemberIds = new Set(allWinners.map(w => w.member_id));
+            // When redrawing a specific prize, only exclude winners from OTHER prizes
+            const winnersToExclude = redrawPrizeId != null
+                ? allWinners.filter(w => w.prize_id !== redrawPrizeId)
+                : allWinners;
+            const wonMemberIds = new Set(winnersToExclude.map(w => w.member_id));
             return pool.filter(m => !wonMemberIds.has(m.id));
         }
 
-        function getEligibleGroups() {
+        function getEligibleGroups(redrawPrizeId = null) {
             const allowRepeat = document.getElementById('allow-repeat').checked;
             let pool = allGroups.filter(g => selectedGroupIds.has(g.id));
             if (allowRepeat) return pool;
-            const wonGroupIds = new Set(allWinners.filter(w => w.group_id != null).map(w => w.group_id));
+            // When redrawing a specific prize, only exclude winners from OTHER prizes
+            const winnersToExclude = redrawPrizeId != null
+                ? allWinners.filter(w => w.prize_id !== redrawPrizeId)
+                : allWinners;
+            const wonGroupIds = new Set(winnersToExclude.filter(w => w.group_id != null).map(w => w.group_id));
             return pool.filter(g => !wonGroupIds.has(g.id));
         }
 
@@ -818,8 +826,8 @@
             if (isDrawing) return;
             if (!confirm(`確定要為此獎項重抽 ${count} 人嗎？`)) return;
 
-            // Get eligible items (exclude current winners)
-            const eligible = drawMode === 'member' ? getEligibleMembers() : getEligibleGroups();
+            // Get eligible items (exclude winners from OTHER prizes, allow same-prize winners back into pool)
+            const eligible = drawMode === 'member' ? getEligibleMembers(prizeId) : getEligibleGroups(prizeId);
             const itemLabel = drawMode === 'member' ? '人' : '組';
             if (eligible.length === 0) return alert(`沒有合格的${drawMode === 'member' ? '成員' : '群組'}可以抽獎`);
             if (eligible.length < count) {

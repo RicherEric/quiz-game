@@ -1926,11 +1926,12 @@
         async function redrawWinners(prizeId, count) {
             if (!confirm(`確定要為此獎項重抽 ${count} 人嗎？`)) return;
 
-            // Get current winners to exclude
-            const { data: currentWinners } = await sbClient.from('lottery_winners').select('member_id');
-            const wonMemberIds = new Set((currentWinners || []).map(w => w.member_id));
+            // Get current winners to exclude (only from OTHER prizes, allow same-prize winners back into pool)
+            const { data: currentWinners } = await sbClient.from('lottery_winners').select('member_id, group_id, prize_id');
+            const otherPrizeWinners = (currentWinners || []).filter(w => w.prize_id !== prizeId);
+            const wonMemberIds = new Set(otherPrizeWinners.map(w => w.member_id).filter(id => id != null));
 
-            // Get eligible members (exclude all current winners)
+            // Get eligible members (exclude winners from other prizes only)
             const eligible = adminAllMembers.filter(m => !wonMemberIds.has(m.id));
             if (eligible.length === 0) return alert('沒有合格的成員可以抽獎');
             if (eligible.length < count) {
