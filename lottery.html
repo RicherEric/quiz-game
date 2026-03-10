@@ -628,6 +628,8 @@
         // ===== Draw Flow =====
         async function startDraw() {
             if (isDrawing) return;
+            // 不管當前在哪個頁籤，都先切回摸彩抽獎頁面
+            switchLotteryTab('draw');
             const prizeId = parseInt(document.getElementById('prize-selector').value);
             const prize = allPrizes.find(p => p.id === prizeId);
             if (!prize) return alert('請選擇獎項');
