@@ -44,6 +44,14 @@
         .countdown-ring circle {
             transition: stroke-dashoffset 0.1s linear;
         }
+
+        @keyframes slide-up {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .animate-slide-up {
+            animation: slide-up 0.3s ease-out;
+        }
     </style>
 </head>
 
@@ -172,6 +180,26 @@
             </div>
             <p class="text-xl text-gold-200/60">感謝您的參與！</p>
         </div>
+
+        <!-- 中獎紀錄 Modal -->
+        <div id="winners-modal" class="hidden fixed inset-0 z-50 flex items-end justify-center">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeWinnersModal()"></div>
+            <div class="relative w-full max-w-3xl bg-midnight-900 border-t-2 border-gold-600/50 rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col animate-slide-up">
+                <div class="flex items-center justify-between px-6 py-4 border-b border-gold-700/30">
+                    <h2 class="text-2xl font-bold text-gold-100">🏆 中獎紀錄</h2>
+                    <button onclick="closeWinnersModal()" class="text-gold-400 hover:text-gold-200 text-2xl font-bold px-2">✕</button>
+                </div>
+                <div id="winners-modal-content" class="overflow-y-auto p-6 space-y-4">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 中獎紀錄浮動按鈕 -->
+        <button id="winners-fab" class="hidden fixed bottom-6 right-6 z-40 bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 font-black text-lg px-5 py-3 rounded-2xl shadow-[0_0_20px_rgba(251,191,36,0.4)] hover:shadow-[0_0_30px_rgba(251,191,36,0.6)] transition-all active:scale-95"
+            onclick="openWinnersModal()">
+            🏆 中獎紀錄
+        </button>
     </div>
 
     <script>
@@ -336,6 +364,7 @@
             if (status.state === 'waiting') {
                 hideAllUI();
                 document.getElementById('waiting-ui').classList.remove('hidden');
+                showWinnersFab();
             }
             else if (status.state === 'playing') {
                 // 如果已經在答這一題，不要重複刷新
@@ -349,6 +378,8 @@
                     startTime = Date.now();
 
                     hideAllUI();
+                    hideWinnersFab();
+                    closeWinnersModal();
                     document.getElementById('game-ui').classList.remove('hidden');
                     resetUI();
                     refreshUI(q);
@@ -357,6 +388,7 @@
             }
             else if (status.state === 'stopped') {
                 stopCountdown();
+                showWinnersFab();
                 // 停止作答：未答題者自動提交
                 if (!hasAnswered) {
                     processAnswer(currentSelection);
@@ -366,6 +398,7 @@
                 stopCountdown();
                 hideAllUI();
                 document.getElementById('scoring-ui').classList.remove('hidden');
+                showWinnersFab();
                 // 取得本題積分與累計積分
                 const { data: myResponse } = await sbClient.from('responses').select('scored_points').eq('player_name', myName).eq('question_id', status.current_q_id).single();
                 const questionScore = myResponse ? myResponse.scored_points : 0;
@@ -378,6 +411,7 @@
             else if (status.state === 'ended') {
                 hideAllUI();
                 document.getElementById('end-ui').classList.remove('hidden');
+                showWinnersFab();
 
                 // 取得排行榜並顯示分數與名次
                 const { data: allPlayers } = await sbClient.from('players').select('*').order('score', { ascending: false });
@@ -418,6 +452,8 @@
             else if (status.state === 'dismissed') {
                 // 被踢回首頁：清除狀態，回到輸入暱稱畫面
                 hideAllUI();
+                hideWinnersFab();
+                closeWinnersModal();
                 if (channel) { sbClient.removeChannel(channel); channel = null; }
                 if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
                 stopCountdown();
@@ -504,6 +540,79 @@
             fb.innerText = msg;
             fb.classList.remove('hidden');
             fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-midnight-900/50 text-gold-200 border-2 border-gold-600 block mt-6";
+        }
+
+        // ===== 中獎紀錄 =====
+        function showWinnersFab() {
+            document.getElementById('winners-fab').classList.remove('hidden');
+        }
+
+        function hideWinnersFab() {
+            document.getElementById('winners-fab').classList.add('hidden');
+        }
+
+        async function openWinnersModal() {
+            document.getElementById('winners-modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+            await fetchFrontendWinners();
+        }
+
+        function closeWinnersModal() {
+            document.getElementById('winners-modal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        async function fetchFrontendWinners() {
+            const container = document.getElementById('winners-modal-content');
+            const [{ data: winners }, { data: groups }] = await Promise.all([
+                sbClient.from('lottery_winners').select('*, lottery_members(name, group_id), lottery_prizes(name, sort_order, winner_count)').order('drawn_at', { ascending: false }),
+                sbClient.from('lottery_groups').select('*').order('id')
+            ]);
+
+            if (!winners || winners.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無中獎紀錄</div>';
+                return;
+            }
+
+            const allGroups = groups || [];
+
+            // Group by prize
+            const byPrize = {};
+            winners.forEach(w => {
+                const prizeId = w.prize_id;
+                const prizeName = w.lottery_prizes?.name || '未知獎項';
+                const sortOrder = w.lottery_prizes?.sort_order ?? 999;
+                const key = String(sortOrder).padStart(5, '0') + '_' + prizeId;
+                if (!byPrize[key]) byPrize[key] = { name: prizeName, winners: [] };
+                byPrize[key].winners.push(w);
+            });
+
+            const sortedKeys = Object.keys(byPrize).sort();
+            let html = '';
+            sortedKeys.forEach(key => {
+                const prizeGroup = byPrize[key];
+                html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-5 space-y-3">
+                    <h3 class="text-xl font-bold text-gold-200">🎁 ${prizeGroup.name}</h3>
+                    <div class="space-y-2">`;
+
+                prizeGroup.winners.forEach(w => {
+                    const isGroupWin = w.group_id != null && w.member_id == null;
+                    const groupForWin = isGroupWin ? allGroups.find(g => g.id === w.group_id) : null;
+                    const displayName = isGroupWin
+                        ? (groupForWin?.name || '未知群組')
+                        : (w.lottery_members?.name || '未知');
+                    const groupObj = isGroupWin ? null : allGroups.find(g => g.id === w.lottery_members?.group_id);
+                    const groupName = isGroupWin ? '群組' : (groupObj ? groupObj.name : '');
+
+                    html += `<div class="flex items-center bg-midnight-800/50 border border-gold-800/30 rounded-xl px-4 py-3 space-x-3">
+                        <span class="text-gold-400">🏆</span>
+                        <span class="text-gold-200 font-bold">${displayName}</span>
+                        ${groupName ? `<span class="text-gold-400/50 text-sm">(${groupName})</span>` : ''}
+                    </div>`;
+                });
+                html += '</div></div>';
+            });
+            container.innerHTML = html;
         }
     </script>
 </body>
