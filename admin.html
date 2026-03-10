@@ -374,6 +374,11 @@
                             class="px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 text-white font-bold rounded-xl transition shadow-lg">
                             ⚖ 平均分配機率
                         </button>
+                        <button onclick="document.getElementById('staff-csv-input').click()"
+                            class="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 hover:to-purple-700 text-white font-bold rounded-xl transition shadow-lg">
+                            📤 匯入 Staff CSV
+                        </button>
+                        <input type="file" id="staff-csv-input" accept=".csv" class="hidden" onchange="importStaffCSV(this)">
                         <button onclick="openGroupModal()"
                             class="px-6 py-3 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg">
                             ＋ 新增群組
@@ -1521,6 +1526,68 @@
             const { error } = await sbClient.from('lottery_members').delete().eq('id', id);
             if (error) return alert('刪除失敗：' + error.message);
             fetchLotteryGroups();
+        }
+
+        async function importStaffCSV(input) {
+            const file = input.files[0];
+            if (!file) return;
+            input.value = '';
+
+            const text = await file.text();
+            const lines = text.split(/\r?\n/).filter(l => l.trim());
+            if (lines.length < 2) return alert('CSV 檔案格式錯誤或無資料');
+
+            // 解析標題列，找到 English Name 和 Office 欄位
+            const headers = lines[0].split(',').map(h => h.trim());
+            const nameIdx = headers.indexOf('English Name');
+            const officeIdx = headers.indexOf('Office');
+            if (nameIdx === -1 || officeIdx === -1) return alert('CSV 缺少 "English Name" 或 "Office" 欄位');
+
+            // 按 Office 分組
+            const grouped = {};
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',').map(c => c.trim());
+                const name = cols[nameIdx];
+                const office = cols[officeIdx];
+                if (!name || !office) continue;
+                if (!grouped[office]) grouped[office] = [];
+                grouped[office].push(name);
+            }
+
+            const offices = Object.keys(grouped);
+            if (offices.length === 0) return alert('未找到有效資料');
+
+            if (!confirm(`將匯入 ${offices.length} 個群組（${offices.join('、')}），共 ${Object.values(grouped).reduce((s, a) => s + a.length, 0)} 人。\n\n⚠️ 這會先清空現有的所有群組與成員，確定要繼續嗎？`)) return;
+
+            try {
+                // 清空現有資料
+                await sbClient.from('lottery_members').delete().neq('id', 0);
+                await sbClient.from('lottery_groups').delete().neq('id', 0);
+
+                // 建立群組並新增成員
+                const probBase = Math.floor(100 / offices.length);
+                const probRem = 100 % offices.length;
+
+                for (let i = 0; i < offices.length; i++) {
+                    const office = offices[i];
+                    const prob = probBase + (i < probRem ? 1 : 0);
+                    const { data: group, error: gErr } = await sbClient.from('lottery_groups')
+                        .insert({ name: office, probability_pct: prob })
+                        .select('id')
+                        .single();
+                    if (gErr) throw new Error(`建立群組 "${office}" 失敗：${gErr.message}`);
+
+                    const memberRows = grouped[office].map(name => ({ name, group_id: group.id }));
+                    const { error: mErr } = await sbClient.from('lottery_members').insert(memberRows);
+                    if (mErr) throw new Error(`新增 "${office}" 成員失敗：${mErr.message}`);
+                }
+
+                alert(`匯入成功！已建立 ${offices.length} 個群組`);
+                manuallySetGroups.clear();
+                fetchLotteryGroups();
+            } catch (e) {
+                alert('匯入失敗：' + e.message);
+            }
         }
 
         // ===== 獎項管理 =====
