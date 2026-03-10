@@ -1323,6 +1323,47 @@
                 </tr>`;
             html += '</tbody></table></div></div>';
 
+            // Individual records list (逐條中獎記錄)
+            html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 p-6 space-y-4">
+                <h3 class="text-xl font-bold text-gold-200">逐條中獎記錄</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gold-800/50">
+                                <th class="text-center text-gold-400/60 font-bold py-3 px-4 w-12">#</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">中獎者</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">群組</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">獎項</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">備註</th>
+                                <th class="text-left text-gold-400/60 font-bold py-3 px-4">中獎時間</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+            // Sort by prize sort_order, then by drawn_at
+            const sortedIndividualWinners = [...individualWinners].sort((a, b) => {
+                const orderA = a.lottery_prizes?.sort_order ?? 999;
+                const orderB = b.lottery_prizes?.sort_order ?? 999;
+                if (orderA !== orderB) return orderA - orderB;
+                return new Date(a.drawn_at || 0) - new Date(b.drawn_at || 0);
+            });
+            sortedIndividualWinners.forEach((w, idx) => {
+                const memberName = w.lottery_members?.name || '未知';
+                const groupObj = allGroups.find(g => g.id === w.lottery_members?.group_id);
+                const groupName = groupObj ? groupObj.name : '-';
+                const prizeName = w.lottery_prizes?.name || '未知獎項';
+                const noteText = w.note ? '📝 ' + w.note : '-';
+                const drawnAt = w.drawn_at ? new Date(w.drawn_at).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+                html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
+                    <td class="text-center text-gold-400/50 py-2 px-4">${idx + 1}</td>
+                    <td class="text-gold-200 font-bold py-2 px-4">${memberName}</td>
+                    <td class="text-gold-400/60 py-2 px-4">${groupName}</td>
+                    <td class="text-gold-300 py-2 px-4 font-bold">${prizeName}</td>
+                    <td class="text-gold-400/60 py-2 px-4 text-xs">${noteText}</td>
+                    <td class="text-gold-400/60 py-2 px-4 text-xs">${drawnAt}</td>
+                </tr>`;
+            });
+            html += '</tbody></table></div></div>';
+
             container.innerHTML = html;
         }
 
