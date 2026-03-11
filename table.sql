@@ -226,6 +226,18 @@ CREATE POLICY "Allow public delete question-media" ON storage.objects
 ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS answer_image_url text;
 ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS answer_video_url text;
 
+-- 多媒體陣列欄位（支援多張圖片/多個影片）
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS image_urls jsonb DEFAULT '[]';
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS video_urls jsonb DEFAULT '[]';
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS answer_image_urls jsonb DEFAULT '[]';
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS answer_video_urls jsonb DEFAULT '[]';
+
+-- 遷移舊資料到新欄位
+UPDATE public.questions SET image_urls = jsonb_build_array(image_url) WHERE image_url IS NOT NULL AND image_url != '' AND (image_urls = '[]'::jsonb);
+UPDATE public.questions SET video_urls = jsonb_build_array(video_url) WHERE video_url IS NOT NULL AND video_url != '' AND (video_urls = '[]'::jsonb);
+UPDATE public.questions SET answer_image_urls = jsonb_build_array(answer_image_url) WHERE answer_image_url IS NOT NULL AND answer_image_url != '' AND (answer_image_urls = '[]'::jsonb);
+UPDATE public.questions SET answer_video_urls = jsonb_build_array(answer_video_url) WHERE answer_video_url IS NOT NULL AND answer_video_url != '' AND (answer_video_urls = '[]'::jsonb);
+
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
 VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')

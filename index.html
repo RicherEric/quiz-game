@@ -101,13 +101,10 @@
                 class="h-28 mx-auto drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
             <p class="text-3xl text-gold-200 font-bold">本題結算完成</p>
 
-            <!-- 答案媒體 -->
+            <!-- 答案媒體（多媒體） -->
             <div id="scoring-media" class="hidden space-y-3">
-                <img id="scoring-image" class="hidden max-h-48 mx-auto rounded-2xl border border-gold-700/30 shadow-lg" alt="">
-                <div id="scoring-youtube" class="hidden aspect-video w-full max-w-lg mx-auto rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg">
-                    <iframe id="scoring-youtube-frame" class="w-full h-full" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-                </div>
-                <video id="scoring-video" class="hidden max-h-48 mx-auto rounded-2xl border border-gold-700/30 shadow-lg" controls></video>
+                <div id="scoring-images-row" class="flex overflow-x-auto snap-x gap-3 justify-center"></div>
+                <div id="scoring-videos-col" class="space-y-3 flex flex-col items-center"></div>
             </div>
 
             <!-- 本題積分 -->
@@ -153,13 +150,10 @@
                 </div>
                 <h2 id="q-text" class="text-4xl md:text-5xl font-bold leading-tight text-gold-100">載入中...</h2>
 
-                <!-- 題目媒體 -->
+                <!-- 題目媒體（多媒體） -->
                 <div id="q-media" class="hidden mt-4 space-y-3">
-                    <img id="q-media-image" class="hidden max-h-60 mx-auto rounded-2xl border border-gold-700/30 shadow-lg" alt="">
-                    <div id="q-media-youtube" class="hidden aspect-video w-full max-w-lg mx-auto rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg">
-                        <iframe id="q-youtube-frame" class="w-full h-full" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-                    </div>
-                    <video id="q-media-video" class="hidden max-h-60 mx-auto rounded-2xl border border-gold-700/30 shadow-lg" controls></video>
+                    <div id="q-images-row" class="flex overflow-x-auto snap-x gap-3 justify-center"></div>
+                    <div id="q-videos-col" class="space-y-3 flex flex-col items-center"></div>
                 </div>
             </div>
 
@@ -418,31 +412,46 @@
                 document.getElementById('scoring-ui').classList.remove('hidden');
                 showWinnersFab();
 
-                // 顯示答案媒體
+                // 顯示答案媒體（多媒體）
                 const scoringMedia = document.getElementById('scoring-media');
-                const scoringImage = document.getElementById('scoring-image');
-                const scoringVideo = document.getElementById('scoring-video');
-                const scoringYoutube = document.getElementById('scoring-youtube');
-                const scoringYtFrame = document.getElementById('scoring-youtube-frame');
-                scoringImage.classList.add('hidden'); scoringImage.src = '';
-                scoringVideo.classList.add('hidden'); scoringVideo.src = '';
-                scoringYoutube.classList.add('hidden'); scoringYtFrame.src = '';
+                const sImagesRow = document.getElementById('scoring-images-row');
+                const sVideosCol = document.getElementById('scoring-videos-col');
+                sImagesRow.innerHTML = ''; sVideosCol.innerHTML = '';
                 let hasAnswerMedia = false;
-                if (currentQ && currentQ.answer_image_url) {
-                    scoringImage.src = currentQ.answer_image_url;
-                    scoringImage.classList.remove('hidden');
-                    hasAnswerMedia = true;
-                }
-                if (currentQ && currentQ.answer_video_url) {
-                    const ytId = extractYouTubeId(currentQ.answer_video_url);
-                    if (ytId) {
-                        scoringYtFrame.src = `https://www.youtube.com/embed/${ytId}`;
-                        scoringYoutube.classList.remove('hidden');
-                    } else {
-                        scoringVideo.src = currentQ.answer_video_url;
-                        scoringVideo.classList.remove('hidden');
+                if (currentQ) {
+                    const ansImgUrls = (currentQ.answer_image_urls && currentQ.answer_image_urls.length) ? currentQ.answer_image_urls : (currentQ.answer_image_url ? [currentQ.answer_image_url] : []);
+                    const ansVidUrls = (currentQ.answer_video_urls && currentQ.answer_video_urls.length) ? currentQ.answer_video_urls : (currentQ.answer_video_url ? [currentQ.answer_video_url] : []);
+                    if (ansImgUrls.length) {
+                        ansImgUrls.forEach(url => {
+                            const img = document.createElement('img');
+                            img.src = url;
+                            img.className = 'snap-center max-h-48 rounded-2xl border border-gold-700/30 shadow-lg';
+                            if (ansImgUrls.length === 1) img.className += ' mx-auto';
+                            sImagesRow.appendChild(img);
+                        });
+                        hasAnswerMedia = true;
                     }
-                    hasAnswerMedia = true;
+                    if (ansVidUrls.length) {
+                        ansVidUrls.forEach(url => {
+                            const ytId = extractYouTubeId(url);
+                            if (ytId) {
+                                const div = document.createElement('div');
+                                div.className = 'aspect-video w-full max-w-lg rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg';
+                                const iframe = document.createElement('iframe');
+                                iframe.src = `https://www.youtube.com/embed/${ytId}`;
+                                iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
+                                iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
+                                div.appendChild(iframe);
+                                sVideosCol.appendChild(div);
+                            } else {
+                                const vid = document.createElement('video');
+                                vid.src = url; vid.controls = true;
+                                vid.className = 'max-h-48 rounded-2xl border border-gold-700/30 shadow-lg w-full max-w-lg';
+                                sVideosCol.appendChild(vid);
+                            }
+                        });
+                        hasAnswerMedia = true;
+                    }
                 }
                 scoringMedia.classList.toggle('hidden', !hasAnswerMedia);
 
@@ -546,30 +555,43 @@
             document.getElementById('opt3').innerText = q.option_c;
             document.getElementById('opt4').innerText = q.option_d;
 
-            // 顯示媒體（圖片 + 影片）
+            // 顯示媒體（多媒體）
             const mediaContainer = document.getElementById('q-media');
-            const mediaImage = document.getElementById('q-media-image');
-            const mediaVideo = document.getElementById('q-media-video');
-            const mediaYoutube = document.getElementById('q-media-youtube');
-            const ytFrame = document.getElementById('q-youtube-frame');
-            mediaImage.classList.add('hidden'); mediaImage.src = '';
-            mediaVideo.classList.add('hidden'); mediaVideo.src = '';
-            mediaYoutube.classList.add('hidden'); ytFrame.src = '';
+            const imagesRow = document.getElementById('q-images-row');
+            const videosCol = document.getElementById('q-videos-col');
+            imagesRow.innerHTML = ''; videosCol.innerHTML = '';
+            const imgUrls = (q.image_urls && q.image_urls.length) ? q.image_urls : (q.image_url ? [q.image_url] : []);
+            const vidUrls = (q.video_urls && q.video_urls.length) ? q.video_urls : (q.video_url ? [q.video_url] : []);
             let hasMedia = false;
-            if (q.image_url) {
-                mediaImage.src = q.image_url;
-                mediaImage.classList.remove('hidden');
+            if (imgUrls.length) {
+                imgUrls.forEach(url => {
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.className = 'snap-center max-h-60 rounded-2xl border border-gold-700/30 shadow-lg';
+                    if (imgUrls.length === 1) img.className += ' mx-auto';
+                    imagesRow.appendChild(img);
+                });
                 hasMedia = true;
             }
-            if (q.video_url) {
-                const ytId = extractYouTubeId(q.video_url);
-                if (ytId) {
-                    ytFrame.src = `https://www.youtube.com/embed/${ytId}`;
-                    mediaYoutube.classList.remove('hidden');
-                } else {
-                    mediaVideo.src = q.video_url;
-                    mediaVideo.classList.remove('hidden');
-                }
+            if (vidUrls.length) {
+                vidUrls.forEach(url => {
+                    const ytId = extractYouTubeId(url);
+                    if (ytId) {
+                        const div = document.createElement('div');
+                        div.className = 'aspect-video w-full max-w-lg rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg';
+                        const iframe = document.createElement('iframe');
+                        iframe.src = `https://www.youtube.com/embed/${ytId}`;
+                        iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
+                        iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
+                        div.appendChild(iframe);
+                        videosCol.appendChild(div);
+                    } else {
+                        const vid = document.createElement('video');
+                        vid.src = url; vid.controls = true;
+                        vid.className = 'max-h-60 rounded-2xl border border-gold-700/30 shadow-lg w-full max-w-lg';
+                        videosCol.appendChild(vid);
+                    }
+                });
                 hasMedia = true;
             }
             mediaContainer.classList.toggle('hidden', !hasMedia);
