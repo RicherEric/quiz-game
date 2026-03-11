@@ -101,6 +101,15 @@
                 class="h-28 mx-auto drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
             <p class="text-3xl text-gold-200 font-bold">本題結算完成</p>
 
+            <!-- 答案媒體 -->
+            <div id="scoring-media" class="hidden space-y-3">
+                <img id="scoring-image" class="hidden max-h-48 mx-auto rounded-2xl border border-gold-700/30 shadow-lg" alt="">
+                <div id="scoring-youtube" class="hidden aspect-video w-full max-w-lg mx-auto rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg">
+                    <iframe id="scoring-youtube-frame" class="w-full h-full" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                </div>
+                <video id="scoring-video" class="hidden max-h-48 mx-auto rounded-2xl border border-gold-700/30 shadow-lg" controls></video>
+            </div>
+
             <!-- 本題積分 -->
             <div class="bg-midnight-900/50 px-8 py-6 rounded-2xl border border-gold-700/30">
                 <p class="text-lg text-gold-300/70 mb-1">您本題獲得的積分</p>
@@ -143,6 +152,15 @@
                     </div>
                 </div>
                 <h2 id="q-text" class="text-4xl md:text-5xl font-bold leading-tight text-gold-100">載入中...</h2>
+
+                <!-- 題目媒體 -->
+                <div id="q-media" class="hidden mt-4 space-y-3">
+                    <img id="q-media-image" class="hidden max-h-60 mx-auto rounded-2xl border border-gold-700/30 shadow-lg" alt="">
+                    <div id="q-media-youtube" class="hidden aspect-video w-full max-w-lg mx-auto rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg">
+                        <iframe id="q-youtube-frame" class="w-full h-full" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                    </div>
+                    <video id="q-media-video" class="hidden max-h-60 mx-auto rounded-2xl border border-gold-700/30 shadow-lg" controls></video>
+                </div>
             </div>
 
             <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -399,6 +417,35 @@
                 hideAllUI();
                 document.getElementById('scoring-ui').classList.remove('hidden');
                 showWinnersFab();
+
+                // 顯示答案媒體
+                const scoringMedia = document.getElementById('scoring-media');
+                const scoringImage = document.getElementById('scoring-image');
+                const scoringVideo = document.getElementById('scoring-video');
+                const scoringYoutube = document.getElementById('scoring-youtube');
+                const scoringYtFrame = document.getElementById('scoring-youtube-frame');
+                scoringImage.classList.add('hidden'); scoringImage.src = '';
+                scoringVideo.classList.add('hidden'); scoringVideo.src = '';
+                scoringYoutube.classList.add('hidden'); scoringYtFrame.src = '';
+                let hasAnswerMedia = false;
+                if (currentQ && currentQ.answer_image_url) {
+                    scoringImage.src = currentQ.answer_image_url;
+                    scoringImage.classList.remove('hidden');
+                    hasAnswerMedia = true;
+                }
+                if (currentQ && currentQ.answer_video_url) {
+                    const ytId = extractYouTubeId(currentQ.answer_video_url);
+                    if (ytId) {
+                        scoringYtFrame.src = `https://www.youtube.com/embed/${ytId}`;
+                        scoringYoutube.classList.remove('hidden');
+                    } else {
+                        scoringVideo.src = currentQ.answer_video_url;
+                        scoringVideo.classList.remove('hidden');
+                    }
+                    hasAnswerMedia = true;
+                }
+                scoringMedia.classList.toggle('hidden', !hasAnswerMedia);
+
                 // 取得本題積分與累計積分
                 const { data: myResponse } = await sbClient.from('responses').select('scored_points').eq('player_name', myName).eq('question_id', status.current_q_id).single();
                 const questionScore = myResponse ? myResponse.scored_points : 0;
@@ -484,6 +531,12 @@
             circleEl.setAttribute('stroke', '#ffaa1d');
         }
 
+        function extractYouTubeId(url) {
+            if (!url) return null;
+            const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+            return m ? m[1] : null;
+        }
+
         function refreshUI(q) {
             const qNum = questionIdOrder.indexOf(q.id) + 1 || q.id;
             document.getElementById('q-category').innerText = `Question ${qNum}`;
@@ -492,6 +545,34 @@
             document.getElementById('opt2').innerText = q.option_b;
             document.getElementById('opt3').innerText = q.option_c;
             document.getElementById('opt4').innerText = q.option_d;
+
+            // 顯示媒體（圖片 + 影片）
+            const mediaContainer = document.getElementById('q-media');
+            const mediaImage = document.getElementById('q-media-image');
+            const mediaVideo = document.getElementById('q-media-video');
+            const mediaYoutube = document.getElementById('q-media-youtube');
+            const ytFrame = document.getElementById('q-youtube-frame');
+            mediaImage.classList.add('hidden'); mediaImage.src = '';
+            mediaVideo.classList.add('hidden'); mediaVideo.src = '';
+            mediaYoutube.classList.add('hidden'); ytFrame.src = '';
+            let hasMedia = false;
+            if (q.image_url) {
+                mediaImage.src = q.image_url;
+                mediaImage.classList.remove('hidden');
+                hasMedia = true;
+            }
+            if (q.video_url) {
+                const ytId = extractYouTubeId(q.video_url);
+                if (ytId) {
+                    ytFrame.src = `https://www.youtube.com/embed/${ytId}`;
+                    mediaYoutube.classList.remove('hidden');
+                } else {
+                    mediaVideo.src = q.video_url;
+                    mediaVideo.classList.remove('hidden');
+                }
+                hasMedia = true;
+            }
+            mediaContainer.classList.toggle('hidden', !hasMedia);
         }
 
         function selectOption(choice) {

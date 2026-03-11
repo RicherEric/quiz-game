@@ -222,6 +222,10 @@ DROP POLICY IF EXISTS "Allow public delete question-media" ON storage.objects;
 CREATE POLICY "Allow public delete question-media" ON storage.objects
   FOR DELETE USING (bucket_id = 'question-media');
 
+-- 答案媒體欄位
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS answer_image_url text;
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS answer_video_url text;
+
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
 VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')

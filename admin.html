@@ -647,6 +647,63 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 分隔線：答案媒體 -->
+            <div class="border-t border-gold-600/30 pt-3">
+                <p class="text-gold-400 font-bold text-sm mb-2">答案揭曉時顯示的媒體</p>
+            </div>
+
+            <!-- 答案圖片 -->
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">答案圖片（選填）</label>
+                <div class="space-y-2">
+                    <input id="answer-image-url" type="text" placeholder="外部圖片 URL"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm"
+                        oninput="previewAnswerImageFromUrl(this.value)">
+                    <div class="flex items-center space-x-2">
+                        <label
+                            class="cursor-pointer px-4 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition">
+                            上傳圖片
+                            <input id="answer-image-file" type="file" accept="image/*" class="hidden"
+                                onchange="previewAnswerImageFromFile(this)">
+                        </label>
+                        <span id="answer-image-filename" class="text-gold-400/60 text-sm truncate"></span>
+                        <button type="button" onclick="clearAnswerImageMedia()"
+                            class="text-red-400 hover:text-red-200 text-sm font-bold px-2">✕ 清除</button>
+                    </div>
+                    <img id="answer-image-preview"
+                        class="hidden rounded-xl max-h-48 mx-auto border border-gold-700/30">
+                </div>
+            </div>
+            <!-- 答案影片 -->
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">答案影片（選填）</label>
+                <div class="space-y-2">
+                    <input id="answer-video-url" type="text" placeholder="外部影片 URL（YouTube 或直連）"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm"
+                        oninput="previewAnswerVideoFromUrl(this.value)">
+                    <div class="flex items-center space-x-2">
+                        <label
+                            class="cursor-pointer px-4 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition">
+                            上傳影片
+                            <input id="answer-video-file" type="file" accept="video/*" class="hidden"
+                                onchange="previewAnswerVideoFromFile(this)">
+                        </label>
+                        <span id="answer-video-filename" class="text-gold-400/60 text-sm truncate"></span>
+                        <button type="button" onclick="clearAnswerVideoMedia()"
+                            class="text-red-400 hover:text-red-200 text-sm font-bold px-2">✕ 清除</button>
+                    </div>
+                    <div id="answer-video-preview-container" class="hidden">
+                        <video id="answer-video-preview"
+                            class="hidden rounded-xl max-h-48 mx-auto border border-gold-700/30" controls></video>
+                        <div id="answer-youtube-preview" class="hidden rounded-xl overflow-hidden mx-auto"
+                            style="max-width:400px;">
+                            <iframe id="answer-youtube-preview-frame" class="w-full aspect-video" frameborder="0"
+                                allowfullscreen></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="flex space-x-3">
                 <button onclick="saveQuestion()"
                     class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-3 rounded-xl font-bold text-lg transition">儲存</button>
@@ -802,11 +859,103 @@
             document.getElementById('question-video-url').dataset.cleared = '1';
         }
 
+        // ===== Answer media preview helpers =====
+        function previewAnswerImageFromUrl(url) {
+            const img = document.getElementById('answer-image-preview');
+            if (url && url.trim()) {
+                img.src = url.trim();
+                img.classList.remove('hidden');
+            } else {
+                img.classList.add('hidden');
+                img.src = '';
+            }
+        }
+
+        function previewAnswerImageFromFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            document.getElementById('answer-image-filename').textContent = file.name;
+            document.getElementById('answer-image-url').value = '';
+            const img = document.getElementById('answer-image-preview');
+            img.src = URL.createObjectURL(file);
+            img.classList.remove('hidden');
+        }
+
+        function clearAnswerImageMedia() {
+            document.getElementById('answer-image-url').value = '';
+            document.getElementById('answer-image-file').value = '';
+            document.getElementById('answer-image-filename').textContent = '';
+            const img = document.getElementById('answer-image-preview');
+            img.classList.add('hidden');
+            img.src = '';
+            document.getElementById('answer-image-url').dataset.cleared = '1';
+        }
+
+        function previewAnswerVideoFromUrl(url) {
+            const container = document.getElementById('answer-video-preview-container');
+            const video = document.getElementById('answer-video-preview');
+            const ytDiv = document.getElementById('answer-youtube-preview');
+            const ytFrame = document.getElementById('answer-youtube-preview-frame');
+
+            if (!url || !url.trim()) {
+                container.classList.add('hidden');
+                video.classList.add('hidden');
+                ytDiv.classList.add('hidden');
+                return;
+            }
+            url = url.trim();
+            container.classList.remove('hidden');
+            const ytId = extractYouTubeId(url);
+            if (ytId) {
+                video.classList.add('hidden');
+                ytFrame.src = `https://www.youtube.com/embed/${ytId}`;
+                ytDiv.classList.remove('hidden');
+            } else {
+                ytDiv.classList.add('hidden');
+                ytFrame.src = '';
+                video.src = url;
+                video.classList.remove('hidden');
+            }
+        }
+
+        function previewAnswerVideoFromFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            document.getElementById('answer-video-filename').textContent = file.name;
+            document.getElementById('answer-video-url').value = '';
+            const container = document.getElementById('answer-video-preview-container');
+            const video = document.getElementById('answer-video-preview');
+            const ytDiv = document.getElementById('answer-youtube-preview');
+            container.classList.remove('hidden');
+            ytDiv.classList.add('hidden');
+            video.src = URL.createObjectURL(file);
+            video.classList.remove('hidden');
+        }
+
+        function clearAnswerVideoMedia() {
+            document.getElementById('answer-video-url').value = '';
+            document.getElementById('answer-video-file').value = '';
+            document.getElementById('answer-video-filename').textContent = '';
+            const container = document.getElementById('answer-video-preview-container');
+            const video = document.getElementById('answer-video-preview');
+            const ytDiv = document.getElementById('answer-youtube-preview');
+            container.classList.add('hidden');
+            video.classList.add('hidden');
+            video.src = '';
+            ytDiv.classList.add('hidden');
+            document.getElementById('answer-youtube-preview-frame').src = '';
+            document.getElementById('answer-video-url').dataset.cleared = '1';
+        }
+
         function resetMediaFields() {
             clearImageMedia();
             clearVideoMedia();
+            clearAnswerImageMedia();
+            clearAnswerVideoMedia();
             delete document.getElementById('question-image-url').dataset.cleared;
             delete document.getElementById('question-video-url').dataset.cleared;
+            delete document.getElementById('answer-image-url').dataset.cleared;
+            delete document.getElementById('answer-video-url').dataset.cleared;
         }
 
         async function initAdmin() {
@@ -2768,6 +2917,14 @@
                         document.getElementById('question-video-url').value = q.video_url;
                         previewVideoFromUrl(q.video_url);
                     }
+                    if (q.answer_image_url) {
+                        document.getElementById('answer-image-url').value = q.answer_image_url;
+                        previewAnswerImageFromUrl(q.answer_image_url);
+                    }
+                    if (q.answer_video_url) {
+                        document.getElementById('answer-video-url').value = q.answer_video_url;
+                        previewAnswerVideoFromUrl(q.answer_video_url);
+                    }
                 }
             }
             document.getElementById('question-modal').classList.remove('hidden');
@@ -2842,6 +2999,54 @@
                     }
                     row.video_url = null;
                 }
+
+                // Handle answer image
+                const ansImgFile = document.getElementById('answer-image-file').files[0];
+                const ansImgUrl = document.getElementById('answer-image-url').value.trim();
+                const ansImgCleared = document.getElementById('answer-image-url').dataset.cleared === '1';
+                if (ansImgFile) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.answer_image_url && isStorageUrl(oldQ.answer_image_url)) await deleteStorageFile(oldQ.answer_image_url);
+                    }
+                    row.answer_image_url = await uploadMedia(ansImgFile, 'images');
+                } else if (ansImgUrl) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.answer_image_url && isStorageUrl(oldQ.answer_image_url)) await deleteStorageFile(oldQ.answer_image_url);
+                    }
+                    row.answer_image_url = ansImgUrl;
+                } else if (ansImgCleared) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.answer_image_url && isStorageUrl(oldQ.answer_image_url)) await deleteStorageFile(oldQ.answer_image_url);
+                    }
+                    row.answer_image_url = null;
+                }
+
+                // Handle answer video
+                const ansVidFile = document.getElementById('answer-video-file').files[0];
+                const ansVidUrl = document.getElementById('answer-video-url').value.trim();
+                const ansVidCleared = document.getElementById('answer-video-url').dataset.cleared === '1';
+                if (ansVidFile) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.answer_video_url && isStorageUrl(oldQ.answer_video_url)) await deleteStorageFile(oldQ.answer_video_url);
+                    }
+                    row.answer_video_url = await uploadMedia(ansVidFile, 'videos');
+                } else if (ansVidUrl) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.answer_video_url && isStorageUrl(oldQ.answer_video_url)) await deleteStorageFile(oldQ.answer_video_url);
+                    }
+                    row.answer_video_url = ansVidUrl;
+                } else if (ansVidCleared) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.answer_video_url && isStorageUrl(oldQ.answer_video_url)) await deleteStorageFile(oldQ.answer_video_url);
+                    }
+                    row.answer_video_url = null;
+                }
             } catch (uploadErr) {
                 return alert('媒體上傳失敗：' + uploadErr.message);
             }
@@ -2867,6 +3072,8 @@
             if (q) {
                 if (q.image_url && isStorageUrl(q.image_url)) await deleteStorageFile(q.image_url);
                 if (q.video_url && isStorageUrl(q.video_url)) await deleteStorageFile(q.video_url);
+                if (q.answer_image_url && isStorageUrl(q.answer_image_url)) await deleteStorageFile(q.answer_image_url);
+                if (q.answer_video_url && isStorageUrl(q.answer_video_url)) await deleteStorageFile(q.answer_video_url);
             }
             const { error } = await sbClient.from('questions').delete().eq('id', id);
             if (error) return alert('刪除失敗：' + error.message);
@@ -2909,6 +3116,8 @@
                 };
                 if (cols.length > 8 && cols[8].trim()) qRow.image_url = cols[8].trim();
                 if (cols.length > 9 && cols[9].trim()) qRow.video_url = cols[9].trim();
+                if (cols.length > 10 && cols[10].trim()) qRow.answer_image_url = cols[10].trim();
+                if (cols.length > 11 && cols[11].trim()) qRow.answer_video_url = cols[11].trim();
                 rows.push(qRow);
             }
 
