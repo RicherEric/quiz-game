@@ -193,6 +193,35 @@ ALTER TABLE public.lottery_winners ADD COLUMN IF NOT EXISTS note text;
 ALTER TABLE public.lottery_winners ADD COLUMN IF NOT EXISTS group_id integer REFERENCES public.lottery_groups(id) ON DELETE CASCADE;
 ALTER TABLE public.lottery_winners ALTER COLUMN member_id DROP NOT NULL;
 
+-- ============================================================
+-- Storage bucket RLS 政策（question-media）
+-- ============================================================
+
+-- 建立 storage bucket（若不存在）
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('question-media', 'question-media', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 允許所有人讀取（公開檢視圖片/影片）
+DROP POLICY IF EXISTS "Allow public read question-media" ON storage.objects;
+CREATE POLICY "Allow public read question-media" ON storage.objects
+  FOR SELECT USING (bucket_id = 'question-media');
+
+-- 允許所有人上傳（管理後台使用 anon key）
+DROP POLICY IF EXISTS "Allow public insert question-media" ON storage.objects;
+CREATE POLICY "Allow public insert question-media" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'question-media');
+
+-- 允許所有人更新
+DROP POLICY IF EXISTS "Allow public update question-media" ON storage.objects;
+CREATE POLICY "Allow public update question-media" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'question-media');
+
+-- 允許所有人刪除（管理後台刪除舊媒體）
+DROP POLICY IF EXISTS "Allow public delete question-media" ON storage.objects;
+CREATE POLICY "Allow public delete question-media" ON storage.objects
+  FOR DELETE USING (bucket_id = 'question-media');
+
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
 VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')

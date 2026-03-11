@@ -57,8 +57,13 @@
         }
 
         @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -187,9 +192,12 @@
 
         <!-- 抽獎 Tabs -->
         <div id="section-lottery-tabs" class="hidden flex space-x-2 border-b border-gold-800/50">
-            <button onclick="switchTab('tab-lottery-groups')" id="btn-tab-lottery-groups" class="tab-btn">🎱 群組管理</button>
-            <button onclick="switchTab('tab-lottery-prizes')" id="btn-tab-lottery-prizes" class="tab-btn">🎁 獎項管理</button>
-            <button onclick="switchTab('tab-lottery-winners')" id="btn-tab-lottery-winners" class="tab-btn">🏆 中獎紀錄</button>
+            <button onclick="switchTab('tab-lottery-groups')" id="btn-tab-lottery-groups" class="tab-btn">🎱
+                群組管理</button>
+            <button onclick="switchTab('tab-lottery-prizes')" id="btn-tab-lottery-prizes" class="tab-btn">🎁
+                獎項管理</button>
+            <button onclick="switchTab('tab-lottery-winners')" id="btn-tab-lottery-winners" class="tab-btn">🏆
+                中獎紀錄</button>
             <button onclick="switchTab('tab-lottery-stats')" id="btn-tab-lottery-stats" class="tab-btn">📊 群組統計</button>
             <button onclick="window.open('lottery.html', '_blank')" class="tab-btn">🎰 摸彩抽獎 ↗</button>
         </div>
@@ -201,11 +209,12 @@
                 <h2 id="stats-q-text" class="text-3xl font-bold text-gold-100 mb-4">請從上方選擇題目...</h2>
 
                 <!-- 題目媒體顯示 -->
-                <div id="media-display" class="hidden mb-4">
+                <div id="media-display" class="hidden mb-4 space-y-4">
                     <img id="media-image" class="hidden rounded-xl max-h-80 mx-auto" />
                     <video id="media-video" class="hidden rounded-xl max-h-80 mx-auto" controls></video>
                     <div id="media-youtube" class="hidden flex justify-center">
-                        <iframe id="youtube-frame" class="rounded-xl w-full max-w-2xl aspect-video" frameborder="0" allowfullscreen></iframe>
+                        <iframe id="youtube-frame" class="rounded-xl w-full max-w-2xl aspect-video" frameborder="0"
+                            allowfullscreen></iframe>
                     </div>
                 </div>
 
@@ -336,7 +345,9 @@
                             </tr>
                         </thead>
                         <tbody id="questions-table-body">
-                            <tr><td colspan="11" class="text-gold-400/50 text-center py-10">載入中...</td></tr>
+                            <tr>
+                                <td colspan="11" class="text-gold-400/50 text-center py-10">載入中...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -364,7 +375,9 @@
                             </tr>
                         </thead>
                         <tbody id="players-table-body">
-                            <tr><td colspan="4" class="text-gold-400/50 text-center py-10">載入中...</td></tr>
+                            <tr>
+                                <td colspan="4" class="text-gold-400/50 text-center py-10">載入中...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -387,14 +400,17 @@
                             class="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 hover:to-purple-700 text-white font-bold rounded-xl transition shadow-lg">
                             📤 匯入 Staff CSV
                         </button>
-                        <input type="file" id="staff-csv-input" accept=".csv" class="hidden" onchange="importStaffCSV(this)">
+                        <input type="file" id="staff-csv-input" accept=".csv" class="hidden"
+                            onchange="importStaffCSV(this)">
                         <button onclick="openGroupModal()"
                             class="px-6 py-3 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg">
                             ＋ 新增群組
                         </button>
                     </div>
                 </div>
-                <div id="prob-warning" class="hidden bg-red-900/50 border border-red-500/50 text-red-200 px-6 py-3 rounded-xl font-bold text-center"></div>
+                <div id="prob-warning"
+                    class="hidden bg-red-900/50 border border-red-500/50 text-red-200 px-6 py-3 rounded-xl font-bold text-center">
+                </div>
                 <div id="lottery-groups-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="text-gold-400/50 text-center py-10 col-span-2">載入中...</div>
                 </div>
@@ -431,9 +447,15 @@
             <!-- 群組統計 Tab -->
             <div id="tab-lottery-stats" class="hidden space-y-6">
                 <div class="flex space-x-2 border-b border-gold-800/50 mb-2">
-                    <button onclick="switchStatsSubTab('sub-member-stats')" id="btn-sub-member-stats" class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-200 bg-gold-700/40 border border-gold-600/50 border-b-0">👥 群組人數統計</button>
-                    <button onclick="switchStatsSubTab('sub-winner-stats')" id="btn-sub-winner-stats" class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-400/60 hover:text-gold-300">🏆 中獎群組統計</button>
-                    <button onclick="switchStatsSubTab('sub-individual-stats')" id="btn-sub-individual-stats" class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-400/60 hover:text-gold-300">👤 個人中獎統計</button>
+                    <button onclick="switchStatsSubTab('sub-member-stats')" id="btn-sub-member-stats"
+                        class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-200 bg-gold-700/40 border border-gold-600/50 border-b-0">👥
+                        群組人數統計</button>
+                    <button onclick="switchStatsSubTab('sub-winner-stats')" id="btn-sub-winner-stats"
+                        class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-400/60 hover:text-gold-300">🏆
+                        中獎群組統計</button>
+                    <button onclick="switchStatsSubTab('sub-individual-stats')" id="btn-sub-individual-stats"
+                        class="px-4 py-2 text-sm font-bold rounded-t-xl transition-all text-gold-400/60 hover:text-gold-300">👤
+                        個人中獎統計</button>
                 </div>
                 <div id="sub-member-stats" class="space-y-6">
                     <div id="lottery-stats-container" class="space-y-6">
@@ -471,7 +493,8 @@
     </div>
 
     <!-- Group Modal -->
-    <div id="group-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+    <div id="group-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
         onclick="if(event.target===this)closeGroupModal()">
         <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-md">
             <h2 id="group-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增群組</h2>
@@ -496,7 +519,8 @@
     </div>
 
     <!-- Prize Modal -->
-    <div id="prize-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+    <div id="prize-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
         onclick="if(event.target===this)closePrizeModal()">
         <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-md">
             <h2 id="prize-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增獎項</h2>
@@ -521,9 +545,11 @@
     </div>
 
     <!-- Question Modal -->
-    <div id="question-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+    <div id="question-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
         onclick="if(event.target===this)closeQuestionModal()">
-        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div
+            class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <h2 id="question-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增題目</h2>
             <input type="hidden" id="question-edit-id">
             <div>
@@ -578,14 +604,18 @@
                         class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm"
                         oninput="previewImageFromUrl(this.value)">
                     <div class="flex items-center space-x-2">
-                        <label class="cursor-pointer px-4 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition">
+                        <label
+                            class="cursor-pointer px-4 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition">
                             上傳圖片
-                            <input id="question-image-file" type="file" accept="image/*" class="hidden" onchange="previewImageFromFile(this)">
+                            <input id="question-image-file" type="file" accept="image/*" class="hidden"
+                                onchange="previewImageFromFile(this)">
                         </label>
                         <span id="question-image-filename" class="text-gold-400/60 text-sm truncate"></span>
-                        <button type="button" onclick="clearImageMedia()" class="text-red-400 hover:text-red-200 text-sm font-bold px-2">✕ 清除</button>
+                        <button type="button" onclick="clearImageMedia()"
+                            class="text-red-400 hover:text-red-200 text-sm font-bold px-2">✕ 清除</button>
                     </div>
-                    <img id="question-image-preview" class="hidden rounded-xl max-h-48 mx-auto border border-gold-700/30">
+                    <img id="question-image-preview"
+                        class="hidden rounded-xl max-h-48 mx-auto border border-gold-700/30">
                 </div>
             </div>
             <!-- 影片媒體 -->
@@ -596,17 +626,23 @@
                         class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm"
                         oninput="previewVideoFromUrl(this.value)">
                     <div class="flex items-center space-x-2">
-                        <label class="cursor-pointer px-4 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition">
+                        <label
+                            class="cursor-pointer px-4 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition">
                             上傳影片
-                            <input id="question-video-file" type="file" accept="video/*" class="hidden" onchange="previewVideoFromFile(this)">
+                            <input id="question-video-file" type="file" accept="video/*" class="hidden"
+                                onchange="previewVideoFromFile(this)">
                         </label>
                         <span id="question-video-filename" class="text-gold-400/60 text-sm truncate"></span>
-                        <button type="button" onclick="clearVideoMedia()" class="text-red-400 hover:text-red-200 text-sm font-bold px-2">✕ 清除</button>
+                        <button type="button" onclick="clearVideoMedia()"
+                            class="text-red-400 hover:text-red-200 text-sm font-bold px-2">✕ 清除</button>
                     </div>
                     <div id="question-video-preview-container" class="hidden">
-                        <video id="question-video-preview" class="hidden rounded-xl max-h-48 mx-auto border border-gold-700/30" controls></video>
-                        <div id="question-youtube-preview" class="hidden rounded-xl overflow-hidden mx-auto" style="max-width:400px;">
-                            <iframe id="question-youtube-preview-frame" class="w-full aspect-video" frameborder="0" allowfullscreen></iframe>
+                        <video id="question-video-preview"
+                            class="hidden rounded-xl max-h-48 mx-auto border border-gold-700/30" controls></video>
+                        <div id="question-youtube-preview" class="hidden rounded-xl overflow-hidden mx-auto"
+                            style="max-width:400px;">
+                            <iframe id="question-youtube-preview-frame" class="w-full aspect-video" frameborder="0"
+                                allowfullscreen></iframe>
                         </div>
                     </div>
                 </div>
