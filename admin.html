@@ -759,6 +759,7 @@
                     const img = document.createElement('img');
                     img.src = item.file ? URL.createObjectURL(item.file) : item.url;
                     img.className = 'rounded-xl max-h-32 border border-gold-700/30';
+                    img.referrerPolicy = 'no-referrer';
                     wrapper.appendChild(img);
                 } else {
                     const ytId = extractYouTubeId(item.url || '');
@@ -893,6 +894,7 @@
                     imgUrls.forEach(url => {
                         const img = document.createElement('img');
                         img.src = url; img.className = 'rounded-xl max-h-80';
+                        img.referrerPolicy = 'no-referrer';
                         imagesRow.appendChild(img);
                     });
                     imagesRow.classList.remove('hidden');
