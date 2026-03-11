@@ -26,7 +26,10 @@
         }
 
         .selected-opt {
-            @apply ring-4 ring-gold-400 scale-95 shadow-[0_0_20px_rgba(251, 191, 36, 0.5)];
+            @apply ring-4 ring-gold-400 scale-95;
+            background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+            color: #0f172a !important;
+            box-shadow: 0 0 25px rgba(251, 191, 36, 0.6);
         }
 
         .dimmed-opt {
@@ -100,6 +103,12 @@
             <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                 class="h-28 mx-auto drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
             <p class="text-3xl text-gold-200 font-bold">本題結算完成</p>
+
+            <!-- 正確答案 -->
+            <div id="scoring-answer" class="hidden bg-green-900/40 px-8 py-5 rounded-2xl border-2 border-green-500/50">
+                <p class="text-lg text-green-300/80 mb-1">正確答案</p>
+                <div id="scoring-answer-text" class="text-3xl font-black text-green-200"></div>
+            </div>
 
             <!-- 答案媒體（多媒體） -->
             <div id="scoring-media" class="hidden space-y-3">
@@ -388,6 +397,19 @@
                 hideAllUI();
                 document.getElementById('scoring-ui').classList.remove('hidden');
 
+                // 顯示正確答案
+                const scoringAnswer = document.getElementById('scoring-answer');
+                const scoringAnswerText = document.getElementById('scoring-answer-text');
+                if (currentQ && currentQ.answer) {
+                    const answerMap = { 1: 'A', 2: 'B', 3: 'C', 4: 'D' };
+                    const optionMap = { 1: currentQ.option_a, 2: currentQ.option_b, 3: currentQ.option_c, 4: currentQ.option_d };
+                    const ansNum = currentQ.answer;
+                    scoringAnswerText.innerText = `${answerMap[ansNum]}. ${optionMap[ansNum]}`;
+                    scoringAnswer.classList.remove('hidden');
+                } else {
+                    scoringAnswer.classList.add('hidden');
+                }
+
                 // 顯示答案媒體（多媒體）
                 const scoringMedia = document.getElementById('scoring-media');
                 const sImagesRow = document.getElementById('scoring-images-row');
@@ -501,9 +523,11 @@
             document.getElementById('feedback').classList.add('hidden');
             document.getElementById('options-grid').classList.remove('hidden');
             document.getElementById('submit-btn').classList.add('hidden');
-            document.querySelectorAll('.option-btn').forEach(btn => {
+            document.querySelectorAll('.option-btn').forEach((btn, idx) => {
                 btn.disabled = false;
                 btn.classList.remove('grayscale', 'selected-opt', 'dimmed-opt');
+                const bg = optOriginalBg[idx + 1];
+                if (bg && !btn.classList.contains(bg)) btn.classList.add(bg);
             });
             // Reset countdown display
             document.getElementById('countdown-text').innerText = '15.0';
@@ -529,56 +553,24 @@
             document.getElementById('opt3').innerText = q.option_c;
             document.getElementById('opt4').innerText = q.option_d;
 
-            // 顯示媒體（多媒體）
-            const mediaContainer = document.getElementById('q-media');
-            const imagesRow = document.getElementById('q-images-row');
-            const videosCol = document.getElementById('q-videos-col');
-            imagesRow.innerHTML = ''; videosCol.innerHTML = '';
-            const imgUrls = (q.image_urls && q.image_urls.length) ? q.image_urls : (q.image_url ? [q.image_url] : []);
-            const vidUrls = (q.video_urls && q.video_urls.length) ? q.video_urls : (q.video_url ? [q.video_url] : []);
-            let hasMedia = false;
-            if (imgUrls.length) {
-                imgUrls.forEach(url => {
-                    const img = document.createElement('img');
-                    img.src = url;
-                    img.className = 'snap-center max-h-60 rounded-2xl border border-gold-700/30 shadow-lg';
-                    img.referrerPolicy = 'no-referrer';
-                    if (imgUrls.length === 1) img.className += ' mx-auto';
-                    imagesRow.appendChild(img);
-                });
-                hasMedia = true;
-            }
-            if (vidUrls.length) {
-                vidUrls.forEach(url => {
-                    const ytId = extractYouTubeId(url);
-                    if (ytId) {
-                        const div = document.createElement('div');
-                        div.className = 'aspect-video w-full max-w-lg rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg';
-                        const iframe = document.createElement('iframe');
-                        iframe.src = `https://www.youtube.com/embed/${ytId}`;
-                        iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
-                        iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
-                        div.appendChild(iframe);
-                        videosCol.appendChild(div);
-                    } else {
-                        const vid = document.createElement('video');
-                        vid.src = url; vid.controls = true;
-                        vid.className = 'max-h-60 rounded-2xl border border-gold-700/30 shadow-lg w-full max-w-lg';
-                        videosCol.appendChild(vid);
-                    }
-                });
-                hasMedia = true;
-            }
-            mediaContainer.classList.toggle('hidden', !hasMedia);
+            // 題目媒體不推送給玩家，只顯示選項
+            document.getElementById('q-media').classList.add('hidden');
         }
 
+        const optOriginalBg = { 1: 'bg-blue-900', 2: 'bg-indigo-900', 3: 'bg-sky-900', 4: 'bg-cyan-900' };
         function selectOption(choice) {
             if (hasAnswered) return;
             currentSelection = choice;
             for (let i = 1; i <= 4; i++) {
                 const btn = document.getElementById('opt' + i);
-                if (i === choice) { btn.classList.add('selected-opt'); btn.classList.remove('dimmed-opt'); }
-                else { btn.classList.remove('selected-opt'); btn.classList.add('dimmed-opt'); }
+                if (i === choice) {
+                    btn.classList.add('selected-opt');
+                    btn.classList.remove('dimmed-opt', optOriginalBg[i]);
+                } else {
+                    btn.classList.remove('selected-opt');
+                    btn.classList.add('dimmed-opt');
+                    if (!btn.classList.contains(optOriginalBg[i])) btn.classList.add(optOriginalBg[i]);
+                }
             }
             document.getElementById('submit-btn').classList.remove('hidden');
         }
