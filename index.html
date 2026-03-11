@@ -202,6 +202,12 @@
             <button id="submit-btn" onclick="submitAnswer()"
                 class="w-full mt-6 py-5 bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 rounded-2xl text-3xl font-black hidden shadow-lg">確認送出</button>
             <div id="feedback" class="hidden text-center p-6 rounded-2xl text-3xl font-black mt-6 shadow-2xl"></div>
+
+            <!-- 公布答案時的答案媒體 -->
+            <div id="reveal-media" class="hidden space-y-3 mt-4">
+                <div id="reveal-images-row" class="flex overflow-x-auto snap-x gap-3 justify-center"></div>
+                <div id="reveal-videos-col" class="space-y-3 flex flex-col items-center"></div>
+            </div>
         </div>
 
         <div id="end-ui" class="hidden text-center mt-20 space-y-8">
@@ -448,6 +454,57 @@
                         if (optOriginalBg[i]) btn.classList.add(optOriginalBg[i]);
                     }
                 }
+
+                // 顯示答案媒體（圖片與影片）
+                const revealMedia = document.getElementById('reveal-media');
+                const rImagesRow = document.getElementById('reveal-images-row');
+                const rVideosCol = document.getElementById('reveal-videos-col');
+                rImagesRow.innerHTML = ''; rVideosCol.innerHTML = '';
+                let hasRevealMedia = false;
+                if (currentQ) {
+                    const ansImgUrls = (currentQ.answer_image_urls && currentQ.answer_image_urls.length) ? currentQ.answer_image_urls : (currentQ.answer_image_url ? [currentQ.answer_image_url] : []);
+                    const ansVidUrls = (currentQ.answer_video_urls && currentQ.answer_video_urls.length) ? currentQ.answer_video_urls : (currentQ.answer_video_url ? [currentQ.answer_video_url] : []);
+                    if (ansImgUrls.length) {
+                        ansImgUrls.forEach(url => {
+                            const img = document.createElement('img');
+                            img.referrerPolicy = 'no-referrer';
+                            img.crossOrigin = 'anonymous';
+                            img.className = 'snap-center max-h-48 rounded-2xl border border-gold-700/30 shadow-lg cursor-zoom-in';
+                            if (ansImgUrls.length === 1) img.className += ' mx-auto';
+                            img.onclick = function() { openLightbox(this.src); };
+                            img.onerror = function() {
+                                this.onerror = null;
+                                this.crossOrigin = null;
+                                this.src = url;
+                            };
+                            img.src = url;
+                            rImagesRow.appendChild(img);
+                        });
+                        hasRevealMedia = true;
+                    }
+                    if (ansVidUrls.length) {
+                        ansVidUrls.forEach(url => {
+                            const ytId = extractYouTubeId(url);
+                            if (ytId) {
+                                const div = document.createElement('div');
+                                div.className = 'aspect-video w-full max-w-lg rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg';
+                                const iframe = document.createElement('iframe');
+                                iframe.src = `https://www.youtube.com/embed/${ytId}`;
+                                iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
+                                iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
+                                div.appendChild(iframe);
+                                rVideosCol.appendChild(div);
+                            } else {
+                                const vid = document.createElement('video');
+                                vid.src = url; vid.controls = true;
+                                vid.className = 'max-h-48 rounded-2xl border border-gold-700/30 shadow-lg w-full max-w-lg';
+                                rVideosCol.appendChild(vid);
+                            }
+                        });
+                        hasRevealMedia = true;
+                    }
+                }
+                revealMedia.classList.toggle('hidden', !hasRevealMedia);
             }
             else if (status.state === 'scoring') {
                 stopCountdown();
@@ -593,6 +650,8 @@
                 const bg = optOriginalBg[idx + 1];
                 if (bg && !btn.classList.contains(bg)) btn.classList.add(bg);
             });
+            // 隱藏公布答案媒體
+            document.getElementById('reveal-media').classList.add('hidden');
             // Reset countdown display
             document.getElementById('countdown-container').classList.remove('invisible');
             document.getElementById('countdown-text').innerText = '15.0';
