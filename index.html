@@ -55,6 +55,25 @@
         .animate-slide-up {
             animation: slide-up 0.3s ease-out;
         }
+
+        .correct-opt {
+            ring: 4px solid #34d399;
+            background: linear-gradient(135deg, #059669, #047857) !important;
+            color: #fff !important;
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.5);
+            border-color: #34d399 !important;
+            opacity: 1 !important;
+            filter: none !important;
+        }
+
+        .incorrect-opt {
+            background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
+            color: #fff !important;
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.5);
+            border-color: #f87171 !important;
+            opacity: 1 !important;
+            filter: none !important;
+        }
     </style>
 </head>
 
@@ -392,6 +411,44 @@
                     processAnswer(currentSelection);
                 }
             }
+            else if (status.state === 'revealed') {
+                stopCountdown();
+
+                // 重新取得題目資料（含正確答案）
+                const { data: revQ } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
+                if (revQ) currentQ = revQ;
+
+                const correctAnswer = currentQ ? currentQ.answer : null;
+                const myChoice = currentSelection;
+
+                // 顯示選項區塊，隱藏回饋訊息
+                hideAllUI();
+                document.getElementById('game-ui').classList.remove('hidden');
+                document.getElementById('feedback').classList.add('hidden');
+                document.getElementById('options-grid').classList.remove('hidden');
+                document.getElementById('submit-btn').classList.add('hidden');
+
+                // 隱藏倒數計時
+                document.getElementById('countdown-container').classList.add('invisible');
+
+                // 為每個選項上色
+                for (let i = 1; i <= 4; i++) {
+                    const btn = document.getElementById('opt' + i);
+                    btn.disabled = true;
+                    btn.classList.remove('selected-opt', 'dimmed-opt', 'grayscale');
+                    Object.values(optOriginalBg).forEach(bg => btn.classList.remove(bg));
+                    btn.classList.remove('correct-opt', 'incorrect-opt');
+
+                    if (i === correctAnswer) {
+                        btn.classList.add('correct-opt');
+                    } else if (i === myChoice && myChoice !== correctAnswer && myChoice !== 0) {
+                        btn.classList.add('incorrect-opt');
+                    } else {
+                        btn.classList.add('dimmed-opt');
+                        if (optOriginalBg[i]) btn.classList.add(optOriginalBg[i]);
+                    }
+                }
+            }
             else if (status.state === 'scoring') {
                 stopCountdown();
                 hideAllUI();
@@ -532,11 +589,12 @@
             document.getElementById('submit-btn').classList.add('hidden');
             document.querySelectorAll('.option-btn').forEach((btn, idx) => {
                 btn.disabled = false;
-                btn.classList.remove('grayscale', 'selected-opt', 'dimmed-opt');
+                btn.classList.remove('grayscale', 'selected-opt', 'dimmed-opt', 'correct-opt', 'incorrect-opt');
                 const bg = optOriginalBg[idx + 1];
                 if (bg && !btn.classList.contains(bg)) btn.classList.add(bg);
             });
             // Reset countdown display
+            document.getElementById('countdown-container').classList.remove('invisible');
             document.getElementById('countdown-text').innerText = '15.0';
             document.getElementById('countdown-text').classList.remove('text-red-400');
             document.getElementById('countdown-text').classList.add('text-gold-300');

@@ -1146,6 +1146,10 @@
                 selector.disabled = true;
                 document.getElementById('btn-reveal').classList.remove('hidden');
                 document.getElementById('btn-score').classList.remove('hidden');
+            } else if (state === 'revealed') {
+                selector.disabled = true;
+                answerRevealed = true;
+                document.getElementById('btn-score').classList.remove('hidden');
             } else if (state === 'scoring') {
                 selector.disabled = true;
                 // 如果是最後一題，隱藏「下一題」按鈕
@@ -1165,6 +1169,7 @@
                 waiting: ['⏸️ 待機中 (Waiting)', 'text-slate-400 font-bold'],
                 playing: ['🟢 開放作答中 (Playing)', 'text-emerald-400 font-bold'],
                 stopped: ['🔴 已停止作答 (Stopped)', 'text-amber-400 font-bold'],
+                revealed: ['🔍 已公布答案 (Revealed)', 'text-purple-400 font-bold'],
                 scoring: ['💰 結算中 (Scoring)', 'text-blue-400 font-bold'],
                 ended: ['🏆 遊戲結束 (Ended)', 'text-gold-400 font-bold']
             };
@@ -1222,12 +1227,27 @@
             }
         }
 
-        // 公布答案：顯示答案媒體
-        function revealAnswer() {
+        // 公布答案：顯示答案媒體，並通知玩家端
+        async function revealAnswer() {
             const qId = parseInt(document.getElementById('q-selector').value);
             if (!qId) return;
             const q = questions.find(x => x.id === qId);
             if (!q) return;
+
+            // 確認正確答案（若 admin 未手動選擇，使用資料庫預設）
+            if (!selectedAnswer) {
+                if (q && q.answer) {
+                    selectedAnswer = q.answer;
+                    highlightSelectedAnswer(selectedAnswer);
+                } else {
+                    alert("請先選擇正確答案！");
+                    return;
+                }
+            }
+
+            // 將正確答案寫入資料庫，讓玩家端可以讀取
+            await sbClient.from('questions').update({ answer: selectedAnswer }).eq('id', qId);
+            q.answer = selectedAnswer;
 
             const container = document.getElementById('answer-reveal-display');
             const imagesRow = document.getElementById('answer-reveal-images-row');
@@ -1285,6 +1305,9 @@
             // 標記答案已公布，重新渲染玩家列表以顯示選項顏色
             answerRevealed = true;
             fetchCurrentQuestionStats();
+
+            // 切換狀態為 revealed，通知玩家端顯示答案顏色
+            changeState('revealed');
 
             // 隱藏公布答案按鈕（已公布）
             document.getElementById('btn-reveal').classList.add('hidden');
@@ -1542,7 +1565,7 @@
         let lastRenderedState = '';
         function renderPlayerStatusList(allPlayers, respondedNames, choiceMap, choiceLabels, choiceColors) {
             const container = document.getElementById('player-status-list');
-            const isStopped = (currentState === 'stopped' || currentState === 'scoring');
+            const isStopped = (currentState === 'stopped' || currentState === 'revealed' || currentState === 'scoring');
 
             // 在 stopped/scoring 狀態下使用排行榜樣式逐行展開
             if (isStopped) {
