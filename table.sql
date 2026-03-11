@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS public.questions (
   points integer DEFAULT 1000,
   seconds integer DEFAULT 20,
   sort_order integer NOT NULL DEFAULT 0,
+  image_url text,
+  video_url text,
   CONSTRAINT questions_pkey PRIMARY KEY (id)
 );
 
@@ -185,10 +187,6 @@ ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS sort_order integer NOT NUL
 
 
 ALTER TABLE public.responses ADD COLUMN IF NOT EXISTS scored_points integer NOT NULL DEFAULT 0;
-
--- 題目媒體欄位
-ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS image_url text;
-ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS video_url text;
 
 -- lottery_winners: 備註欄位、群組抽獎支援
 ALTER TABLE public.lottery_winners ADD COLUMN IF NOT EXISTS note text;
