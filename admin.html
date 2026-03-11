@@ -9,6 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script>
         tailwind.config = { theme: { extend: { colors: { gold: { 100: '#ffedc6', 300: '#ffc24a', 400: '#ffaa1d', 500: '#f98c00', 700: '#bb5200' }, midnight: { 800: '#1e293b', 900: '#0f172a', 950: '#020617' } } } } }
     </script>
@@ -602,7 +603,7 @@
                             class="flex-1 bg-midnight-800 text-gold-200 p-2 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm">
                         <label class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
                             上傳
-                            <input id="question-image-file-input" type="file" accept="image/*" class="hidden"
+                            <input id="question-image-file-input" type="file" accept="image/*,.heic,.heif" class="hidden"
                                 onchange="addMediaFile(this, 'question-images')">
                         </label>
                         <button type="button" onclick="addMediaUrl('question-image-url-input', 'question-images')"
@@ -644,7 +645,7 @@
                             class="flex-1 bg-midnight-800 text-gold-200 p-2 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm">
                         <label class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
                             上傳
-                            <input id="answer-image-file-input" type="file" accept="image/*" class="hidden"
+                            <input id="answer-image-file-input" type="file" accept="image/*,.heic,.heif" class="hidden"
                                 onchange="addMediaFile(this, 'answer-images')">
                         </label>
                         <button type="button" onclick="addMediaUrl('answer-image-url-input', 'answer-images')"
@@ -822,9 +823,23 @@
             renderMediaList(listId);
         }
 
-        function addMediaFile(input, listId) {
-            const file = input.files[0];
+        async function addMediaFile(input, listId) {
+            let file = input.files[0];
             if (!file) return;
+            // Auto-convert HEIC/HEIF to JPEG
+            if (file.type === 'image/heic' || file.type === 'image/heif' ||
+                /\.heic$/i.test(file.name) || /\.heif$/i.test(file.name)) {
+                try {
+                    const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+                    const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
+                    file = new File([blob], newName, { type: 'image/jpeg' });
+                } catch (e) {
+                    console.error('HEIC 轉換失敗:', e);
+                    alert('HEIC 圖片轉換失敗，請手動轉為 JPG 後再上傳');
+                    input.value = '';
+                    return;
+                }
+            }
             mediaLists[listId].push({ url: '', file, pendingUpload: true });
             input.value = '';
             renderMediaList(listId);
