@@ -757,9 +757,24 @@
                 wrapper.className = 'relative inline-block';
                 if (isImage) {
                     const img = document.createElement('img');
-                    img.src = item.file ? URL.createObjectURL(item.file) : item.url;
-                    img.className = 'rounded-xl max-h-32 border border-gold-700/30';
                     img.referrerPolicy = 'no-referrer';
+                    img.crossOrigin = 'anonymous';
+                    img.className = 'rounded-xl max-h-32 border border-gold-700/30';
+                    img.alt = '圖片預覽';
+                    img.onerror = function() {
+                        this.onerror = null;
+                        this.crossOrigin = null;
+                        this.src = item.file ? URL.createObjectURL(item.file) : item.url;
+                        this.onerror = function() {
+                            this.onerror = null;
+                            this.style.display = 'none';
+                            const fallback = document.createElement('div');
+                            fallback.className = 'rounded-xl max-h-32 border border-red-700/50 bg-red-900/20 px-4 py-3 text-red-300 text-xs break-all';
+                            fallback.innerHTML = '圖片無法載入<br>' + (item.url || '(uploaded file)');
+                            wrapper.insertBefore(fallback, this);
+                        };
+                    };
+                    img.src = item.file ? URL.createObjectURL(item.file) : item.url;
                     wrapper.appendChild(img);
                 } else {
                     const ytId = extractYouTubeId(item.url || '');
@@ -893,8 +908,15 @@
                 if (imgUrls.length) {
                     imgUrls.forEach(url => {
                         const img = document.createElement('img');
-                        img.src = url; img.className = 'rounded-xl max-h-80';
                         img.referrerPolicy = 'no-referrer';
+                        img.crossOrigin = 'anonymous';
+                        img.className = 'rounded-xl max-h-80';
+                        img.onerror = function() {
+                            this.onerror = null;
+                            this.crossOrigin = null;
+                            this.src = url;
+                        };
+                        img.src = url;
                         imagesRow.appendChild(img);
                     });
                     imagesRow.classList.remove('hidden');

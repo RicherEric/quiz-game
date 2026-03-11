@@ -422,10 +422,16 @@
                     if (ansImgUrls.length) {
                         ansImgUrls.forEach(url => {
                             const img = document.createElement('img');
-                            img.src = url;
-                            img.className = 'snap-center max-h-48 rounded-2xl border border-gold-700/30 shadow-lg';
                             img.referrerPolicy = 'no-referrer';
+                            img.crossOrigin = 'anonymous';
+                            img.className = 'snap-center max-h-48 rounded-2xl border border-gold-700/30 shadow-lg';
                             if (ansImgUrls.length === 1) img.className += ' mx-auto';
+                            img.onerror = function() {
+                                this.onerror = null;
+                                this.crossOrigin = null;
+                                this.src = url;
+                            };
+                            img.src = url;
                             sImagesRow.appendChild(img);
                         });
                         hasAnswerMedia = true;
