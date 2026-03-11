@@ -830,14 +830,21 @@
             if (file.type === 'image/heic' || file.type === 'image/heif' ||
                 /\.heic$/i.test(file.name) || /\.heif$/i.test(file.name)) {
                 try {
-                    const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+                    const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+                    const blob = Array.isArray(result) ? result[0] : result;
                     const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
                     file = new File([blob], newName, { type: 'image/jpeg' });
                 } catch (e) {
                     console.error('HEIC 轉換失敗:', e);
-                    alert('HEIC 圖片轉換失敗，請手動轉為 JPG 後再上傳');
-                    input.value = '';
-                    return;
+                    // If already a JPEG disguised as HEIC, try using as-is
+                    if (e && e.code === 1) {
+                        const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
+                        file = new File([file], newName, { type: 'image/jpeg' });
+                    } else {
+                        alert('HEIC 圖片轉換失敗，請手動轉為 JPG 後再上傳');
+                        input.value = '';
+                        return;
+                    }
                 }
             }
             mediaLists[listId].push({ url: '', file, pendingUpload: true });
