@@ -714,6 +714,7 @@
 
         let questions = [];
         let selectedAnswer = 0;
+        let answerRevealed = false;
         let statsInterval = null;
         let adminChannel = null;
 
@@ -1135,6 +1136,7 @@
             const selector = document.getElementById('q-selector');
 
             if (state === 'waiting') {
+                answerRevealed = false;
                 selector.disabled = false;
                 document.getElementById('btn-start').classList.remove('hidden');
             } else if (state === 'playing') {
@@ -1146,7 +1148,12 @@
                 document.getElementById('btn-score').classList.remove('hidden');
             } else if (state === 'scoring') {
                 selector.disabled = true;
-                document.getElementById('btn-next').classList.remove('hidden');
+                // 如果是最後一題，隱藏「下一題」按鈕
+                const selectEl = document.getElementById('q-selector');
+                const isLastQuestion = selectEl.selectedIndex >= selectEl.options.length - 1;
+                if (!isLastQuestion) {
+                    document.getElementById('btn-next').classList.remove('hidden');
+                }
                 document.getElementById('btn-end').classList.remove('hidden');
             } else if (state === 'ended') {
                 selector.disabled = true;
@@ -1274,6 +1281,10 @@
             if (!hasMedia) noneMsg.classList.remove('hidden');
 
             container.classList.remove('hidden');
+
+            // 標記答案已公布，重新渲染玩家列表以顯示選項顏色
+            answerRevealed = true;
+            fetchCurrentQuestionStats();
 
             // 隱藏公布答案按鈕（已公布）
             document.getElementById('btn-reveal').classList.add('hidden');
@@ -1549,7 +1560,9 @@
                     const submitted = respondedNames.has(p.name);
                     const choice = choiceMap[p.name];
                     const choiceLabel = choiceLabels[choice] || '?';
-                    const choiceColor = choiceColors[choice] || 'text-gold-400';
+                    // 公布答案前使用統一中性顏色，公布後才顯示不同顏色
+                    const neutralColor = 'text-gold-300 bg-gold-900/40';
+                    const choiceColor = answerRevealed ? (choiceColors[choice] || 'text-gold-400') : neutralColor;
 
                     const delay = needsAnimation ? `animation-delay: ${idx * 80}ms;` : '';
                     const animClass = needsAnimation ? 'reveal-row' : '';
