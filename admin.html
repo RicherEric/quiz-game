@@ -823,6 +823,35 @@
             renderMediaList(listId);
         }
 
+        async function heicFallbackConvert(file) {
+            // Try browser native HEIC decoding (supported in Safari, some Chromium)
+            return new Promise((resolve) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    canvas.toBlob((blob) => {
+                        URL.revokeObjectURL(url);
+                        if (blob) {
+                            const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
+                            resolve(new File([blob], newName, { type: 'image/jpeg' }));
+                        } else {
+                            resolve(null);
+                        }
+                    }, 'image/jpeg', 0.9);
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    resolve(null);
+                };
+                img.src = url;
+            });
+        }
+
         async function addMediaFile(input, listId) {
             let file = input.files[0];
             if (!file) return;
@@ -836,10 +865,10 @@
                     file = new File([blob], newName, { type: 'image/jpeg' });
                 } catch (e) {
                     console.error('HEIC 轉換失敗:', e);
-                    // If already a JPEG disguised as HEIC, try using as-is
-                    if (e && e.code === 1) {
-                        const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
-                        file = new File([file], newName, { type: 'image/jpeg' });
+                    // Fallback: try browser native decoding via Canvas
+                    const converted = await heicFallbackConvert(file);
+                    if (converted) {
+                        file = converted;
                     } else {
                         alert('HEIC 圖片轉換失敗，請手動轉為 JPG 後再上傳');
                         input.value = '';
