@@ -239,28 +239,28 @@
                             <span id="opt-count-a" class="text-blue-200 font-black text-2xl ml-3">0</span>
                         </div>
                         <div onclick="selectCorrectAnswer(2)" id="opt-card-b"
-                            class="flex items-center justify-between cursor-pointer bg-indigo-900/20 border-2 border-indigo-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                            class="flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
                             <div class="flex items-start space-x-3">
-                                <span class="text-indigo-300 font-black text-lg shrink-0">B.</span>
-                                <span id="opt-text-b" class="text-indigo-100 font-bold text-lg">—</span>
+                                <span class="text-blue-300 font-black text-lg shrink-0">B.</span>
+                                <span id="opt-text-b" class="text-blue-100 font-bold text-lg">—</span>
                             </div>
-                            <span id="opt-count-b" class="text-indigo-200 font-black text-2xl ml-3">0</span>
+                            <span id="opt-count-b" class="text-blue-200 font-black text-2xl ml-3">0</span>
                         </div>
                         <div onclick="selectCorrectAnswer(3)" id="opt-card-c"
-                            class="flex items-center justify-between cursor-pointer bg-sky-900/20 border-2 border-sky-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                            class="flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
                             <div class="flex items-start space-x-3">
-                                <span class="text-sky-300 font-black text-lg shrink-0">C.</span>
-                                <span id="opt-text-c" class="text-sky-100 font-bold text-lg">—</span>
+                                <span class="text-blue-300 font-black text-lg shrink-0">C.</span>
+                                <span id="opt-text-c" class="text-blue-100 font-bold text-lg">—</span>
                             </div>
-                            <span id="opt-count-c" class="text-sky-200 font-black text-2xl ml-3">0</span>
+                            <span id="opt-count-c" class="text-blue-200 font-black text-2xl ml-3">0</span>
                         </div>
                         <div onclick="selectCorrectAnswer(4)" id="opt-card-d"
-                            class="flex items-center justify-between cursor-pointer bg-cyan-900/20 border-2 border-cyan-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
+                            class="flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400">
                             <div class="flex items-start space-x-3">
-                                <span class="text-cyan-300 font-black text-lg shrink-0">D.</span>
-                                <span id="opt-text-d" class="text-cyan-100 font-bold text-lg">—</span>
+                                <span class="text-blue-300 font-black text-lg shrink-0">D.</span>
+                                <span id="opt-text-d" class="text-blue-100 font-bold text-lg">—</span>
                             </div>
-                            <span id="opt-count-d" class="text-cyan-200 font-black text-2xl ml-3">0</span>
+                            <span id="opt-count-d" class="text-blue-200 font-black text-2xl ml-3">0</span>
                         </div>
                     </div>
                 </div>
@@ -1306,16 +1306,11 @@
 
         function highlightSelectedAnswer(choice) {
             const cards = ['a', 'b', 'c', 'd'];
-            const defaultStyles = [
-                'flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400',
-                'flex items-center justify-between cursor-pointer bg-indigo-900/20 border-2 border-indigo-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400',
-                'flex items-center justify-between cursor-pointer bg-sky-900/20 border-2 border-sky-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400',
-                'flex items-center justify-between cursor-pointer bg-cyan-900/20 border-2 border-cyan-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400'
-            ];
+            const defaultStyle = 'flex items-center justify-between cursor-pointer bg-blue-900/20 border-2 border-blue-500/30 px-4 py-3 rounded-xl transition-all hover:border-emerald-400';
             const selectedStyle = 'flex items-center justify-between cursor-pointer bg-emerald-900/30 border-2 border-emerald-400 ring-4 ring-emerald-400/50 px-4 py-3 rounded-xl transition-all';
             for (let i = 0; i < 4; i++) {
                 const card = document.getElementById('opt-card-' + cards[i]);
-                card.className = (i + 1 === choice) ? selectedStyle : defaultStyles[i];
+                card.className = (i + 1 === choice) ? selectedStyle : defaultStyle;
             }
         }
 
@@ -1471,9 +1466,9 @@
             const choiceLabels = { 1: 'A', 2: 'B', 3: 'C', 4: 'D', 0: '未答' };
             const choiceColors = {
                 1: 'text-blue-300 bg-blue-900/40',
-                2: 'text-indigo-300 bg-indigo-900/40',
-                3: 'text-sky-300 bg-sky-900/40',
-                4: 'text-cyan-300 bg-cyan-900/40',
+                2: 'text-blue-300 bg-blue-900/40',
+                3: 'text-blue-300 bg-blue-900/40',
+                4: 'text-blue-300 bg-blue-900/40',
                 0: 'text-red-400 bg-red-900/40'
             };
 
