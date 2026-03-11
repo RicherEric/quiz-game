@@ -823,33 +823,76 @@
             renderMediaList(listId);
         }
 
-        async function heicFallbackConvert(file) {
-            // Try browser native HEIC decoding (supported in Safari, some Chromium)
-            return new Promise((resolve) => {
-                const url = URL.createObjectURL(file);
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.naturalWidth;
-                    canvas.height = img.naturalHeight;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
-                    canvas.toBlob((blob) => {
+        async function convertHeicToJpeg(file) {
+            const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
+
+            // Method 1: createImageBitmap — native browser HEIC support (Chrome/Edge with HEVC codec, Safari)
+            try {
+                const bitmap = await createImageBitmap(file);
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(bitmap, 0, 0);
+                bitmap.close();
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+                if (blob && blob.size > 0) {
+                    console.log('HEIC 轉換成功 (createImageBitmap)');
+                    return new File([blob], newName, { type: 'image/jpeg' });
+                }
+            } catch (e) {
+                console.warn('createImageBitmap HEIC 轉換失敗:', e);
+            }
+
+            // Method 2: heic2any library with pre-loaded ArrayBuffer
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const inputBlob = new Blob([arrayBuffer]);
+                const result = await heic2any({ blob: inputBlob, toType: 'image/jpeg', quality: 0.9 });
+                const blob = Array.isArray(result) ? result[0] : result;
+                if (blob && blob.size > 0) {
+                    console.log('HEIC 轉換成功 (heic2any)');
+                    return new File([blob], newName, { type: 'image/jpeg' });
+                }
+            } catch (e) {
+                console.warn('heic2any HEIC 轉換失敗:', e);
+            }
+
+            // Method 3: Image + Canvas fallback (Safari native decoding)
+            try {
+                const converted = await new Promise((resolve) => {
+                    const url = URL.createObjectURL(file);
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.naturalWidth;
+                        canvas.height = img.naturalHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        canvas.toBlob((blob) => {
+                            URL.revokeObjectURL(url);
+                            if (blob && blob.size > 0) {
+                                resolve(new File([blob], newName, { type: 'image/jpeg' }));
+                            } else {
+                                resolve(null);
+                            }
+                        }, 'image/jpeg', 0.9);
+                    };
+                    img.onerror = () => {
                         URL.revokeObjectURL(url);
-                        if (blob) {
-                            const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
-                            resolve(new File([blob], newName, { type: 'image/jpeg' }));
-                        } else {
-                            resolve(null);
-                        }
-                    }, 'image/jpeg', 0.9);
-                };
-                img.onerror = () => {
-                    URL.revokeObjectURL(url);
-                    resolve(null);
-                };
-                img.src = url;
-            });
+                        resolve(null);
+                    };
+                    img.src = url;
+                });
+                if (converted) {
+                    console.log('HEIC 轉換成功 (Canvas fallback)');
+                    return converted;
+                }
+            } catch (e) {
+                console.warn('Canvas fallback HEIC 轉換失敗:', e);
+            }
+
+            return null;
         }
 
         async function addMediaFile(input, listId) {
@@ -858,22 +901,13 @@
             // Auto-convert HEIC/HEIF to JPEG
             if (file.type === 'image/heic' || file.type === 'image/heif' ||
                 /\.heic$/i.test(file.name) || /\.heif$/i.test(file.name)) {
-                try {
-                    const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
-                    const blob = Array.isArray(result) ? result[0] : result;
-                    const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
-                    file = new File([blob], newName, { type: 'image/jpeg' });
-                } catch (e) {
-                    console.error('HEIC 轉換失敗:', e);
-                    // Fallback: try browser native decoding via Canvas
-                    const converted = await heicFallbackConvert(file);
-                    if (converted) {
-                        file = converted;
-                    } else {
-                        alert('HEIC 圖片轉換失敗，請手動轉為 JPG 後再上傳');
-                        input.value = '';
-                        return;
-                    }
+                const converted = await convertHeicToJpeg(file);
+                if (converted) {
+                    file = converted;
+                } else {
+                    alert('HEIC 圖片轉換失敗，請手動轉為 JPG 後再上傳');
+                    input.value = '';
+                    return;
                 }
             }
             mediaLists[listId].push({ url: '', file, pendingUpload: true });
