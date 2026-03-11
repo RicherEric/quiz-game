@@ -1130,16 +1130,17 @@
             const ids = ['btn-start', 'btn-stop', 'btn-reveal', 'btn-score', 'btn-next', 'btn-end'];
             ids.forEach(id => document.getElementById(id).classList.add('hidden'));
 
-            // 隱藏答案公布區
-            document.getElementById('answer-reveal-display').classList.add('hidden');
-
             const selector = document.getElementById('q-selector');
 
             if (state === 'waiting') {
                 answerRevealed = false;
+                // 回到待機時才隱藏答案公布區
+                document.getElementById('answer-reveal-display').classList.add('hidden');
                 selector.disabled = false;
                 document.getElementById('btn-start').classList.remove('hidden');
             } else if (state === 'playing') {
+                // 新題目開始時隱藏答案公布區
+                document.getElementById('answer-reveal-display').classList.add('hidden');
                 selector.disabled = true;
                 document.getElementById('btn-stop').classList.remove('hidden');
             } else if (state === 'stopped') {
@@ -1149,6 +1150,7 @@
             } else if (state === 'revealed') {
                 selector.disabled = true;
                 answerRevealed = true;
+                // revealed 狀態不隱藏答案公布區，讓媒體持續顯示
                 document.getElementById('btn-score').classList.remove('hidden');
             } else if (state === 'scoring') {
                 selector.disabled = true;
@@ -1468,10 +1470,11 @@
                 });
             }
 
-            document.getElementById('opt-count-a').innerText = counts[1];
-            document.getElementById('opt-count-b').innerText = counts[2];
-            document.getElementById('opt-count-c').innerText = counts[3];
-            document.getElementById('opt-count-d').innerText = counts[4];
+            // 公布答案前隱藏各選項人數，公布後才顯示
+            document.getElementById('opt-count-a').innerText = answerRevealed ? counts[1] : '';
+            document.getElementById('opt-count-b').innerText = answerRevealed ? counts[2] : '';
+            document.getElementById('opt-count-c').innerText = answerRevealed ? counts[3] : '';
+            document.getElementById('opt-count-d').innerText = answerRevealed ? counts[4] : '';
 
             // 更新提交進度
             const submittedCount = respondedNames.size;

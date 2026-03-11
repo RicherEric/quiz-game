@@ -427,6 +427,15 @@
                 const correctAnswer = currentQ ? currentQ.answer : null;
                 const myChoice = currentSelection;
 
+                // 取得各選項作答人數
+                let optCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+                const { data: revResponses } = await sbClient.from('responses').select('choice').eq('question_id', status.current_q_id);
+                if (revResponses) {
+                    revResponses.forEach(r => {
+                        if (optCounts[r.choice] !== undefined) optCounts[r.choice]++;
+                    });
+                }
+
                 // 顯示選項區塊，隱藏回饋訊息
                 hideAllUI();
                 document.getElementById('game-ui').classList.remove('hidden');
@@ -437,7 +446,10 @@
                 // 隱藏倒數計時
                 document.getElementById('countdown-container').classList.add('invisible');
 
-                // 為每個選項上色
+                // 選項文字與人數
+                const optTexts = { 1: currentQ.option_a, 2: currentQ.option_b, 3: currentQ.option_c, 4: currentQ.option_d };
+
+                // 為每個選項上色 + 顯示人數
                 for (let i = 1; i <= 4; i++) {
                     const btn = document.getElementById('opt' + i);
                     btn.disabled = true;
@@ -453,6 +465,9 @@
                         btn.classList.add('dimmed-opt');
                         if (optOriginalBg[i]) btn.classList.add(optOriginalBg[i]);
                     }
+
+                    // 在選項上顯示人數
+                    btn.innerHTML = `<span>${optTexts[i]}</span><span class="ml-2 text-lg opacity-80 bg-black/30 px-3 py-1 rounded-full">${optCounts[i]} 人</span>`;
                 }
 
                 // 顯示答案媒體（圖片與影片）
