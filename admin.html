@@ -200,6 +200,15 @@
             <div id="tab-stats" class="space-y-6">
                 <h2 id="stats-q-text" class="text-3xl font-bold text-gold-100 mb-4">請從上方選擇題目...</h2>
 
+                <!-- 題目媒體顯示 -->
+                <div id="media-display" class="hidden mb-4">
+                    <img id="media-image" class="hidden rounded-xl max-h-80 mx-auto" />
+                    <video id="media-video" class="hidden rounded-xl max-h-80 mx-auto" controls></video>
+                    <div id="media-youtube" class="hidden flex justify-center">
+                        <iframe id="youtube-frame" class="rounded-xl w-full max-w-2xl aspect-video" frameborder="0" allowfullscreen></iframe>
+                    </div>
+                </div>
+
                 <!-- 題目選項（點選設定正確答案） -->
                 <div id="q-options-display" class="bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30 hidden">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -514,7 +523,7 @@
     <!-- Question Modal -->
     <div id="question-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
         onclick="if(event.target===this)closeQuestionModal()">
-        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-lg">
+        <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <h2 id="question-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增題目</h2>
             <input type="hidden" id="question-edit-id">
             <div>
@@ -561,6 +570,47 @@
                         class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
                 </div>
             </div>
+            <!-- 圖片媒體 -->
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">圖片（選填）</label>
+                <div class="space-y-2">
+                    <input id="question-image-url" type="text" placeholder="外部圖片 URL"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm"
+                        oninput="previewImageFromUrl(this.value)">
+                    <div class="flex items-center space-x-2">
+                        <label class="cursor-pointer px-4 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition">
+                            上傳圖片
+                            <input id="question-image-file" type="file" accept="image/*" class="hidden" onchange="previewImageFromFile(this)">
+                        </label>
+                        <span id="question-image-filename" class="text-gold-400/60 text-sm truncate"></span>
+                        <button type="button" onclick="clearImageMedia()" class="text-red-400 hover:text-red-200 text-sm font-bold px-2">✕ 清除</button>
+                    </div>
+                    <img id="question-image-preview" class="hidden rounded-xl max-h-48 mx-auto border border-gold-700/30">
+                </div>
+            </div>
+            <!-- 影片媒體 -->
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">影片（選填）</label>
+                <div class="space-y-2">
+                    <input id="question-video-url" type="text" placeholder="外部影片 URL（YouTube 或直連）"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm"
+                        oninput="previewVideoFromUrl(this.value)">
+                    <div class="flex items-center space-x-2">
+                        <label class="cursor-pointer px-4 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition">
+                            上傳影片
+                            <input id="question-video-file" type="file" accept="video/*" class="hidden" onchange="previewVideoFromFile(this)">
+                        </label>
+                        <span id="question-video-filename" class="text-gold-400/60 text-sm truncate"></span>
+                        <button type="button" onclick="clearVideoMedia()" class="text-red-400 hover:text-red-200 text-sm font-bold px-2">✕ 清除</button>
+                    </div>
+                    <div id="question-video-preview-container" class="hidden">
+                        <video id="question-video-preview" class="hidden rounded-xl max-h-48 mx-auto border border-gold-700/30" controls></video>
+                        <div id="question-youtube-preview" class="hidden rounded-xl overflow-hidden mx-auto" style="max-width:400px;">
+                            <iframe id="question-youtube-preview-frame" class="w-full aspect-video" frameborder="0" allowfullscreen></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="flex space-x-3">
                 <button onclick="saveQuestion()"
                     class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-3 rounded-xl font-bold text-lg transition">儲存</button>
@@ -594,6 +644,134 @@
         let selectedAnswer = 0;
         let statsInterval = null;
         let adminChannel = null;
+
+        // ---- Media helpers ----
+        function extractYouTubeId(url) {
+            if (!url) return null;
+            const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+            return m ? m[1] : null;
+        }
+
+        function isStorageUrl(url) {
+            return url && url.includes('question-media');
+        }
+
+        function storagePathFromUrl(url) {
+            // Extract path after /object/public/question-media/
+            const m = url.match(/\/object\/public\/question-media\/(.+)/);
+            return m ? decodeURIComponent(m[1]) : null;
+        }
+
+        async function uploadMedia(file, folder) {
+            const path = `${folder}/${Date.now()}_${file.name}`;
+            const { error } = await sbClient.storage.from('question-media').upload(path, file);
+            if (error) throw error;
+            const { data } = sbClient.storage.from('question-media').getPublicUrl(path);
+            return data.publicUrl;
+        }
+
+        async function deleteStorageFile(url) {
+            const path = storagePathFromUrl(url);
+            if (path) {
+                await sbClient.storage.from('question-media').remove([path]);
+            }
+        }
+
+        // Modal preview helpers
+        function previewImageFromUrl(url) {
+            const img = document.getElementById('question-image-preview');
+            if (url && url.trim()) {
+                img.src = url.trim();
+                img.classList.remove('hidden');
+            } else {
+                img.classList.add('hidden');
+                img.src = '';
+            }
+        }
+
+        function previewImageFromFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            document.getElementById('question-image-filename').textContent = file.name;
+            document.getElementById('question-image-url').value = '';
+            const img = document.getElementById('question-image-preview');
+            img.src = URL.createObjectURL(file);
+            img.classList.remove('hidden');
+        }
+
+        function clearImageMedia() {
+            document.getElementById('question-image-url').value = '';
+            document.getElementById('question-image-file').value = '';
+            document.getElementById('question-image-filename').textContent = '';
+            const img = document.getElementById('question-image-preview');
+            img.classList.add('hidden');
+            img.src = '';
+            // Mark cleared
+            document.getElementById('question-image-url').dataset.cleared = '1';
+        }
+
+        function previewVideoFromUrl(url) {
+            const container = document.getElementById('question-video-preview-container');
+            const video = document.getElementById('question-video-preview');
+            const ytDiv = document.getElementById('question-youtube-preview');
+            const ytFrame = document.getElementById('question-youtube-preview-frame');
+
+            if (!url || !url.trim()) {
+                container.classList.add('hidden');
+                video.classList.add('hidden');
+                ytDiv.classList.add('hidden');
+                return;
+            }
+            url = url.trim();
+            container.classList.remove('hidden');
+            const ytId = extractYouTubeId(url);
+            if (ytId) {
+                video.classList.add('hidden');
+                ytFrame.src = `https://www.youtube.com/embed/${ytId}`;
+                ytDiv.classList.remove('hidden');
+            } else {
+                ytDiv.classList.add('hidden');
+                ytFrame.src = '';
+                video.src = url;
+                video.classList.remove('hidden');
+            }
+        }
+
+        function previewVideoFromFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            document.getElementById('question-video-filename').textContent = file.name;
+            document.getElementById('question-video-url').value = '';
+            const container = document.getElementById('question-video-preview-container');
+            const video = document.getElementById('question-video-preview');
+            const ytDiv = document.getElementById('question-youtube-preview');
+            container.classList.remove('hidden');
+            ytDiv.classList.add('hidden');
+            video.src = URL.createObjectURL(file);
+            video.classList.remove('hidden');
+        }
+
+        function clearVideoMedia() {
+            document.getElementById('question-video-url').value = '';
+            document.getElementById('question-video-file').value = '';
+            document.getElementById('question-video-filename').textContent = '';
+            const container = document.getElementById('question-video-preview-container');
+            const video = document.getElementById('question-video-preview');
+            const ytDiv = document.getElementById('question-youtube-preview');
+            container.classList.add('hidden');
+            video.classList.add('hidden');
+            video.src = '';
+            ytDiv.classList.add('hidden');
+            document.getElementById('question-youtube-preview-frame').src = '';
+            document.getElementById('question-video-url').dataset.cleared = '1';
+        }
+
+        function resetMediaFields() {
+            clearImageMedia();
+            clearVideoMedia();
+            delete document.getElementById('question-image-url').dataset.cleared;
+            delete document.getElementById('question-video-url').dataset.cleared;
+        }
 
         async function initAdmin() {
             // 自動檢查並初始化 game_status 控制資料
@@ -649,6 +827,35 @@
                 document.getElementById('q-options-display').classList.remove('hidden');
                 selectedAnswer = 0;
                 highlightSelectedAnswer(0);
+
+                // 顯示媒體
+                const mediaDisplay = document.getElementById('media-display');
+                const mediaImage = document.getElementById('media-image');
+                const mediaVideo = document.getElementById('media-video');
+                const mediaYoutube = document.getElementById('media-youtube');
+                const ytFrame = document.getElementById('youtube-frame');
+                mediaImage.classList.add('hidden'); mediaImage.src = '';
+                mediaVideo.classList.add('hidden'); mediaVideo.src = '';
+                mediaYoutube.classList.add('hidden'); ytFrame.src = '';
+                let hasMedia = false;
+                if (q.image_url) {
+                    mediaImage.src = q.image_url;
+                    mediaImage.classList.remove('hidden');
+                    hasMedia = true;
+                }
+                if (q.video_url) {
+                    const ytId = extractYouTubeId(q.video_url);
+                    if (ytId) {
+                        ytFrame.src = `https://www.youtube.com/embed/${ytId}`;
+                        mediaYoutube.classList.remove('hidden');
+                    } else {
+                        mediaVideo.src = q.video_url;
+                        mediaVideo.classList.remove('hidden');
+                    }
+                    hasMedia = true;
+                }
+                mediaDisplay.classList.toggle('hidden', !hasMedia);
+
                 fetchCurrentQuestionStats();
             });
 
@@ -2452,7 +2659,7 @@
                 html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30" data-id="${q.id}">
                     <td class="cursor-grab text-center text-gold-400/40 py-3 px-1 text-lg">⠿</td>
                     <td class="text-gold-400/60 py-3 px-3">${i + 1}</td>
-                    <td class="text-gold-200 font-bold py-3 px-3 max-w-[200px] truncate">${q.question}</td>
+                    <td class="text-gold-200 font-bold py-3 px-3 max-w-[200px] truncate">${q.question}${q.image_url ? ' 📷' : ''}${q.video_url ? ' 🎬' : ''}</td>
                     <td class="text-center text-gold-400/80 py-3 px-3 text-xs max-w-[80px] truncate">${q.option_a || '-'}</td>
                     <td class="text-center text-gold-400/80 py-3 px-3 text-xs max-w-[80px] truncate">${q.option_b || '-'}</td>
                     <td class="text-center text-gold-400/80 py-3 px-3 text-xs max-w-[80px] truncate">${q.option_c || '-'}</td>
@@ -2501,6 +2708,7 @@
             document.getElementById('question-points').value = 1000;
             document.getElementById('question-seconds').value = 10;
             document.getElementById('question-modal-title').textContent = '新增題目';
+            resetMediaFields();
 
             if (id) {
                 const q = questions.find(x => x.id === id);
@@ -2515,6 +2723,15 @@
                     document.getElementById('question-points').value = q.points || 1000;
                     document.getElementById('question-seconds').value = q.seconds || 10;
                     document.getElementById('question-modal-title').textContent = '編輯題目';
+                    // Load existing media
+                    if (q.image_url) {
+                        document.getElementById('question-image-url').value = q.image_url;
+                        previewImageFromUrl(q.image_url);
+                    }
+                    if (q.video_url) {
+                        document.getElementById('question-video-url').value = q.video_url;
+                        previewVideoFromUrl(q.video_url);
+                    }
                 }
             }
             document.getElementById('question-modal').classList.remove('hidden');
@@ -2539,6 +2756,60 @@
 
             const row = { question, option_a, option_b, option_c, option_d, answer, points, seconds };
 
+            // Handle image
+            const imageFile = document.getElementById('question-image-file').files[0];
+            const imageUrlInput = document.getElementById('question-image-url').value.trim();
+            const imageCleared = document.getElementById('question-image-url').dataset.cleared === '1';
+            try {
+                if (imageFile) {
+                    // Delete old storage file if replacing
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.image_url && isStorageUrl(oldQ.image_url)) await deleteStorageFile(oldQ.image_url);
+                    }
+                    row.image_url = await uploadMedia(imageFile, 'images');
+                } else if (imageUrlInput) {
+                    // Delete old storage file if replacing with external URL
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.image_url && isStorageUrl(oldQ.image_url)) await deleteStorageFile(oldQ.image_url);
+                    }
+                    row.image_url = imageUrlInput;
+                } else if (imageCleared) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.image_url && isStorageUrl(oldQ.image_url)) await deleteStorageFile(oldQ.image_url);
+                    }
+                    row.image_url = null;
+                }
+
+                // Handle video
+                const videoFile = document.getElementById('question-video-file').files[0];
+                const videoUrlInput = document.getElementById('question-video-url').value.trim();
+                const videoCleared = document.getElementById('question-video-url').dataset.cleared === '1';
+                if (videoFile) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.video_url && isStorageUrl(oldQ.video_url)) await deleteStorageFile(oldQ.video_url);
+                    }
+                    row.video_url = await uploadMedia(videoFile, 'videos');
+                } else if (videoUrlInput) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.video_url && isStorageUrl(oldQ.video_url)) await deleteStorageFile(oldQ.video_url);
+                    }
+                    row.video_url = videoUrlInput;
+                } else if (videoCleared) {
+                    if (id) {
+                        const oldQ = questions.find(x => x.id == id);
+                        if (oldQ && oldQ.video_url && isStorageUrl(oldQ.video_url)) await deleteStorageFile(oldQ.video_url);
+                    }
+                    row.video_url = null;
+                }
+            } catch (uploadErr) {
+                return alert('媒體上傳失敗：' + uploadErr.message);
+            }
+
             if (id) {
                 const { error } = await sbClient.from('questions').update(row).eq('id', id);
                 if (error) return alert('更新失敗：' + error.message);
@@ -2555,6 +2826,12 @@
 
         async function deleteQuestion(id) {
             if (!confirm('確定刪除此題目？')) return;
+            // Clean up storage files
+            const q = questions.find(x => x.id === id);
+            if (q) {
+                if (q.image_url && isStorageUrl(q.image_url)) await deleteStorageFile(q.image_url);
+                if (q.video_url && isStorageUrl(q.video_url)) await deleteStorageFile(q.video_url);
+            }
             const { error } = await sbClient.from('questions').delete().eq('id', id);
             if (error) return alert('刪除失敗：' + error.message);
             await refreshQuestionsAndSelector();
@@ -2584,7 +2861,7 @@
             for (let i = 1; i < lines.length; i++) {
                 const cols = parseCSVLine(lines[i]);
                 if (cols.length < 8) continue;
-                rows.push({
+                const qRow = {
                     question: cols[0],
                     option_a: cols[1],
                     option_b: cols[2],
@@ -2593,7 +2870,10 @@
                     answer: parseInt(cols[5]) || 1,
                     points: parseInt(cols[6]) || 1000,
                     seconds: parseInt(cols[7]) || 10
-                });
+                };
+                if (cols.length > 8 && cols[8].trim()) qRow.image_url = cols[8].trim();
+                if (cols.length > 9 && cols[9].trim()) qRow.video_url = cols[9].trim();
+                rows.push(qRow);
             }
 
             if (rows.length === 0) {
