@@ -142,7 +142,11 @@
                     ⏸️ 停止作答
                 </button>
 
-                <!-- stopped 狀態：結算 -->
+                <!-- stopped 狀態：公布答案 + 結算 -->
+                <button id="btn-reveal" onclick="revealAnswer()"
+                    class="hidden bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 text-white px-8 py-4 rounded-xl font-bold text-xl transition shadow-lg border border-purple-400/50">
+                    🔍 公布答案
+                </button>
                 <button id="btn-score" onclick="doScoring()"
                     class="hidden bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 text-white px-8 py-4 rounded-xl font-bold text-xl transition shadow-lg border border-blue-400/50">
                     💰 結算
@@ -213,6 +217,14 @@
                 <div id="media-display" class="hidden mb-4 space-y-4">
                     <div id="media-images-row" class="hidden flex flex-wrap gap-3 justify-center overflow-x-auto"></div>
                     <div id="media-videos-col" class="hidden space-y-3 flex flex-col items-center"></div>
+                </div>
+
+                <!-- 答案媒體顯示（公布答案時） -->
+                <div id="answer-reveal-display" class="hidden mb-4 space-y-4 bg-green-900/20 p-6 rounded-2xl border-2 border-green-500/40">
+                    <h3 class="text-xl font-bold text-green-300 text-center">📢 答案公布</h3>
+                    <div id="answer-reveal-images-row" class="hidden flex flex-wrap gap-3 justify-center overflow-x-auto"></div>
+                    <div id="answer-reveal-videos-col" class="hidden space-y-3 flex flex-col items-center"></div>
+                    <p id="answer-reveal-none" class="hidden text-green-300/60 text-center">此題無答案媒體</p>
                 </div>
 
                 <!-- 題目選項（點選設定正確答案） -->
@@ -1114,8 +1126,11 @@
 
         function updateControlButtons(state) {
             currentState = state;
-            const ids = ['btn-start', 'btn-stop', 'btn-score', 'btn-next', 'btn-end'];
+            const ids = ['btn-start', 'btn-stop', 'btn-reveal', 'btn-score', 'btn-next', 'btn-end'];
             ids.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+            // 隱藏答案公布區
+            document.getElementById('answer-reveal-display').classList.add('hidden');
 
             const selector = document.getElementById('q-selector');
 
@@ -1127,6 +1142,7 @@
                 document.getElementById('btn-stop').classList.remove('hidden');
             } else if (state === 'stopped') {
                 selector.disabled = true;
+                document.getElementById('btn-reveal').classList.remove('hidden');
                 document.getElementById('btn-score').classList.remove('hidden');
             } else if (state === 'scoring') {
                 selector.disabled = true;
@@ -1197,6 +1213,73 @@
                     switchTab('tab-leaderboard');
                 }
             }
+        }
+
+        // 公布答案：顯示答案媒體
+        function revealAnswer() {
+            const qId = parseInt(document.getElementById('q-selector').value);
+            if (!qId) return;
+            const q = questions.find(x => x.id === qId);
+            if (!q) return;
+
+            const container = document.getElementById('answer-reveal-display');
+            const imagesRow = document.getElementById('answer-reveal-images-row');
+            const videosCol = document.getElementById('answer-reveal-videos-col');
+            const noneMsg = document.getElementById('answer-reveal-none');
+            imagesRow.innerHTML = '';
+            videosCol.innerHTML = '';
+            imagesRow.classList.add('hidden');
+            videosCol.classList.add('hidden');
+            noneMsg.classList.add('hidden');
+
+            const ansImgUrls = (q.answer_image_urls && q.answer_image_urls.length) ? q.answer_image_urls : (q.answer_image_url ? [q.answer_image_url] : []);
+            const ansVidUrls = (q.answer_video_urls && q.answer_video_urls.length) ? q.answer_video_urls : (q.answer_video_url ? [q.answer_video_url] : []);
+
+            let hasMedia = false;
+            if (ansImgUrls.length) {
+                ansImgUrls.forEach(url => {
+                    const img = document.createElement('img');
+                    img.referrerPolicy = 'no-referrer';
+                    img.crossOrigin = 'anonymous';
+                    img.className = 'rounded-xl max-h-80 cursor-zoom-in';
+                    img.src = url;
+                    img.onclick = function() { openLightbox(this.src); };
+                    imagesRow.appendChild(img);
+                });
+                imagesRow.classList.remove('hidden');
+                hasMedia = true;
+            }
+            if (ansVidUrls.length) {
+                ansVidUrls.forEach(url => {
+                    const ytId = extractYouTubeId(url);
+                    if (ytId) {
+                        const div = document.createElement('div');
+                        div.className = 'aspect-video w-full max-w-2xl rounded-2xl overflow-hidden border border-green-500/30 shadow-lg';
+                        const iframe = document.createElement('iframe');
+                        iframe.src = `https://www.youtube.com/embed/${ytId}`;
+                        iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
+                        iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
+                        div.appendChild(iframe);
+                        videosCol.appendChild(div);
+                    } else {
+                        const vid = document.createElement('video');
+                        vid.src = url; vid.controls = true;
+                        vid.className = 'max-h-60 rounded-2xl border border-green-500/30 shadow-lg w-full max-w-2xl';
+                        videosCol.appendChild(vid);
+                    }
+                });
+                videosCol.classList.remove('hidden');
+                hasMedia = true;
+            }
+            if (!hasMedia) noneMsg.classList.remove('hidden');
+
+            container.classList.remove('hidden');
+
+            // 隱藏公布答案按鈕（已公布）
+            document.getElementById('btn-reveal').classList.add('hidden');
+
+            // 確保停留在作答監控頁面
+            switchTab('tab-stats');
         }
 
         // 正確答案選擇
