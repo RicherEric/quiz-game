@@ -125,6 +125,12 @@
 
             <div id="control-panel"
                 class="flex items-center space-x-4 bg-midnight-950 p-3 rounded-2xl border border-gold-800/50">
+                <div id="mode-switch" class="flex rounded-xl overflow-hidden border border-gold-700/50">
+                    <button id="btn-mode-official" onclick="switchMode('official')"
+                        class="px-4 py-2 font-bold text-sm transition bg-emerald-700 text-white">正式</button>
+                    <button id="btn-mode-test" onclick="switchMode('test')"
+                        class="px-4 py-2 font-bold text-sm transition bg-midnight-800 text-gold-400/60 hover:text-gold-300">測試</button>
+                </div>
                 <select id="q-selector"
                     class="bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold text-xl border border-gold-700/50 cursor-pointer w-64">
                     <option value="">載入題目中...</option>
@@ -588,7 +594,7 @@
                         class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
                 </div>
             </div>
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-4 gap-4">
                 <div>
                     <label class="block text-gold-300 font-bold mb-1">正確答案 (1-4)</label>
                     <input id="question-answer" type="number" min="1" max="4" value="1"
@@ -603,6 +609,14 @@
                     <label class="block text-gold-300 font-bold mb-1">秒數</label>
                     <input id="question-seconds" type="number" min="1" value="10"
                         class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">題目類型</label>
+                    <select id="question-type"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                        <option value="official">正式</option>
+                        <option value="test">測試</option>
+                    </select>
                 </div>
             </div>
             <!-- 題目圖片（多張） -->
@@ -717,6 +731,56 @@
         let answerRevealed = false;
         let statsInterval = null;
         let adminChannel = null;
+        let currentMode = 'official';
+
+        // ---- Mode switching ----
+        async function switchMode(mode) {
+            // 防護：若處於進行中狀態，先 confirm 警告
+            if (['playing', 'stopped', 'revealed', 'scoring'].includes(currentState)) {
+                if (!confirm('目前遊戲正在進行中，切換模式將回到待機狀態。確定要切換嗎？')) return;
+                await sbClient.from('game_status').update({
+                    state: 'waiting',
+                    start_time: 0,
+                    mode: mode
+                }).eq('id', 1);
+                updateControlButtons('waiting');
+            } else {
+                await sbClient.from('game_status').update({ mode: mode }).eq('id', 1);
+            }
+
+            currentMode = mode;
+            // 更新按鈕樣式
+            const btnOfficial = document.getElementById('btn-mode-official');
+            const btnTest = document.getElementById('btn-mode-test');
+            if (mode === 'official') {
+                btnOfficial.className = 'px-4 py-2 font-bold text-sm transition bg-emerald-700 text-white';
+                btnTest.className = 'px-4 py-2 font-bold text-sm transition bg-midnight-800 text-gold-400/60 hover:text-gold-300';
+            } else {
+                btnOfficial.className = 'px-4 py-2 font-bold text-sm transition bg-midnight-800 text-gold-400/60 hover:text-gold-300';
+                btnTest.className = 'px-4 py-2 font-bold text-sm transition bg-amber-600 text-white';
+            }
+            populateQuestionSelector();
+            fetchQuestionsTable();
+            fetchLeaderboard();
+        }
+
+        function populateQuestionSelector() {
+            const select = document.getElementById('q-selector');
+            const prevValue = select.value;
+            select.innerHTML = '';
+            const filtered = (questions || []).filter(q => (q.type || 'official') === currentMode);
+            if (filtered.length === 0) {
+                select.innerHTML = '<option value="">(無題目資料)</option>';
+            } else {
+                filtered.forEach((q, idx) => {
+                    select.innerHTML += `<option value="${q.id}">Q${idx + 1}: ${q.question}</option>`;
+                });
+            }
+            if (prevValue && filtered.some(q => q.id == prevValue)) {
+                select.value = prevValue;
+            }
+            select.dispatchEvent(new Event('change'));
+        }
 
         // ---- Media helpers ----
         function extractYouTubeId(url) {
@@ -968,17 +1032,23 @@
 
             // 載入題庫到下拉選單
             const { data: qData } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
-            questions = qData;
-            const select = document.getElementById('q-selector');
-            select.innerHTML = '';
+            questions = qData || [];
 
-            if (!questions || questions.length === 0) {
-                select.innerHTML = '<option value="">(無題目資料)</option>';
-            } else {
-                questions.forEach((q, idx) => {
-                    select.innerHTML += `<option value="${q.id}">Q${idx + 1}: ${q.question}</option>`;
-                });
+            // 讀取 game_status.mode 還原持久化模式
+            const { data: gsMode } = await sbClient.from('game_status').select('mode').eq('id', 1).single();
+            if (gsMode && gsMode.mode) {
+                currentMode = gsMode.mode;
+                // 更新按鈕樣式（不觸發 DB 寫入）
+                const btnOfficial = document.getElementById('btn-mode-official');
+                const btnTest = document.getElementById('btn-mode-test');
+                if (currentMode === 'test') {
+                    btnOfficial.className = 'px-4 py-2 font-bold text-sm transition bg-midnight-800 text-gold-400/60 hover:text-gold-300';
+                    btnTest.className = 'px-4 py-2 font-bold text-sm transition bg-amber-600 text-white';
+                }
             }
+
+            populateQuestionSelector();
+            const select = document.getElementById('q-selector');
 
             // 監聽下拉選單改變，自動讀取該題統計並設定預設正確答案
             select.addEventListener('change', () => {
@@ -1205,7 +1275,8 @@
             const updateData = {
                 current_q_id: parseInt(qId),
                 state: newState,
-                start_time: Date.now()
+                start_time: Date.now(),
+                mode: currentMode
             };
 
             const { data, error } = await sbClient.from('game_status').update(updateData).eq('id', 1).select();
@@ -1372,13 +1443,14 @@
 
                 // 答對的加分（依答題速度加成）
                 let earnedScore = 0;
+                const scoreField = currentMode === 'test' ? 'test_score' : 'score';
                 if (isCorrect) {
                     const remainingMs = Math.max(0, 15000 - (r.response_time_ms || 15000));
                     earnedScore = Math.round(points * (1 + (remainingMs / 15000) * 0.75));
 
-                    const { data: player } = await sbClient.from('players').select('score').eq('name', r.player_name).single();
+                    const { data: player } = await sbClient.from('players').select(scoreField).eq('name', r.player_name).single();
                     if (player) {
-                        await sbClient.from('players').update({ score: player.score + earnedScore }).eq('name', r.player_name);
+                        await sbClient.from('players').update({ [scoreField]: player[scoreField] + earnedScore }).eq('name', r.player_name);
                     }
                 }
 
@@ -1411,7 +1483,8 @@
             const { data, error } = await sbClient.from('game_status').update({
                 current_q_id: parseInt(qId),
                 state: 'waiting',
-                start_time: 0
+                start_time: 0,
+                mode: currentMode
             }).eq('id', 1).select();
 
             if (!error && data && data.length > 0) {
@@ -1436,7 +1509,8 @@
                     const { data, error } = await sbClient.from('game_status').update({
                         current_q_id: parseInt(qId),
                         state: 'waiting',
-                        start_time: 0
+                        start_time: 0,
+                        mode: currentMode
                     }).eq('id', 1).select();
                     if (!error && data && data.length > 0) {
                         updateControlButtons('waiting');
@@ -1445,7 +1519,8 @@
                     // 踢回首頁：發送 dismissed 狀態
                     await sbClient.from('game_status').update({
                         state: 'dismissed',
-                        start_time: 0
+                        start_time: 0,
+                        mode: currentMode
                     }).eq('id', 1).select();
                 }
             }, 1500);
@@ -1546,8 +1621,16 @@
 
         // 讀取總排行榜
         async function fetchLeaderboard() {
-            const { data: players, count } = await sbClient.from('players').select('*', { count: 'exact' }).order('score', { ascending: false });
+            const scoreField = currentMode === 'test' ? 'test_score' : 'score';
+            const { data: players, count } = await sbClient.from('players').select('*', { count: 'exact' }).order(scoreField, { ascending: false });
             document.getElementById('total-players').innerText = count || 0;
+
+            // 更新排行榜標題
+            const titleEl = document.querySelector('#tab-leaderboard h2');
+            if (titleEl) titleEl.innerText = currentMode === 'test' ? '測試排行榜' : '榮耀排行榜';
+            // 更新 tab 按鈕文字
+            const tabBtn = document.getElementById('btn-tab-leaderboard');
+            if (tabBtn) tabBtn.innerHTML = currentMode === 'test' ? '🏆 測試排行榜' : '🏆 總積分排行榜';
 
             const container = document.getElementById('leaderboard-container');
             if (!players || players.length === 0) return container.innerHTML = '<div class="text-center py-10">尚無資料</div>';
@@ -1560,7 +1643,7 @@
                 html += `<div class="grid grid-cols-12 gap-4 items-center px-8 py-4 rounded-xl ${bg}">
                             <div class="col-span-2 text-center font-bold text-xl">${i + 1}${crown}</div>
                             <div class="col-span-6 font-bold text-xl">${p.name}</div>
-                            <div class="col-span-4 text-right font-mono font-black text-2xl text-gold-300">${p.score}</div>
+                            <div class="col-span-4 text-right font-mono font-black text-2xl text-gold-300">${p[scoreField]}</div>
                          </div>`;
             });
             container.innerHTML = html;
@@ -1838,7 +1921,7 @@
                 await sbClient.from('responses').delete().neq('id', 0);
 
                 // 將所有玩家積分歸零
-                await sbClient.from('players').update({ score: 0 }).neq('id', 0);
+                await sbClient.from('players').update({ score: 0, test_score: 0 }).neq('id', 0);
 
                 // 遊戲狀態回到 waiting，題目回到第一題
                 await sbClient.from('game_status').update({
@@ -2879,7 +2962,8 @@
 
         // ===== 玩家管理 =====
         async function fetchPlayersTable() {
-            const { data: players } = await sbClient.from('players').select('*').order('score', { ascending: false });
+            const scoreField = currentMode === 'test' ? 'test_score' : 'score';
+            const { data: players } = await sbClient.from('players').select('*').order(scoreField, { ascending: false });
             const tbody = document.getElementById('players-table-body');
             if (!players || players.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-gold-400/50 text-center py-10">尚無玩家</td></tr>';
@@ -2890,7 +2974,7 @@
                 html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30">
                     <td class="text-gold-400/60 py-3 px-3">${i + 1}</td>
                     <td class="text-gold-200 font-bold py-3 px-3">${p.name}</td>
-                    <td class="text-center text-gold-300 font-bold py-3 px-3">${p.score}</td>
+                    <td class="text-center text-gold-300 font-bold py-3 px-3">${p[scoreField]}</td>
                     <td class="text-right py-3 px-3">
                         <button onclick="deletePlayer('${p.name.replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-200 text-sm font-bold px-3 py-1 rounded-lg bg-midnight-800 border border-red-700/40">刪除</button>
                     </td>
@@ -2943,13 +3027,14 @@
         async function fetchQuestionsTable() {
             const { data: qs } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
             const tbody = document.getElementById('questions-table-body');
-            if (!qs || qs.length === 0) {
+            const filtered = (qs || []).filter(q => (q.type || 'official') === currentMode);
+            if (filtered.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="11" class="text-gold-400/50 text-center py-10">尚無題目</td></tr>';
                 return;
             }
             const answerLabels = { 1: 'A', 2: 'B', 3: 'C', 4: 'D' };
             let html = '';
-            qs.forEach((q, i) => {
+            filtered.forEach((q, i) => {
                 html += `<tr class="border-b border-gold-800/20 hover:bg-midnight-800/30" data-id="${q.id}">
                     <td class="cursor-grab text-center text-gold-400/40 py-3 px-1 text-lg">⠿</td>
                     <td class="text-gold-400/60 py-3 px-3">${i + 1}</td>
@@ -3001,6 +3086,7 @@
             document.getElementById('question-answer').value = 1;
             document.getElementById('question-points').value = 1000;
             document.getElementById('question-seconds').value = 10;
+            document.getElementById('question-type').value = currentMode;
             document.getElementById('question-modal-title').textContent = '新增題目';
             resetMediaFields();
 
@@ -3016,6 +3102,7 @@
                     document.getElementById('question-answer').value = q.answer || 1;
                     document.getElementById('question-points').value = q.points || 1000;
                     document.getElementById('question-seconds').value = q.seconds || 10;
+                    document.getElementById('question-type').value = q.type || 'official';
                     document.getElementById('question-modal-title').textContent = '編輯題目';
                     // Load existing media from array fields (fallback to old single fields)
                     const imgUrls = (q.image_urls && q.image_urls.length) ? q.image_urls : (q.image_url ? [q.image_url] : []);
@@ -3049,10 +3136,11 @@
             const answer = parseInt(document.getElementById('question-answer').value) || 1;
             const points = parseInt(document.getElementById('question-points').value) || 1000;
             const seconds = parseInt(document.getElementById('question-seconds').value) || 10;
+            const type = document.getElementById('question-type').value || currentMode;
 
             if (!question) return alert('請輸入題目文字');
 
-            const row = { question, option_a, option_b, option_c, option_d, answer, points, seconds };
+            const row = { question, option_a, option_b, option_c, option_d, answer, points, seconds, type };
 
             try {
                 // Helper: process a media list, upload pending files, return URL array
@@ -3198,6 +3286,8 @@
                     qRow.answer_video_urls = urls;
                     qRow.answer_video_url = urls[0] || null;
                 }
+                // Column 13 (index 12): type (official/test), defaults to currentMode
+                qRow.type = (cols.length > 12 && cols[12].trim()) ? cols[12].trim() : currentMode;
                 rows.push(qRow);
             }
 
@@ -3255,22 +3345,7 @@
         async function refreshQuestionsAndSelector() {
             const { data: qData } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
             questions = qData || [];
-            const select = document.getElementById('q-selector');
-            const prevValue = select.value;
-            select.innerHTML = '';
-            if (questions.length === 0) {
-                select.innerHTML = '<option value="">(無題目資料)</option>';
-            } else {
-                questions.forEach((q, idx) => {
-                    select.innerHTML += `<option value="${q.id}">Q${idx + 1}: ${q.question}</option>`;
-                });
-            }
-            // 還原先前選取的題目（若仍存在）
-            if (prevValue && questions.some(q => q.id == prevValue)) {
-                select.value = prevValue;
-            }
-            // 觸發 change 事件，同步更新作答監控的題目顯示
-            select.dispatchEvent(new Event('change'));
+            populateQuestionSelector();
             fetchQuestionsTable();
         }
 

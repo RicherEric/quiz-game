@@ -238,6 +238,13 @@ UPDATE public.questions SET video_urls = jsonb_build_array(video_url) WHERE vide
 UPDATE public.questions SET answer_image_urls = jsonb_build_array(answer_image_url) WHERE answer_image_url IS NOT NULL AND answer_image_url != '' AND (answer_image_urls = '[]'::jsonb);
 UPDATE public.questions SET answer_video_urls = jsonb_build_array(answer_video_url) WHERE answer_video_url IS NOT NULL AND answer_video_url != '' AND (answer_video_urls = '[]'::jsonb);
 
+-- 題目類型（正式/測試）
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'official';
+-- 遊戲模式（正式/測試），讓玩家端知道目前模式
+ALTER TABLE public.game_status ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT 'official';
+-- 測試分數獨立累計
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS test_score integer DEFAULT 0;
+
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
 VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')

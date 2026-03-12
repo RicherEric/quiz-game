@@ -121,6 +121,9 @@
         <div id="scoring-ui" class="hidden text-center mt-16 space-y-6">
             <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                 class="h-28 mx-auto drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+            <div id="test-mode-badge" class="hidden">
+                <span class="inline-block bg-amber-600/80 text-white text-sm font-bold px-4 py-1 rounded-full">測試模式</span>
+            </div>
             <p class="text-3xl text-gold-200 font-bold">本題結算完成</p>
 
             <!-- 正確答案 -->
@@ -233,7 +236,7 @@
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
 
-        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [], qrToken = null;
+        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [], qrToken = null, currentMode = 'official';
         let countdownTimer = null;
         const COUNTDOWN_TOTAL = 15000; // 15 seconds in ms
         const COUNTDOWN_CIRCUMFERENCE = 2 * Math.PI * 28; // ~175.93
@@ -388,6 +391,7 @@
         }
 
         async function handleStateChange(status) {
+            currentMode = status.mode || 'official';
             if (status.state === 'waiting') {
                 hideAllUI();
                 document.getElementById('waiting-ui').classList.remove('hidden');
@@ -526,6 +530,9 @@
                 hideAllUI();
                 document.getElementById('scoring-ui').classList.remove('hidden');
 
+                // 顯示/隱藏測試模式 badge
+                document.getElementById('test-mode-badge').classList.toggle('hidden', currentMode !== 'test');
+
                 // 顯示正確答案
                 const scoringAnswer = document.getElementById('scoring-answer');
                 const scoringAnswerText = document.getElementById('scoring-answer-text');
@@ -595,8 +602,9 @@
                 const questionScore = myResponse ? myResponse.scored_points : 0;
                 document.getElementById('scoring-question-score').innerText = `${questionScore} 分`;
 
-                const { data: myPlayer } = await sbClient.from('players').select('score').eq('name', myName).single();
-                const totalScore = myPlayer ? myPlayer.score : 0;
+                const scoreField = currentMode === 'test' ? 'test_score' : 'score';
+                const { data: myPlayer } = await sbClient.from('players').select(scoreField).eq('name', myName).single();
+                const totalScore = myPlayer ? myPlayer[scoreField] : 0;
                 document.getElementById('scoring-total-score').innerText = `${totalScore} 分`;
             }
             else if (status.state === 'ended') {
@@ -604,11 +612,12 @@
                 document.getElementById('end-ui').classList.remove('hidden');
 
                 // 取得排行榜並顯示分數與名次
-                const { data: allPlayers } = await sbClient.from('players').select('*').order('score', { ascending: false });
+                const scoreField = currentMode === 'test' ? 'test_score' : 'score';
+                const { data: allPlayers } = await sbClient.from('players').select('*').order(scoreField, { ascending: false });
                 if (allPlayers) {
                     const myRank = allPlayers.findIndex(p => p.name === myName) + 1;
                     const myData = allPlayers.find(p => p.name === myName);
-                    const myScore = myData ? myData.score : 0;
+                    const myScore = myData ? myData[scoreField] : 0;
                     const crownIcons = { 1: '👑', 2: '👑', 3: '👑' };
                     const crown = crownIcons[myRank] || '';
                     document.getElementById('end-rank').innerHTML = crown ? `${crown} 第 ${myRank} 名 ${crown}` : `第 ${myRank} 名`;
@@ -623,7 +632,7 @@
                         const highlight = isMe ? 'bg-gold-500/20 border border-gold-400/60' : '';
                         top3Html += `<div class="flex items-center justify-between px-6 py-3 rounded-2xl ${highlight}">
                             <span class="text-2xl font-bold text-gold-200">${rankEmojis[i]} ${p.name}${isMe ? '（你）' : ''}</span>
-                            <span class="text-2xl font-black text-gold-300">${p.score} 分</span>
+                            <span class="text-2xl font-black text-gold-300">${p[scoreField]} 分</span>
                         </div>`;
                     });
                     // 如果自己不在前三名，額外顯示自己的排名
