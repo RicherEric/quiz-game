@@ -319,18 +319,20 @@
             </div>
 
             <div id="tab-leaderboard" class="hidden">
+                <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] rounded-3xl p-8 border border-gold-500/25 shadow-xl">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-3xl font-bold text-gold-100">榮耀排行榜</h2>
-                    <p class="text-gold-400/80">參賽總人數: <span id="total-players"
-                            class="font-bold text-2xl text-gold-200">0</span></p>
+                    <p class="text-gold-400/90">參賽總人數: <span id="total-players"
+                            class="font-bold text-2xl text-gold-100">0</span></p>
                 </div>
                 <div
-                    class="bg-midnight-900/80 px-8 py-4 border-b border-gold-700/30 grid grid-cols-12 gap-4 text-gold-400/80 font-bold uppercase text-sm rounded-t-2xl">
+                    class="bg-[#1a2f4d]/90 px-8 py-4 border-b border-gold-500/30 grid grid-cols-12 gap-4 text-gold-300/90 font-bold uppercase text-sm rounded-t-2xl">
                     <div class="col-span-2 text-center">排名</div>
                     <div class="col-span-6">玩家</div>
                     <div class="col-span-4 text-right">積分</div>
                 </div>
                 <div id="leaderboard-container" class="space-y-2 mt-2"></div>
+                </div>
             </div>
 
             <div id="tab-history" class="hidden">
@@ -1748,7 +1750,7 @@
             let html = '';
             players.forEach((p, i) => {
                 const isTop3 = i < 3;
-                const bg = isTop3 ? 'bg-gradient-to-r from-gold-500/20 to-gold-700/20 border border-gold-500/50' : 'bg-midnight-800/50 border border-gold-800/30';
+                const bg = isTop3 ? 'bg-gradient-to-r from-gold-500/25 to-gold-700/20 border border-gold-500/40' : 'bg-[#1e3350]/60 border border-gold-700/15';
                 const crown = isTop3 ? ' 👑' : '';
                 html += `<div class="grid grid-cols-12 gap-4 items-center px-8 py-4 rounded-xl ${bg}">
                             <div class="col-span-2 text-center font-bold text-xl">${i + 1}${crown}</div>
