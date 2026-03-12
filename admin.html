@@ -1053,7 +1053,21 @@
             // 監聽下拉選單改變，自動讀取該題統計並設定預設正確答案
             select.addEventListener('change', () => {
                 const qId = select.value;
-                if (!qId) return;
+                if (!qId) {
+                    // 無題目時清空監控畫面
+                    document.getElementById('stats-q-text').innerText = '請從上方選擇題目...';
+                    document.getElementById('q-options-display').classList.add('hidden');
+                    document.getElementById('media-display').classList.add('hidden');
+                    document.getElementById('answer-reveal-display').classList.add('hidden');
+                    document.getElementById('opt-count-a').innerText = '';
+                    document.getElementById('opt-count-b').innerText = '';
+                    document.getElementById('opt-count-c').innerText = '';
+                    document.getElementById('opt-count-d').innerText = '';
+                    document.getElementById('submitted-count').innerText = '0';
+                    document.getElementById('player-status-list').innerHTML = '';
+                    document.getElementById('submit-progress-bar').style.width = '0%';
+                    return;
+                }
                 const q = questions.find(x => x.id == qId);
                 const qIdx = questions.findIndex(x => x.id == qId);
                 document.getElementById('stats-q-text').innerText = `Q${qIdx + 1}: ${q.question}`;
