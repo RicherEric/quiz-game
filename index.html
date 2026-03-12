@@ -304,8 +304,8 @@
             }
 
             // 載入題目 ID 順序，用於顯示題號
-            const { data: qList } = await sbClient.from('questions').select('id, sort_order').order('sort_order', { ascending: true }).order('id', { ascending: true });
-            questionIdOrder = (qList || []).map(q => q.id);
+            const { data: qList } = await sbClient.from('questions').select('id, sort_order, type').order('sort_order', { ascending: true }).order('id', { ascending: true });
+            questionIdOrder = qList || [];
 
             document.getElementById('user-display').innerText = myName;
             document.getElementById('login-ui').classList.add('hidden');
@@ -723,7 +723,8 @@
         }
 
         function refreshUI(q) {
-            const qNum = questionIdOrder.indexOf(q.id) + 1 || q.id;
+            const filteredByMode = questionIdOrder.filter(x => (x.type || 'official') === currentMode);
+            const qNum = filteredByMode.findIndex(x => x.id === q.id) + 1 || q.id;
             document.getElementById('q-category').innerText = `Question ${qNum}`;
             document.getElementById('q-text').innerText = q.question;
             document.getElementById('opt1').innerText = q.option_a;
