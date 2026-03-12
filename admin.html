@@ -150,6 +150,12 @@
                     ▶️ 開放作答
                 </button>
 
+                <!-- playing 狀態：重新推播（讓漏接的玩家收到） -->
+                <button id="btn-rebroadcast" onclick="reBroadcast()"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-cyan-400/50">
+                    🔄 重新推播
+                </button>
+
                 <!-- playing 狀態：停止作答 -->
                 <button id="btn-stop" onclick="changeState('stopped')"
                     class="hidden flex-1 md:flex-none bg-gradient-to-r from-amber-600 to-amber-800 hover:from-amber-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-amber-400/50">
@@ -1267,7 +1273,7 @@
 
         function updateControlButtons(state) {
             currentState = state;
-            const ids = ['btn-start', 'btn-stop', 'btn-reveal', 'btn-score', 'btn-next', 'btn-end'];
+            const ids = ['btn-start', 'btn-rebroadcast', 'btn-stop', 'btn-reveal', 'btn-score', 'btn-next', 'btn-end'];
             ids.forEach(id => document.getElementById(id).classList.add('hidden'));
 
             const selector = document.getElementById('q-selector');
@@ -1289,6 +1295,7 @@
                 // 新題目開始時隱藏答案公布區
                 document.getElementById('answer-reveal-display').classList.add('hidden');
                 selector.disabled = true;
+                document.getElementById('btn-rebroadcast').classList.remove('hidden');
                 document.getElementById('btn-stop').classList.remove('hidden');
             } else if (state === 'stopped') {
                 selector.disabled = true;
@@ -1374,6 +1381,23 @@
                     fetchLeaderboard();
                     switchTab('tab-leaderboard');
                 }
+            }
+        }
+
+        // 重新推播：只更新 start_time 觸發廣播，不影響已在作答的玩家
+        async function reBroadcast() {
+            const selectEl = document.getElementById('q-selector');
+            const qId = selectEl.value;
+            if (!qId) return;
+
+            const { error } = await sbClient.from('game_status')
+                .update({ start_time: Date.now() })
+                .eq('id', 1);
+
+            if (error) {
+                alert(`重新推播失敗：${error.message}`);
+            } else {
+                console.log('已重新推播，讓漏接的玩家收到開放作答指令');
             }
         }
 
