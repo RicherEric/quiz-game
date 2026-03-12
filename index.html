@@ -138,6 +138,12 @@
                 <div id="scoring-videos-col" class="space-y-3 flex flex-col items-center"></div>
             </div>
 
+            <!-- 答案 Note 註記（scoring 狀態） -->
+            <div id="scoring-note" class="hidden bg-green-900/30 px-5 py-4 rounded-2xl border border-green-500/30">
+                <p class="text-sm text-green-300/70 font-bold mb-1">📝 Note</p>
+                <p id="scoring-note-text" class="text-green-200 font-bold text-lg whitespace-pre-wrap"></p>
+            </div>
+
             <!-- 本題積分 -->
             <div class="bg-midnight-900/50 px-8 py-6 rounded-2xl border border-gold-700/30">
                 <p class="text-lg text-gold-300/70 mb-1">您本題獲得的積分</p>
@@ -210,6 +216,11 @@
             <div id="reveal-media" class="hidden space-y-3 mt-4">
                 <div id="reveal-images-row" class="flex overflow-x-auto snap-x gap-3 justify-center"></div>
                 <div id="reveal-videos-col" class="space-y-3 flex flex-col items-center"></div>
+            </div>
+            <!-- 答案 Note 註記（revealed 狀態） -->
+            <div id="reveal-note" class="hidden mt-4 bg-green-900/30 px-5 py-4 rounded-2xl border border-green-500/30">
+                <p class="text-sm text-green-300/70 font-bold mb-1">📝 Note</p>
+                <p id="reveal-note-text" class="text-green-200 font-bold text-lg whitespace-pre-wrap"></p>
             </div>
         </div>
 
@@ -524,6 +535,15 @@
                     }
                 }
                 revealMedia.classList.toggle('hidden', !hasRevealMedia);
+
+                // 顯示答案 Note 註記
+                const revealNoteEl = document.getElementById('reveal-note');
+                if (currentQ && currentQ.answer_note) {
+                    document.getElementById('reveal-note-text').innerText = currentQ.answer_note;
+                    revealNoteEl.classList.remove('hidden');
+                } else {
+                    revealNoteEl.classList.add('hidden');
+                }
             }
             else if (status.state === 'scoring') {
                 stopCountdown();
@@ -596,6 +616,15 @@
                     }
                 }
                 scoringMedia.classList.toggle('hidden', !hasAnswerMedia);
+
+                // 顯示答案 Note 註記
+                const scoringNoteEl = document.getElementById('scoring-note');
+                if (currentQ && currentQ.answer_note) {
+                    document.getElementById('scoring-note-text').innerText = currentQ.answer_note;
+                    scoringNoteEl.classList.remove('hidden');
+                } else {
+                    scoringNoteEl.classList.add('hidden');
+                }
 
                 // 取得本題積分與累計積分
                 const { data: myResponse } = await sbClient.from('responses').select('scored_points').eq('player_name', myName).eq('question_id', status.current_q_id).single();
@@ -674,8 +703,9 @@
                 const bg = optOriginalBg[idx + 1];
                 if (bg && !btn.classList.contains(bg)) btn.classList.add(bg);
             });
-            // 隱藏公布答案媒體
+            // 隱藏公布答案媒體與註記
             document.getElementById('reveal-media').classList.add('hidden');
+            document.getElementById('reveal-note').classList.add('hidden');
             // Reset countdown display
             document.getElementById('countdown-container').classList.remove('invisible');
             document.getElementById('countdown-text').innerText = '15.0';

@@ -101,6 +101,14 @@
         </div>
     </div>
 
+    <!-- 開放作答計時器（固定右上角） -->
+    <div id="playing-timer" class="hidden fixed top-4 right-4 z-50 bg-midnight-900/90 border-2 border-orange-500 rounded-2xl px-5 py-3 shadow-2xl backdrop-blur-sm">
+        <div class="text-center">
+            <p class="text-xs font-bold text-orange-300/80 mb-1">作答經過時間</p>
+            <span id="playing-timer-text" class="text-3xl font-black text-orange-400 tabular-nums">0s</span>
+        </div>
+    </div>
+
     <!-- 管理介面（登入後顯示） -->
     <div id="admin-panel" class="hidden max-w-7xl mx-auto space-y-8">
         <header
@@ -231,6 +239,10 @@
                     <div id="answer-reveal-images-row" class="hidden flex flex-wrap gap-3 justify-center overflow-x-auto"></div>
                     <div id="answer-reveal-videos-col" class="hidden space-y-3 flex flex-col items-center"></div>
                     <p id="answer-reveal-none" class="hidden text-green-300/60 text-center">此題無答案媒體</p>
+                    <div id="answer-reveal-note" class="hidden bg-green-900/30 px-5 py-3 rounded-xl border border-green-500/30 mt-2">
+                        <p class="text-sm text-green-300/70 font-bold mb-1">📝 Note</p>
+                        <p id="answer-reveal-note-text" class="text-green-200 font-bold whitespace-pre-wrap"></p>
+                    </div>
                 </div>
 
                 <!-- 題目選項（點選設定正確答案） -->
@@ -696,6 +708,12 @@
                             class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+ 新增</button>
                     </div>
                 </div>
+            </div>
+            <!-- 答案註記 -->
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">答案 Note 註記（選填，公布答案時顯示）</label>
+                <textarea id="question-answer-note" rows="3" placeholder="輸入答案的補充說明或註記..."
+                    class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm resize-y"></textarea>
             </div>
             <div class="flex space-x-3">
                 <button onclick="saveQuestion()"
@@ -1211,6 +1229,41 @@
         }
 
         let currentState = 'waiting';
+        let playingTimerInterval = null;
+
+        function startPlayingTimer() {
+            stopPlayingTimer();
+            const timerEl = document.getElementById('playing-timer');
+            const textEl = document.getElementById('playing-timer-text');
+            const timerStart = Date.now();
+            timerEl.classList.remove('hidden');
+            // Reset to orange style
+            timerEl.classList.remove('border-red-500');
+            timerEl.classList.add('border-orange-500');
+            textEl.classList.remove('text-red-400');
+            textEl.classList.add('text-orange-400');
+            textEl.innerText = '0s';
+
+            playingTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - timerStart) / 1000);
+                textEl.innerText = elapsed + 's';
+                // 超過 30 秒變紅色
+                if (elapsed >= 30) {
+                    timerEl.classList.remove('border-orange-500');
+                    timerEl.classList.add('border-red-500');
+                    textEl.classList.remove('text-orange-400');
+                    textEl.classList.add('text-red-400');
+                }
+            }, 200);
+        }
+
+        function stopPlayingTimer() {
+            if (playingTimerInterval) {
+                clearInterval(playingTimerInterval);
+                playingTimerInterval = null;
+            }
+            document.getElementById('playing-timer').classList.add('hidden');
+        }
 
         function updateControlButtons(state) {
             currentState = state;
@@ -1218,6 +1271,13 @@
             ids.forEach(id => document.getElementById(id).classList.add('hidden'));
 
             const selector = document.getElementById('q-selector');
+
+            // 計時器：只在 playing 狀態顯示
+            if (state === 'playing') {
+                startPlayingTimer();
+            } else {
+                stopPlayingTimer();
+            }
 
             if (state === 'waiting') {
                 answerRevealed = false;
@@ -1390,6 +1450,16 @@
             }
             if (!hasMedia) noneMsg.classList.remove('hidden');
 
+            // 顯示答案 Note 註記
+            const noteEl = document.getElementById('answer-reveal-note');
+            const noteTextEl = document.getElementById('answer-reveal-note-text');
+            if (q.answer_note) {
+                noteTextEl.innerText = q.answer_note;
+                noteEl.classList.remove('hidden');
+            } else {
+                noteEl.classList.add('hidden');
+            }
+
             container.classList.remove('hidden');
 
             // 標記答案已公布，重新渲染玩家列表以顯示選項顏色
@@ -1504,6 +1574,7 @@
 
             if (!error && data && data.length > 0) {
                 updateControlButtons('waiting');
+                switchTab('tab-stats');
             }
         }
 
@@ -3102,6 +3173,7 @@
             document.getElementById('question-points').value = 1000;
             document.getElementById('question-seconds').value = 10;
             document.getElementById('question-type').value = currentMode;
+            document.getElementById('question-answer-note').value = '';
             document.getElementById('question-modal-title').textContent = '新增題目';
             resetMediaFields();
 
@@ -3118,6 +3190,7 @@
                     document.getElementById('question-points').value = q.points || 1000;
                     document.getElementById('question-seconds').value = q.seconds || 10;
                     document.getElementById('question-type').value = q.type || 'official';
+                    document.getElementById('question-answer-note').value = q.answer_note || '';
                     document.getElementById('question-modal-title').textContent = '編輯題目';
                     // Load existing media from array fields (fallback to old single fields)
                     const imgUrls = (q.image_urls && q.image_urls.length) ? q.image_urls : (q.image_url ? [q.image_url] : []);
@@ -3152,10 +3225,11 @@
             const points = parseInt(document.getElementById('question-points').value) || 1000;
             const seconds = parseInt(document.getElementById('question-seconds').value) || 10;
             const type = document.getElementById('question-type').value || currentMode;
+            const answer_note = document.getElementById('question-answer-note').value.trim() || null;
 
             if (!question) return alert('請輸入題目文字');
 
-            const row = { question, option_a, option_b, option_c, option_d, answer, points, seconds, type };
+            const row = { question, option_a, option_b, option_c, option_d, answer, points, seconds, type, answer_note };
 
             try {
                 // Helper: process a media list, upload pending files, return URL array
@@ -3303,6 +3377,10 @@
                 }
                 // Column 13 (index 12): type (official/test), defaults to currentMode
                 qRow.type = (cols.length > 12 && cols[12].trim()) ? cols[12].trim() : currentMode;
+                // Column 14 (index 13): answer_note
+                if (cols.length > 13 && cols[13].trim()) {
+                    qRow.answer_note = cols[13].trim();
+                }
                 rows.push(qRow);
             }
 

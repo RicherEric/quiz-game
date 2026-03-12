@@ -188,6 +188,9 @@ ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS sort_order integer NOT NUL
 
 ALTER TABLE public.responses ADD COLUMN IF NOT EXISTS scored_points integer NOT NULL DEFAULT 0;
 
+-- questions: 答案註記
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS answer_note text;
+
 -- lottery_winners: 備註欄位、群組抽獎支援
 ALTER TABLE public.lottery_winners ADD COLUMN IF NOT EXISTS note text;
 ALTER TABLE public.lottery_winners ADD COLUMN IF NOT EXISTS group_id integer REFERENCES public.lottery_groups(id) ON DELETE CASCADE;
