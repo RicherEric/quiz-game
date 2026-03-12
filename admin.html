@@ -736,7 +736,8 @@
         }
 
         async function uploadMedia(file, folder) {
-            const path = `${folder}/${Date.now()}_${file.name}`;
+            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const path = `${folder}/${Date.now()}_${safeName}`;
             const { error } = await sbClient.storage.from('question-media').upload(path, file);
             if (error) throw error;
             const { data } = sbClient.storage.from('question-media').getPublicUrl(path);
