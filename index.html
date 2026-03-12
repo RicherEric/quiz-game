@@ -22,7 +22,7 @@
     </script>
     <style>
         .option-btn {
-            @apply w-full py-8 text-3xl font-bold text-white rounded-2xl shadow-lg transform transition-all active:scale-95 disabled:grayscale-[0.5] disabled:opacity-50;
+            @apply w-full py-5 text-2xl font-bold text-white rounded-2xl shadow-lg transform transition-all active:scale-95 disabled:grayscale-[0.5] disabled:opacity-50;
         }
 
         .selected-opt {
@@ -81,10 +81,10 @@
     <div id="app" class="max-w-3xl mx-auto p-6">
 
         <div id="no-token-ui" class="hidden text-center mt-16 space-y-8">
-            <div class="flex flex-col items-center justify-center space-y-6">
+            <div class="flex flex-col items-center justify-center space-y-6 bg-amber-50 p-8 rounded-3xl">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-32 md:h-40 drop-shadow-[0_0_15px_rgba(255,210,100,0.2)]">
-                <h1 class="text-5xl md:text-6xl font-black text-gold-gradient tracking-tight drop-shadow-lg">滙智 10 週年挑戰賽
+                <h1 class="text-5xl md:text-6xl font-black text-teal-900 tracking-tight drop-shadow-lg">滙智 10 週年挑戰賽
                 </h1>
             </div>
             <div class="bg-midnight-900/50 p-8 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm">
@@ -94,10 +94,10 @@
         </div>
 
         <div id="login-ui" class="text-center mt-16 space-y-8">
-            <div class="flex flex-col items-center justify-center space-y-6">
+            <div class="flex flex-col items-center justify-center space-y-6 bg-amber-50 p-8 rounded-3xl">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-32 md:h-40 drop-shadow-[0_0_15px_rgba(255,210,100,0.2)]">
-                <h1 class="text-5xl md:text-6xl font-black text-gold-gradient tracking-tight drop-shadow-lg">滙智 10 週年挑戰賽
+                <h1 class="text-5xl md:text-6xl font-black text-teal-900 tracking-tight drop-shadow-lg">滙智 10 週年挑戰賽
                 </h1>
             </div>
             <div class="bg-midnight-900/50 p-8 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm">
@@ -165,7 +165,7 @@
 
         <div id="game-ui" class="hidden space-y-6">
             <div
-                class="flex justify-center items-center bg-midnight-900/70 p-5 rounded-3xl border-2 border-gold-600/40">
+                class="flex justify-center items-center bg-amber-50 p-5 rounded-3xl border-2 border-gold-600/40">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-12 opacity-80">
             </div>
@@ -194,18 +194,18 @@
                 </div>
             </div>
 
-            <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <button onclick="selectOption(1)" id="opt1"
-                    class="option-btn bg-blue-900 border-2 border-gold-600/50 text-2xl font-bold py-4">A</button>
+                    class="option-btn bg-blue-900 border-2 border-gold-600/50 text-xl font-bold py-3">A</button>
 
                 <button onclick="selectOption(2)" id="opt2"
-                    class="option-btn bg-indigo-900 border-2 border-gold-600/50 text-2xl font-bold py-4">B</button>
+                    class="option-btn bg-indigo-900 border-2 border-gold-600/50 text-xl font-bold py-3">B</button>
 
                 <button onclick="selectOption(3)" id="opt3"
-                    class="option-btn bg-sky-900 border-2 border-gold-600/50 text-2xl font-bold py-4">C</button>
+                    class="option-btn bg-sky-900 border-2 border-gold-600/50 text-xl font-bold py-3">C</button>
 
                 <button onclick="selectOption(4)" id="opt4"
-                    class="option-btn bg-cyan-900 border-2 border-gold-600/50 text-2xl font-bold py-4">D</button>
+                    class="option-btn bg-cyan-900 border-2 border-gold-600/50 text-xl font-bold py-3">D</button>
             </div>
 
             <button id="submit-btn" onclick="submitAnswer()"
