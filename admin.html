@@ -731,8 +731,9 @@
 
         function storagePathFromUrl(url) {
             // Extract path after /object/public/question-media/
+            // Do NOT decodeURIComponent — Supabase storage keys must stay as-is
             const m = url.match(/\/object\/public\/question-media\/(.+)/);
-            return m ? decodeURIComponent(m[1]) : null;
+            return m ? m[1] : null;
         }
 
         async function uploadMedia(file, folder) {
@@ -3085,7 +3086,10 @@
                             ...mediaLists['answer-videos'].filter(i => !i.pendingUpload).map(i => i.url),
                         ]);
                         for (const oldUrl of oldAllUrls) {
-                            if (!newKeptUrls.has(oldUrl)) await deleteStorageFile(oldUrl);
+                            if (!newKeptUrls.has(oldUrl)) {
+                                try { await deleteStorageFile(oldUrl); }
+                                catch (e) { console.warn('刪除舊檔案失敗（已忽略）:', e.message); }
+                            }
                         }
                     }
                 }
@@ -3129,7 +3133,10 @@
                     q.image_url, q.video_url, q.answer_image_url, q.answer_video_url
                 ].filter(u => u && isStorageUrl(u));
                 const uniqueUrls = [...new Set(allUrls)];
-                for (const u of uniqueUrls) await deleteStorageFile(u);
+                for (const u of uniqueUrls) {
+                    try { await deleteStorageFile(u); }
+                    catch (e) { console.warn('刪除舊檔案失敗（已忽略）:', e.message); }
+                }
             }
             const { error } = await sbClient.from('questions').delete().eq('id', id);
             if (error) return alert('刪除失敗：' + error.message);
