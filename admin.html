@@ -1069,7 +1069,8 @@
                     return;
                 }
                 const q = questions.find(x => x.id == qId);
-                const qIdx = questions.findIndex(x => x.id == qId);
+                const filtered = (questions || []).filter(q => (q.type || 'official') === currentMode);
+                const qIdx = filtered.findIndex(x => x.id == qId);
                 document.getElementById('stats-q-text').innerText = `Q${qIdx + 1}: ${q.question}`;
                 // 顯示選項內容
                 document.getElementById('opt-text-a').innerText = q.option_a || '—';
