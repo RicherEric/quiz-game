@@ -444,7 +444,10 @@
             }
         }
 
+        let stateVersion = 0; // 防止並發 handleStateChange 的競態條件
+
         async function handleStateChange(status) {
+            const myVersion = ++stateVersion;
             currentMode = status.mode || 'official';
             if (status.state === 'waiting') {
                 hideAllUI();
@@ -455,6 +458,7 @@
                 if (currentQ && currentQ.id === status.current_q_id && !document.getElementById('game-ui').classList.contains('hidden')) return;
 
                 const { data: q } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
+                if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
                 if (q) {
                     currentQ = q;
                     hasAnswered = false;
@@ -480,7 +484,11 @@
 
                 // 重新取得題目資料（含正確答案）
                 const { data: revQ } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
+                if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
                 if (revQ) currentQ = revQ;
+
+                // 同步刷新題目文字、題號與題目媒體（防止中途進場或重整時只有選項刷新）
+                if (currentQ) refreshUI(currentQ);
 
                 const correctAnswer = currentQ ? currentQ.answer : null;
                 const myChoice = currentSelection;
@@ -488,6 +496,7 @@
                 // 取得各選項作答人數
                 let optCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
                 const { data: revResponses } = await sbClient.from('responses').select('choice').eq('question_id', status.current_q_id);
+                if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
                 if (revResponses) {
                     revResponses.forEach(r => {
                         if (optCounts[r.choice] !== undefined) optCounts[r.choice]++;
