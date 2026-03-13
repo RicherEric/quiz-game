@@ -48,6 +48,19 @@
             transition: stroke-dashoffset 0.1s linear;
         }
 
+        /* 手動同步按鈕 */
+        .sync-btn {
+            @apply fixed top-4 right-4 z-50 bg-gold-600/80 hover:bg-gold-500 text-midnight-950 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all active:scale-90;
+            backdrop-filter: blur(8px);
+        }
+        .sync-btn.syncing svg {
+            animation: spin-sync 0.6s linear;
+        }
+        @keyframes spin-sync {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
         @keyframes slide-up {
             from { transform: translateY(100%); }
             to { transform: translateY(0); }
@@ -78,6 +91,15 @@
 </head>
 
 <body class="bg-midnight-900 text-gold-100 font-sans min-h-screen">
+    <!-- 手動同步按鈕（登入後才顯示） -->
+    <button id="sync-btn" class="sync-btn hidden" onclick="manualRefresh()" title="同步題目狀態">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+    </button>
+
     <div id="app" class="max-w-3xl mx-auto p-6">
 
         <div id="no-token-ui" class="hidden text-center mt-16 space-y-8">
@@ -296,6 +318,7 @@
                 document.getElementById('user-display').innerText = myName;
                 document.getElementById('login-ui').classList.add('hidden');
                 document.getElementById('waiting-ui').classList.remove('hidden');
+                document.getElementById('sync-btn').classList.remove('hidden');
                 listenToHost();
                 return;
             }
@@ -329,6 +352,7 @@
             document.getElementById('user-display').innerText = myName;
             document.getElementById('login-ui').classList.add('hidden');
             document.getElementById('waiting-ui').classList.remove('hidden');
+            document.getElementById('sync-btn').classList.remove('hidden');
 
             listenToHost();
         }
@@ -711,6 +735,7 @@
                 lastProcessedKey = '';
                 document.getElementById('p-name').value = '';
                 document.getElementById('login-ui').classList.remove('hidden');
+                document.getElementById('sync-btn').classList.add('hidden');
             }
         }
 
@@ -850,6 +875,28 @@
             lastProcessedKey = '';
             document.getElementById('p-name').value = '';
             document.getElementById('login-ui').classList.remove('hidden');
+            document.getElementById('sync-btn').classList.add('hidden');
+        }
+
+        // 手動同步：強制重新取得當前題目狀態
+        async function manualRefresh() {
+            const btn = document.getElementById('sync-btn');
+            if (btn.classList.contains('syncing')) return; // 防止連點
+            btn.classList.add('syncing');
+
+            try {
+                const { data } = await sbClient.from('game_status').select('*').eq('id', 1).single();
+                if (data) {
+                    // 強制重新處理（清除 lastProcessedKey 讓 handleStateChange 執行）
+                    lastProcessedKey = '';
+                    handleStateChange(data);
+                }
+            } catch (e) {
+                console.error('手動同步失敗:', e);
+            }
+
+            // 動畫結束後移除 syncing class
+            setTimeout(() => btn.classList.remove('syncing'), 600);
         }
 
     </script>
