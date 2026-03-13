@@ -116,6 +116,7 @@
                         class="text-gold-gradient"></span></h2>
                 <p class="text-2xl text-gold-200/80 leading-relaxed">請看大螢幕，<br>等待主持人開放作答...</p>
             </div>
+            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
         </div>
 
         <div id="scoring-ui" class="hidden text-center mt-16 space-y-6">
@@ -161,6 +162,7 @@
                 <div class="animate-spin rounded-full h-8 w-8 border-b-3 border-gold-400"></div>
                 <p class="text-xl text-gold-200/50">等待主持人進入下一題...</p>
             </div>
+            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
         </div>
 
         <div id="game-ui" class="hidden space-y-6">
@@ -222,6 +224,7 @@
                 <p class="text-sm text-green-300/70 font-bold mb-1">📝 Note</p>
                 <p id="reveal-note-text" class="text-green-200 font-bold text-lg whitespace-pre-wrap"></p>
             </div>
+            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors mt-4">退出遊戲</button>
         </div>
 
         <div id="end-ui" class="hidden text-center mt-20 space-y-8">
@@ -283,6 +286,19 @@
                 }
             }
             console.log("Supabase 初始化成功，已匿名登入");
+
+            // 重新整理恢復：若 sessionStorage 中有已保存的暱稱，自動重新加入
+            const savedName = sessionStorage.getItem('quiz_player_name');
+            if (savedName) {
+                myName = savedName;
+                const { data: qList } = await sbClient.from('questions').select('id, sort_order, type').order('sort_order', { ascending: true }).order('id', { ascending: true });
+                questionIdOrder = qList || [];
+                document.getElementById('user-display').innerText = myName;
+                document.getElementById('login-ui').classList.add('hidden');
+                document.getElementById('waiting-ui').classList.remove('hidden');
+                listenToHost();
+                return;
+            }
         };
 
         async function join() {
@@ -309,6 +325,7 @@
             const { data: qList } = await sbClient.from('questions').select('id, sort_order, type').order('sort_order', { ascending: true }).order('id', { ascending: true });
             questionIdOrder = qList || [];
 
+            sessionStorage.setItem('quiz_player_name', myName);
             document.getElementById('user-display').innerText = myName;
             document.getElementById('login-ui').classList.add('hidden');
             document.getElementById('waiting-ui').classList.remove('hidden');
@@ -682,6 +699,7 @@
             }
             else if (status.state === 'dismissed') {
                 // 被踢回首頁：清除狀態，回到輸入暱稱畫面
+                sessionStorage.removeItem('quiz_player_name');
                 hideAllUI();
                 if (channel) { sbClient.removeChannel(channel); channel = null; }
                 if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
@@ -792,6 +810,22 @@
             fb.innerText = msg;
             fb.classList.remove('hidden');
             fb.className = "text-center p-8 rounded-3xl text-3xl font-black bg-midnight-900/50 text-gold-200 border-2 border-gold-600 block mt-6";
+        }
+
+        function exitGame() {
+            if (!confirm('確定要退出遊戲嗎？')) return;
+            sessionStorage.removeItem('quiz_player_name');
+            hideAllUI();
+            if (channel) { sbClient.removeChannel(channel); channel = null; }
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+            stopCountdown();
+            myName = '';
+            currentQ = null;
+            hasAnswered = false;
+            currentSelection = 0;
+            lastProcessedKey = '';
+            document.getElementById('p-name').value = '';
+            document.getElementById('login-ui').classList.remove('hidden');
         }
 
     </script>

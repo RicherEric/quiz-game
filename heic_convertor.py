@@ -16,6 +16,6 @@ def convert_heic_to_jpg(heic_path):
     return output_path
 
 if __name__ == "__main__":
-    heic_file = r"C:\Users\Eric.Ko\Downloads\20250922_120504111_iOS.heic"  # 替換為你的 HEIC 文件路徑
+    heic_file = r"D:\User\Developer\quiz-game\group_data\20250925_115644701_iOS.heic"  # 替換為你的 HEIC 文件路徑
     jpg_file = convert_heic_to_jpg(heic_file)
     print(f"已將 {heic_file} 轉換為 {jpg_file}")
