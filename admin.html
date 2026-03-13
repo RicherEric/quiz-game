@@ -322,8 +322,14 @@
                 <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] rounded-3xl p-8 border border-gold-500/25 shadow-xl">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-3xl font-bold text-gold-100">榮耀排行榜</h2>
-                    <p class="text-gold-400/90">參賽總人數: <span id="total-players"
-                            class="font-bold text-2xl text-gold-100">0</span></p>
+                    <div class="flex items-center gap-4">
+                        <p class="text-gold-400/90">參賽總人數: <span id="total-players"
+                                class="font-bold text-2xl text-gold-100">0</span></p>
+                        <button onclick="exportLeaderboardPDF()"
+                            class="px-5 py-2 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg text-sm">
+                            📄 匯出 PDF
+                        </button>
+                    </div>
                 </div>
                 <div
                     class="bg-[#1a2f4d]/90 px-8 py-4 border-b border-gold-500/30 grid grid-cols-12 gap-4 text-gold-300/90 font-bold uppercase text-sm rounded-t-2xl">
@@ -2597,6 +2603,75 @@
                 await html2pdf().set({
                     margin: [15, 10, 15, 10],
                     filename: `中獎紀錄_${dateStr.replace(/\//g, '')}.pdf`,
+                    image: { type: 'jpeg', quality: 0.95 },
+                    html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                }).from(container).save();
+            } catch (e) {
+                console.error('PDF export error:', e);
+                alert('PDF 匯出失敗，請稍後再試');
+            } finally {
+                document.body.removeChild(wrapper);
+            }
+        }
+
+        async function exportLeaderboardPDF() {
+            const scoreField = currentMode === 'test' ? 'test_score' : 'score';
+            const { data: players } = await sbClient.from('players').select('*').order(scoreField, { ascending: false });
+            if (!players || players.length === 0) return alert('尚無排行榜資料可匯出');
+
+            // 讓使用者輸入標題以分辨不同回合
+            const customTitle = prompt('請輸入 PDF 標題（例如：第一回合總積分）：', currentMode === 'test' ? '測試排行榜' : '總積分排行榜');
+            if (customTitle === null) return; // 使用者按取消
+
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            // 建立排行榜表格內容
+            let rows = '';
+            players.forEach((p, i) => {
+                const rank = i + 1;
+                const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+                const bgColor = rank <= 3 ? '#fdf6e3' : (i % 2 === 0 ? '#ffffff' : '#fafafa');
+                const fontWeight = rank <= 3 ? '800' : '400';
+                rows += `<tr style="background:${bgColor};border-bottom:1px solid #eee;">
+                    <td style="padding:8px 12px;text-align:center;font-size:14px;font-weight:${fontWeight};color:#666;width:50px;">${rank}</td>
+                    <td style="padding:8px 12px;font-size:14px;font-weight:${fontWeight};">${medal} ${p.name}</td>
+                    <td style="padding:8px 12px;text-align:right;font-size:14px;font-weight:700;color:#8b6508;width:100px;">${p[scoreField]}</td>
+                </tr>`;
+            });
+
+            const container = document.createElement('div');
+            container.style.cssText = 'width:190mm;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;color:#1a1a1a;background:#fff;';
+            container.innerHTML = `
+                <div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #b8860b;margin-bottom:20px;">
+                    <h1 style="font-size:24px;font-weight:900;color:#8b6508;margin:0;">🏆 ${customTitle || '總積分排行榜'}</h1>
+                    <div style="font-size:12px;color:#888;margin-top:4px;">匯出時間：${dateStr} ${timeStr}　｜　參賽人數：${players.length}</div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#f5f0e0;border-bottom:2px solid #d4a843;">
+                            <th style="padding:8px 12px;text-align:center;font-size:13px;color:#8b6508;width:50px;">排名</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:13px;color:#8b6508;">玩家</th>
+                            <th style="padding:8px 12px;text-align:right;font-size:13px;color:#8b6508;width:100px;">積分</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'position:absolute;left:0;top:0;z-index:-9999;overflow:auto;opacity:0;pointer-events:none;';
+            wrapper.appendChild(container);
+            document.body.appendChild(wrapper);
+
+            try {
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                const safeTitle = (customTitle || '總積分排行榜').replace(/[\\/:*?"<>|]/g, '_');
+                await html2pdf().set({
+                    margin: [15, 10, 15, 10],
+                    filename: `${safeTitle}_${dateStr.replace(/\//g, '')}.pdf`,
                     image: { type: 'jpeg', quality: 0.95 },
                     html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0 },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
