@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="js/tailwind-config.js"></script>
     <link rel="stylesheet" href="css/shared.css">
     <style>
@@ -348,6 +349,10 @@
                         <button onclick="document.getElementById('csv-file-input').click()"
                             class="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 hover:to-blue-700 text-white font-bold rounded-xl transition shadow-lg">
                             📄 匯入 CSV
+                        </button>
+                        <button onclick="exportQuestions()"
+                            class="px-6 py-3 bg-gradient-to-r from-green-600 to-green-800 hover:from-green-500 hover:to-green-700 text-white font-bold rounded-xl transition shadow-lg">
+                            📦 匯出題目
                         </button>
                         <button onclick="clearAllQuestions()"
                             class="px-6 py-3 bg-red-900/80 text-red-200 hover:bg-red-800 border border-red-600/50 font-bold rounded-xl transition">
@@ -3406,6 +3411,134 @@
             const { error } = await sbClient.from('questions').delete().neq('id', 0);
             if (error) return alert('清空失敗：' + error.message);
             await refreshQuestionsAndSelector();
+        }
+
+        async function exportQuestions() {
+            if (!questions || questions.length === 0) return alert('目前沒有題目可匯出');
+
+            const overlay = document.createElement('div');
+            overlay.id = 'export-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999';
+            overlay.innerHTML = '<div style="background:#1a1a2e;padding:2rem 3rem;border-radius:1rem;color:#ffd700;font-size:1.2rem;text-align:center"><div id="export-status">準備匯出中...</div></div>';
+            document.body.appendChild(overlay);
+            const statusEl = document.getElementById('export-status');
+
+            try {
+                const zip = new JSZip();
+                const mediaFolder = zip.folder('media');
+                const csvHeader = 'question,option_a,option_b,option_c,option_d,answer,points,seconds,image_urls,video_urls,answer_image_urls,answer_video_urls,type,answer_note';
+                const csvRows = [];
+
+                function isYouTube(url) {
+                    return /youtube\.com|youtu\.be/i.test(url);
+                }
+
+                function getExtFromUrl(url) {
+                    try {
+                        const pathname = new URL(url).pathname;
+                        const ext = pathname.split('.').pop().split('?')[0].toLowerCase();
+                        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'webm', 'mov', 'avi'].includes(ext)) return '.' + ext;
+                    } catch (e) {}
+                    return '';
+                }
+
+                async function downloadAndStore(url, qFolder, prefix, index) {
+                    if (!url || isYouTube(url)) return url || '';
+                    try {
+                        const resp = await fetch(url);
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                        const blob = await resp.blob();
+                        let ext = getExtFromUrl(url);
+                        if (!ext) {
+                            const mime = blob.type;
+                            const mimeMap = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp', 'video/mp4': '.mp4', 'video/webm': '.webm' };
+                            ext = mimeMap[mime] || '';
+                        }
+                        const filename = prefix + '_' + index + ext;
+                        qFolder.file(filename, blob);
+                        return 'media/' + qFolder.name + '/' + filename;
+                    } catch (e) {
+                        console.warn('下載失敗，保留原始 URL:', url, e);
+                        return url;
+                    }
+                }
+
+                function escCSV(val) {
+                    const s = String(val == null ? '' : val);
+                    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+                        return '"' + s.replace(/"/g, '""') + '"';
+                    }
+                    return s;
+                }
+
+                for (let qi = 0; qi < questions.length; qi++) {
+                    const q = questions[qi];
+                    statusEl.textContent = `匯出中... (${qi + 1}/${questions.length}) ${q.question?.substring(0, 20) || ''}`;
+
+                    const qId = q.id;
+                    const qFolder = mediaFolder.folder('Q' + qId);
+
+                    const imageUrls = q.image_urls || (q.image_url ? [q.image_url] : []);
+                    const videoUrls = q.video_urls || (q.video_url ? [q.video_url] : []);
+                    const ansImageUrls = q.answer_image_urls || (q.answer_image_url ? [q.answer_image_url] : []);
+                    const ansVideoUrls = q.answer_video_urls || (q.answer_video_url ? [q.answer_video_url] : []);
+
+                    const csvImagePaths = [];
+                    for (let i = 0; i < imageUrls.length; i++) {
+                        csvImagePaths.push(await downloadAndStore(imageUrls[i], qFolder, 'q', i + 1));
+                    }
+                    const csvVideoPaths = [];
+                    for (let i = 0; i < videoUrls.length; i++) {
+                        csvVideoPaths.push(await downloadAndStore(videoUrls[i], qFolder, 'qv', i + 1));
+                    }
+                    const csvAnsImagePaths = [];
+                    for (let i = 0; i < ansImageUrls.length; i++) {
+                        csvAnsImagePaths.push(await downloadAndStore(ansImageUrls[i], qFolder, 'a', i + 1));
+                    }
+                    const csvAnsVideoPaths = [];
+                    for (let i = 0; i < ansVideoUrls.length; i++) {
+                        csvAnsVideoPaths.push(await downloadAndStore(ansVideoUrls[i], qFolder, 'av', i + 1));
+                    }
+
+                    csvRows.push([
+                        escCSV(q.question),
+                        escCSV(q.option_a),
+                        escCSV(q.option_b),
+                        escCSV(q.option_c),
+                        escCSV(q.option_d),
+                        q.answer || 1,
+                        q.points || 1000,
+                        q.seconds || 10,
+                        escCSV(csvImagePaths.join('|')),
+                        escCSV(csvVideoPaths.join('|')),
+                        escCSV(csvAnsImagePaths.join('|')),
+                        escCSV(csvAnsVideoPaths.join('|')),
+                        escCSV(q.type || currentMode),
+                        escCSV(q.answer_note || '')
+                    ].join(','));
+                }
+
+                const csvContent = '\uFEFF' + csvHeader + '\n' + csvRows.join('\n');
+                zip.file('questions.csv', csvContent);
+
+                statusEl.textContent = '正在產生 ZIP 檔案...';
+                const blob = await zip.generateAsync({ type: 'blob' }, (meta) => {
+                    statusEl.textContent = `壓縮中... ${Math.round(meta.percent)}%`;
+                });
+
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'questions_export.zip';
+                a.click();
+                URL.revokeObjectURL(a.href);
+
+                statusEl.textContent = '匯出完成！';
+                setTimeout(() => overlay.remove(), 1500);
+            } catch (e) {
+                console.error('匯出失敗:', e);
+                alert('匯出失敗：' + e.message);
+                overlay.remove();
+            }
         }
 
         async function importCSV(input) {
