@@ -279,17 +279,7 @@
                 return;
             }
 
-            // 有 token → 匿名登入
-            const { data: { session } } = await sbClient.auth.getSession();
-            if (!session) {
-                const { error } = await sbClient.auth.signInAnonymously();
-                if (error) {
-                    alert("認證失敗，請重新掃描 QR Code");
-                    console.error("Anonymous sign-in error:", error);
-                    return;
-                }
-            }
-            console.log("Supabase 初始化成功，已匿名登入");
+            console.log("Supabase 初始化成功");
 
             // 重新整理恢復：若 sessionStorage 中有已保存的暱稱，自動重新加入
             const savedName = sessionStorage.getItem('quiz_player_name');
@@ -828,7 +818,8 @@
                 p_player_name: myName,
                 p_question_id: currentQ.id,
                 p_choice: choice,
-                p_response_time_ms: elapsedMs
+                p_response_time_ms: elapsedMs,
+                p_qr_token: qrToken
             }).then();
 
             if (choice === 0) {

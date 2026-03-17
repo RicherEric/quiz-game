@@ -105,12 +105,6 @@ CREATE TABLE IF NOT EXISTS public.qr_tokens (
   CONSTRAINT qr_tokens_pkey PRIMARY KEY (id)
 );
 
--- 已驗證玩家
-CREATE TABLE IF NOT EXISTS public.verified_players (
-  user_id uuid NOT NULL,
-  CONSTRAINT verified_players_pkey PRIMARY KEY (user_id)
-);
-
 -- ============================================================
 -- RPC 函數
 -- ============================================================
@@ -123,10 +117,6 @@ BEGIN
     RAISE EXCEPTION 'Invalid QR token';
   END IF;
 
-  INSERT INTO verified_players (user_id)
-  VALUES (auth.uid())
-  ON CONFLICT (user_id) DO NOTHING;
-
   IF EXISTS (SELECT 1 FROM players WHERE name = player_name) THEN
     RAISE EXCEPTION '此暱稱已存在，請換一個暱稱再試！';
   END IF;
@@ -137,16 +127,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 提交答案（驗證玩家身份）
+-- 提交答案（以 QR token 驗證）
 CREATE OR REPLACE FUNCTION submit_response(
   p_player_name text,
   p_question_id int,
   p_choice int,
-  p_response_time_ms int
+  p_response_time_ms int,
+  p_qr_token text DEFAULT NULL
 )
 RETURNS json AS $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM verified_players WHERE user_id = auth.uid()) THEN
+  IF p_qr_token IS NULL OR NOT EXISTS (SELECT 1 FROM qr_tokens WHERE token = p_qr_token) THEN
     RAISE EXCEPTION 'Not a verified player';
   END IF;
 
@@ -157,20 +148,74 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- 成績結算（SQL 批次計算取代前端逐筆更新）
+CREATE OR REPLACE FUNCTION score_question(
+  p_question_id int,
+  p_correct_answer int,
+  p_mode text DEFAULT 'official'
+)
+RETURNS json AS $$
+DECLARE
+  v_points int;
+  v_correct_count int;
+  v_orig_answer int;
+BEGIN
+  -- 取得該題分數
+  SELECT COALESCE(points, 1000), answer
+    INTO v_points, v_orig_answer
+    FROM questions WHERE id = p_question_id;
+
+  -- 批次更新 responses: is_correct + scored_points
+  UPDATE responses
+  SET is_correct    = (choice = p_correct_answer AND choice != 0),
+      scored_points = CASE
+        WHEN (choice = p_correct_answer AND choice != 0)
+        THEN ROUND(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75))
+        ELSE 0
+      END
+  WHERE question_id = p_question_id;
+
+  -- 批次更新 players 分數
+  IF p_mode = 'test' THEN
+    UPDATE players p
+    SET test_score = test_score + r.scored_points
+    FROM responses r
+    WHERE r.question_id = p_question_id
+      AND r.player_name = p.name
+      AND r.scored_points > 0;
+  ELSE
+    UPDATE players p
+    SET score = score + r.scored_points
+    FROM responses r
+    WHERE r.question_id = p_question_id
+      AND r.player_name = p.name
+      AND r.scored_points > 0;
+  END IF;
+
+  -- 統計答對人數
+  SELECT COUNT(*) INTO v_correct_count
+    FROM responses
+   WHERE question_id = p_question_id AND is_correct = true;
+
+  -- 若答案不同，同步更新題庫
+  IF v_orig_answer IS DISTINCT FROM p_correct_answer THEN
+    UPDATE questions SET answer = p_correct_answer WHERE id = p_question_id;
+  END IF;
+
+  RETURN json_build_object('correct_count', v_correct_count);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- ============================================================
 -- RLS 政策（允許匿名用戶透過 RPC 操作）
 -- ============================================================
 
 ALTER TABLE public.qr_tokens ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.verified_players ENABLE ROW LEVEL SECURITY;
-
 -- qr_tokens: 允許所有人讀取，允許寫入
 DROP POLICY IF EXISTS "Allow anon read qr_tokens" ON public.qr_tokens;
 CREATE POLICY "Allow anon read qr_tokens" ON public.qr_tokens FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Allow anon all qr_tokens" ON public.qr_tokens;
 CREATE POLICY "Allow anon all qr_tokens" ON public.qr_tokens FOR ALL USING (true) WITH CHECK (true);
-
--- verified_players: 透過 SECURITY DEFINER 函數操作，不需額外 policy
 
 -- ============================================================
 -- 初始資料

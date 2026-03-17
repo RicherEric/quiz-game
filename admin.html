@@ -1509,7 +1509,7 @@
             }
         }
 
-        // 結算：根據選擇的正確答案計算分數
+        // 結算：根據選擇的正確答案計算分數（透過 SQL 函數批次處理）
         async function doScoring() {
             const qId = parseInt(document.getElementById('q-selector').value);
             if (!qId) return alert("請選擇題目");
@@ -1526,42 +1526,20 @@
                     return;
                 }
             }
-            const points = q ? (q.points || 1000) : 1000;
 
-            // 取得此題所有作答
-            const { data: responses, error: rErr } = await sbClient.from('responses').select('*').eq('question_id', qId);
-            if (rErr) return alert("無法讀取作答資料：" + rErr.message);
+            const { data, error } = await sbClient.rpc('score_question', {
+                p_question_id: qId,
+                p_correct_answer: selectedAnswer,
+                p_mode: currentMode
+            });
+            if (error) return alert("結算失敗：" + error.message);
 
-            // 計算並更新分數（含時間加成）
-            let correctCount = 0;
-            for (const r of (responses || [])) {
-                const isCorrect = (r.choice === selectedAnswer && r.choice !== 0);
-                if (isCorrect) correctCount++;
-
-                // 答對的加分（依答題速度加成）
-                let earnedScore = 0;
-                const scoreField = currentMode === 'test' ? 'test_score' : 'score';
-                if (isCorrect) {
-                    const remainingMs = Math.max(0, 15000 - (r.response_time_ms || 15000));
-                    earnedScore = Math.round(points * (1 + (remainingMs / 15000) * 0.75));
-
-                    const { data: player } = await sbClient.from('players').select(scoreField).eq('name', r.player_name).single();
-                    if (player) {
-                        await sbClient.from('players').update({ [scoreField]: player[scoreField] + earnedScore }).eq('name', r.player_name);
-                    }
-                }
-
-                // 更新 response 的 is_correct 與 scored_points
-                await sbClient.from('responses').update({ is_correct: isCorrect, scored_points: earnedScore }).eq('id', r.id);
-            }
-
-            // 如果 admin 改了答案，同步更新題庫
+            // 同步本地答案快取
             if (q && selectedAnswer !== q.answer) {
-                await sbClient.from('questions').update({ answer: selectedAnswer }).eq('id', qId);
                 q.answer = selectedAnswer;
             }
 
-            console.log(`結算完成: ${correctCount} 人答對，每人 +${points} 分`);
+            console.log(`結算完成: ${data.correct_count} 人答對`);
 
             // 切換到 scoring 狀態
             changeState('scoring');
