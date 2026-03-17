@@ -320,8 +320,10 @@
                 <div
                     class="bg-[#1a2f4d]/90 px-8 py-4 border-b border-gold-500/30 grid grid-cols-12 gap-4 text-gold-300/90 font-bold uppercase text-sm rounded-t-2xl">
                     <div class="col-span-2 text-center">排名</div>
-                    <div class="col-span-6">玩家</div>
-                    <div class="col-span-4 text-right">積分</div>
+                    <div class="col-span-3">玩家</div>
+                    <div class="col-span-2 text-center">答對題數</div>
+                    <div class="col-span-2 text-center">平均答題時間</div>
+                    <div class="col-span-3 text-right">積分</div>
                 </div>
                 <div id="leaderboard-container" class="space-y-2 mt-2"></div>
                 </div>
@@ -1711,15 +1713,24 @@
             const container = document.getElementById('leaderboard-container');
             if (!players || players.length === 0) return container.innerHTML = '<div class="text-center py-10">尚無資料</div>';
 
+            // 查詢每位玩家的答對題數 & 平均答題時間（DB 端聚合）
+            const { data: statsArr } = await sbClient.rpc('get_player_stats');
+            const statsMap = {};
+            if (statsArr) statsArr.forEach(s => { statsMap[s.player_name] = s; });
+
             let html = '';
             players.forEach((p, i) => {
                 const isTop3 = i < 3;
                 const bg = isTop3 ? 'bg-gradient-to-r from-gold-500/25 to-gold-700/20 border border-gold-500/40' : 'bg-[#1e3350]/60 border border-gold-700/15';
                 const crown = isTop3 ? ' 👑' : '';
+                const correctCount = statsMap[p.name]?.correct_count || 0;
+                const avgTime = statsMap[p.name]?.avg_time_ms ? (statsMap[p.name].avg_time_ms / 1000).toFixed(1) + 's' : '-';
                 html += `<div class="grid grid-cols-12 gap-4 items-center px-8 py-4 rounded-xl ${bg}">
                             <div class="col-span-2 text-center font-bold text-xl">${i + 1}${crown}</div>
-                            <div class="col-span-6 font-bold text-xl">${p.name}</div>
-                            <div class="col-span-4 text-right font-mono font-black text-2xl text-gold-300">${p[scoreField]}</div>
+                            <div class="col-span-3 font-bold text-xl">${p.name}</div>
+                            <div class="col-span-2 text-center font-mono font-bold text-xl text-emerald-400">${correctCount}</div>
+                            <div class="col-span-2 text-center font-mono font-bold text-xl text-sky-300">${avgTime}</div>
+                            <div class="col-span-3 text-right font-mono font-black text-2xl text-gold-300">${p[scoreField]}</div>
                          </div>`;
             });
             container.innerHTML = html;
@@ -2579,6 +2590,11 @@
             const { data: players } = await sbClient.from('players').select('*').order(scoreField, { ascending: false });
             if (!players || players.length === 0) return alert('尚無排行榜資料可匯出');
 
+            // 查詢每位玩家的答對題數 & 平均答題時間（DB 端聚合）
+            const { data: statsArr } = await sbClient.rpc('get_player_stats');
+            const statsMap = {};
+            if (statsArr) statsArr.forEach(s => { statsMap[s.player_name] = s; });
+
             // 讓使用者輸入標題以分辨不同回合
             const customTitle = prompt('請輸入 PDF 標題（例如：第一回合總積分）：', currentMode === 'test' ? '測試排行榜' : '總積分排行榜');
             if (customTitle === null) return; // 使用者按取消
@@ -2594,9 +2610,13 @@
                 const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
                 const bgColor = rank <= 3 ? '#fdf6e3' : (i % 2 === 0 ? '#ffffff' : '#fafafa');
                 const fontWeight = rank <= 3 ? '800' : '400';
+                const correctCount = statsMap[p.name]?.correct_count || 0;
+                const avgTime = statsMap[p.name]?.avg_time_ms ? (statsMap[p.name].avg_time_ms / 1000).toFixed(1) + 's' : '-';
                 rows += `<tr style="background:${bgColor};border-bottom:1px solid #eee;">
                     <td style="padding:8px 12px;text-align:center;font-size:14px;font-weight:${fontWeight};color:#666;width:50px;">${rank}</td>
                     <td style="padding:8px 12px;font-size:14px;font-weight:${fontWeight};">${medal} ${p.name}</td>
+                    <td style="padding:8px 12px;text-align:center;font-size:14px;font-weight:700;color:#16a34a;width:80px;">${correctCount}</td>
+                    <td style="padding:8px 12px;text-align:center;font-size:14px;font-weight:700;color:#0284c7;width:100px;">${avgTime}</td>
                     <td style="padding:8px 12px;text-align:right;font-size:14px;font-weight:700;color:#8b6508;width:100px;">${p[scoreField]}</td>
                 </tr>`;
             });
@@ -2613,6 +2633,8 @@
                         <tr style="background:#f5f0e0;border-bottom:2px solid #d4a843;">
                             <th style="padding:8px 12px;text-align:center;font-size:13px;color:#8b6508;width:50px;">排名</th>
                             <th style="padding:8px 12px;text-align:left;font-size:13px;color:#8b6508;">玩家</th>
+                            <th style="padding:8px 12px;text-align:center;font-size:13px;color:#16a34a;width:80px;">答對題數</th>
+                            <th style="padding:8px 12px;text-align:center;font-size:13px;color:#0284c7;width:100px;">平均答題時間</th>
                             <th style="padding:8px 12px;text-align:right;font-size:13px;color:#8b6508;width:100px;">積分</th>
                         </tr>
                     </thead>

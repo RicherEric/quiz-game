@@ -206,6 +206,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- 玩家統計（答對數 + 平均答題時間）— 供排行榜 & PDF 匯出使用
+CREATE OR REPLACE FUNCTION get_player_stats()
+RETURNS TABLE(player_name text, correct_count bigint, avg_time_ms numeric) AS $$
+  SELECT
+    player_name,
+    COUNT(*) FILTER (WHERE is_correct = true),
+    AVG(response_time_ms) FILTER (WHERE response_time_ms > 0)
+  FROM responses
+  GROUP BY player_name;
+$$ LANGUAGE sql SECURITY DEFINER;
+
 -- ============================================================
 -- RLS 政策（允許匿名用戶透過 RPC 操作）
 -- ============================================================
