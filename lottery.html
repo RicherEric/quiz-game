@@ -8,14 +8,9 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script>
-        tailwind.config = { theme: { extend: { colors: { gold: { 100: '#fff4dd', 300: '#ffd37a', 400: '#ffbe50', 500: '#ffa830', 700: '#cc6a18' }, midnight: { 800: '#273550', 900: '#182240', 950: '#0c1329' } } } } }
-    </script>
+    <script src="js/tailwind-config.js"></script>
+    <link rel="stylesheet" href="css/shared.css">
     <style>
-        .text-gold-gradient {
-            @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-100 to-gold-500;
-        }
-
         /* Ball animation */
         .ball {
             position: absolute;

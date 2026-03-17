@@ -8,18 +8,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        gold: { 50: '#fffcf5', 100: '#fff4dd', 200: '#ffe6ac', 300: '#ffd37a', 400: '#ffbe50', 500: '#ffa830', 600: '#ea8820', 700: '#cc6a18', 800: '#a85010', 900: '#8e4210', 950: '#582800' },
-                        midnight: { 900: '#182240', 950: '#0c1329' }
-                    }
-                }
-            }
-        }
-    </script>
+    <script src="js/tailwind-config.js"></script>
+    <link rel="stylesheet" href="css/shared.css">
     <style>
         .option-btn {
             @apply w-full py-5 text-2xl font-bold text-white rounded-2xl shadow-lg transform transition-all active:scale-95 disabled:grayscale-[0.5] disabled:opacity-50;
@@ -36,10 +26,6 @@
             @apply opacity-50 saturate-50;
         }
 
-        .text-gold-gradient {
-            @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-200 to-gold-500;
-        }
-
         .countdown-ring {
             transform: rotate(-90deg);
         }
@@ -54,11 +40,7 @@
             backdrop-filter: blur(8px);
         }
         .sync-btn.syncing svg {
-            animation: spin-sync 0.6s linear;
-        }
-        @keyframes spin-sync {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            animation: spin 0.6s linear;
         }
 
         @keyframes slide-up {
@@ -771,12 +753,6 @@
             circleEl.setAttribute('stroke', '#ffaa1d');
         }
 
-        function extractYouTubeId(url) {
-            if (!url) return null;
-            const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
-            return m ? m[1] : null;
-        }
-
         function refreshUI(q) {
             const filteredByMode = questionIdOrder.filter(x => (x.type || 'official') === currentMode);
             const qNum = filteredByMode.findIndex(x => x.id === q.id) + 1 || q.id;
@@ -910,17 +886,7 @@
 
     </script>
 
-    <!-- 圖片放大 Lightbox -->
-    <div id="img-lightbox" class="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center hidden cursor-zoom-out" onclick="this.classList.add('hidden')">
-        <img id="img-lightbox-img" class="max-w-[90vw] max-h-[90vh] rounded-2xl shadow-2xl object-contain" />
-    </div>
-    <script>
-        function openLightbox(src) {
-            const lb = document.getElementById('img-lightbox');
-            document.getElementById('img-lightbox-img').src = src;
-            lb.classList.remove('hidden');
-        }
-    </script>
+    <script src="js/shared.js"></script>
 </body>
 
 </html>

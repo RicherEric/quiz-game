@@ -1,0 +1,11 @@
+.text-gold-gradient {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(to right, #fff4dd, #ffa830);
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

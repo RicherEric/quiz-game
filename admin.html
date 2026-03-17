@@ -10,14 +10,9 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-    <script>
-        tailwind.config = { theme: { extend: { colors: { gold: { 100: '#fff4dd', 300: '#ffd37a', 400: '#ffbe50', 500: '#ffa830', 700: '#cc6a18' }, midnight: { 800: '#273550', 900: '#182240', 950: '#0c1329' } } } } }
-    </script>
+    <script src="js/tailwind-config.js"></script>
+    <link rel="stylesheet" href="css/shared.css">
     <style>
-        .text-gold-gradient {
-            @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-100 to-gold-500;
-        }
-
         .tab-btn {
             @apply px-3 md:px-6 py-2 md:py-3 font-bold text-sm md:text-lg rounded-t-xl transition bg-midnight-900 text-gold-500/50 hover:text-gold-300;
         }
@@ -57,15 +52,6 @@
             background: rgba(204, 106, 24, 0.15);
         }
 
-        @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-
-            to {
-                transform: rotate(360deg);
-            }
-        }
     </style>
 </head>
 
@@ -815,12 +801,6 @@
         }
 
         // ---- Media helpers ----
-        function extractYouTubeId(url) {
-            if (!url) return null;
-            const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
-            return m ? m[1] : null;
-        }
-
         function isStorageUrl(url) {
             return url && url.includes('question-media');
         }
@@ -3584,17 +3564,7 @@
         });
     </script>
 
-    <!-- 圖片放大 Lightbox -->
-    <div id="img-lightbox" class="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center hidden cursor-zoom-out" onclick="this.classList.add('hidden')">
-        <img id="img-lightbox-img" class="max-w-[90vw] max-h-[90vh] rounded-2xl shadow-2xl object-contain" />
-    </div>
-    <script>
-        function openLightbox(src) {
-            const lb = document.getElementById('img-lightbox');
-            document.getElementById('img-lightbox-img').src = src;
-            lb.classList.remove('hidden');
-        }
-    </script>
+    <script src="js/shared.js"></script>
 </body>
 
 </html>
