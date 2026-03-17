@@ -3475,8 +3475,8 @@
                     const q = questions[qi];
                     statusEl.textContent = `匯出中... (${qi + 1}/${questions.length}) ${q.question?.substring(0, 20) || ''}`;
 
-                    const qId = q.id;
-                    const qFolder = mediaFolder.folder('Q' + qId);
+                    const displayNum = qi + 1;
+                    const qFolder = mediaFolder.folder('Q' + displayNum);
 
                     const imageUrls = q.image_urls || (q.image_url ? [q.image_url] : []);
                     const videoUrls = q.video_urls || (q.video_url ? [q.video_url] : []);
