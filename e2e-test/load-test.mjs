@@ -89,6 +89,18 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function stdDev(arr) {
+  if (arr.length < 2) return 0;
+  const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
+  const variance = arr.reduce((s, v) => s + (v - mean) ** 2, 0) / (arr.length - 1);
+  return Math.sqrt(variance);
+}
+
+function throughput(count, durationMs) {
+  if (durationMs <= 0) return 0;
+  return count / (durationMs / 1000);
+}
+
 // ─── Timing Collector ──────────────────────────────────────────────────────────
 
 /**
@@ -122,6 +134,11 @@ const stats = {
   errors: [],
   perQuestion: {},
   playerLogs: {},
+  edgeCases: [],       // { name, description, expected, actual, pass }
+  dataIntegrity: [],   // { check, detail, pass }
+  passFail: [],        // { criterion, threshold, actual, pass }
+  playerFetchTimes: [],    // individual player fetch durations (ms)
+
 };
 
 function initQStats(qId) {
@@ -210,13 +227,14 @@ async function updateGameStatus(state, currentQId) {
   const payload = { state, start_time: Date.now() };
   if (currentQId !== undefined) payload.current_q_id = currentQId;
 
+  const sentAt = Date.now();  // capture BEFORE update for accurate realtime lag
   const t0 = now();
   const { error } = await admin.from('game_status').update(payload).eq('id', 1);
   const dur = now() - t0;
   const detail = currentQId !== undefined ? `q=${currentQId}` : '';
   recordStep('admin', `state->${state}`, detail, dur, !error);
   if (error) recordError(`update-game-status(${state})`, error);
-  return { durationMs: dur, sentAt: Date.now() };
+  return { durationMs: dur, sentAt };
 }
 
 /**
@@ -414,6 +432,644 @@ function createPlayer(index, qrToken) {
   };
 }
 
+// ─── Edge Case Tests ──────────────────────────────────────────────────────────
+
+/**
+ * Run edge-case tests to verify the system rejects invalid operations.
+ * Each test records pass/fail into stats.edgeCases.
+ */
+async function runEdgeCaseTests(qrToken, questions) {
+  console.log('\n[Phase 1.5] Edge case tests...');
+  phaseStart('1.5-edge-cases');
+
+  const edgeClient = newClient();
+  const testName = `test_user_001`;     // already exists from Phase 1
+  const testName2 = `test_edge_dup_${Date.now()}`;
+
+  // ── Test 1: Duplicate player name rejection ──
+  {
+    const t0 = now();
+    const { data, error } = await edgeClient.rpc('join_via_qr', {
+      qr_token: qrToken,
+      player_name: testName,
+    });
+    const dur = now() - t0;
+    const pass = !!error;
+    stats.edgeCases.push({
+      name: 'duplicate-player-name',
+      description: '重複暱稱應被拒絕',
+      expected: 'error (此暱稱已存在)',
+      actual: error ? `rejected: ${error.message}` : `allowed (unexpected!)`,
+      pass,
+    });
+    recordStep('edge-case', 'duplicate-player-name', '', dur, pass);
+    console.log(`  [EC1] Duplicate name: ${pass ? 'PASS' : 'FAIL'} (${fmtMs(dur)})`);
+  }
+
+  // ── Test 2: Invalid QR token rejection ──
+  {
+    const fakeName = `test_edge_badqr_${Date.now()}`;
+    const t0 = now();
+    const { data, error } = await edgeClient.rpc('join_via_qr', {
+      qr_token: 'invalid-token-12345',
+      player_name: fakeName,
+    });
+    const dur = now() - t0;
+    const pass = !!error;
+    stats.edgeCases.push({
+      name: 'invalid-qr-token',
+      description: '無效 QR token 應被拒絕',
+      expected: 'error (Invalid QR token)',
+      actual: error ? `rejected: ${error.message}` : `allowed (unexpected!)`,
+      pass,
+    });
+    recordStep('edge-case', 'invalid-qr-token', '', dur, pass);
+    console.log(`  [EC2] Invalid QR token: ${pass ? 'PASS' : 'FAIL'} (${fmtMs(dur)})`);
+    // Clean up in case it was wrongly created
+    if (!error) await admin.from('players').delete().eq('name', fakeName);
+  }
+
+  // ── Test 3: Submit with invalid QR token ──
+  {
+    const q = questions[0];
+    const t0 = now();
+    const { data, error } = await edgeClient.rpc('submit_response', {
+      p_player_name: testName,
+      p_question_id: q.id,
+      p_choice: 1,
+      p_response_time_ms: 5000,
+      p_qr_token: 'invalid-token-12345',
+    });
+    const dur = now() - t0;
+    const pass = !!error;
+    stats.edgeCases.push({
+      name: 'submit-invalid-qr',
+      description: '用無效 QR token 提交答案應被拒絕',
+      expected: 'error (Not a verified player)',
+      actual: error ? `rejected: ${error.message}` : `allowed (unexpected!)`,
+      pass,
+    });
+    recordStep('edge-case', 'submit-invalid-qr', '', dur, pass);
+    console.log(`  [EC3] Submit with bad QR: ${pass ? 'PASS' : 'FAIL'} (${fmtMs(dur)})`);
+  }
+
+  // ── Test 4: Submit with null QR token ──
+  {
+    const q = questions[0];
+    const t0 = now();
+    const { data, error } = await edgeClient.rpc('submit_response', {
+      p_player_name: testName,
+      p_question_id: q.id,
+      p_choice: 1,
+      p_response_time_ms: 5000,
+      p_qr_token: null,
+    });
+    const dur = now() - t0;
+    const pass = !!error;
+    stats.edgeCases.push({
+      name: 'submit-null-qr',
+      description: '不帶 QR token 提交答案應被拒絕',
+      expected: 'error (Not a verified player)',
+      actual: error ? `rejected: ${error.message}` : `allowed (unexpected!)`,
+      pass,
+    });
+    recordStep('edge-case', 'submit-null-qr', '', dur, pass);
+    console.log(`  [EC4] Submit with null QR: ${pass ? 'PASS' : 'FAIL'} (${fmtMs(dur)})`);
+  }
+
+  // ── Test 5: Double answer submission (same player, same question) ──
+  // First create a dedicated test player and submit once in the question loop,
+  // then try to submit again. The DB allows duplicates (no unique constraint),
+  // so we just verify the behavior is consistent.
+  {
+    const dupPlayer = `test_edge_dup_answer_${Date.now()}`;
+    // Create player
+    await edgeClient.rpc('join_via_qr', { qr_token: qrToken, player_name: dupPlayer });
+    const q = questions[0];
+
+    // First submission
+    const { error: e1 } = await edgeClient.rpc('submit_response', {
+      p_player_name: dupPlayer, p_question_id: q.id, p_choice: 1, p_response_time_ms: 3000, p_qr_token: qrToken,
+    });
+
+    // Second submission (same player, same question)
+    const t0 = now();
+    const { error: e2 } = await edgeClient.rpc('submit_response', {
+      p_player_name: dupPlayer, p_question_id: q.id, p_choice: 2, p_response_time_ms: 5000, p_qr_token: qrToken,
+    });
+    const dur = now() - t0;
+
+    // Check if duplicate was created
+    const { data: dupCheck } = await edgeClient
+      .from('responses')
+      .select('id, choice')
+      .eq('player_name', dupPlayer)
+      .eq('question_id', q.id);
+    const dupCount = dupCheck?.length || 0;
+
+    // Record as informational: DB currently allows duplicates (no unique constraint)
+    stats.edgeCases.push({
+      name: 'double-answer-submission',
+      description: '同一玩家同一題重複提交（DB 無唯一約束，記錄行為）',
+      expected: `行為記錄 (responses count)`,
+      actual: `${dupCount} responses created (e1=${e1 ? 'err' : 'ok'}, e2=${e2 ? 'err' : 'ok'})`,
+      pass: true, // informational - just records actual behavior
+    });
+    recordStep('edge-case', 'double-answer', `q=${q.id}`, dur);
+    console.log(`  [EC5] Double answer: ${dupCount} rows created (${fmtMs(dur)})`);
+
+    // Clean up
+    await admin.from('responses').delete().eq('player_name', dupPlayer);
+    await admin.from('players').delete().eq('name', dupPlayer);
+  }
+
+  // ── Test 6: Submit to non-existent question ──
+  {
+    const t0 = now();
+    const { data, error } = await edgeClient.rpc('submit_response', {
+      p_player_name: testName,
+      p_question_id: 999999,
+      p_choice: 1,
+      p_response_time_ms: 5000,
+      p_qr_token: qrToken,
+    });
+    const dur = now() - t0;
+    // This may or may not error (depends on FK constraints)
+    stats.edgeCases.push({
+      name: 'submit-nonexistent-question',
+      description: '提交不存在的題目 ID',
+      expected: '行為記錄',
+      actual: error ? `rejected: ${error.message}` : `allowed (no FK constraint)`,
+      pass: true, // informational
+    });
+    recordStep('edge-case', 'submit-nonexistent-question', '', dur);
+    console.log(`  [EC6] Non-existent question: ${error ? 'rejected' : 'allowed'} (${fmtMs(dur)})`);
+    // Clean up if it was inserted
+    if (!error) await admin.from('responses').delete().eq('player_name', testName).eq('question_id', 999999);
+  }
+
+  // ── Test 7: Score non-existent question ──
+  {
+    const t0 = now();
+    const { data, error } = await admin.rpc('score_question', {
+      p_question_id: 999999,
+      p_correct_answer: 1,
+      p_mode: 'official',
+    });
+    const dur = now() - t0;
+    stats.edgeCases.push({
+      name: 'score-nonexistent-question',
+      description: '結算不存在的題目',
+      expected: '行為記錄 (不應崩潰)',
+      actual: error ? `error: ${error.message}` : `ok (correct_count=${data?.correct_count})`,
+      pass: !error, // should not crash
+    });
+    recordStep('edge-case', 'score-nonexistent-question', '', dur, !error);
+    console.log(`  [EC7] Score non-existent Q: ${error ? 'FAIL' : 'PASS'} (${fmtMs(dur)})`);
+  }
+
+  // ── Test 8: Late submission after stopped ──
+  {
+    const q = questions[1]; // use second question to avoid Q1 conflicts
+    const latePlayer = testName; // test_user_001, already joined
+
+    // Set up: play -> stopped
+    await admin.from('game_status').update({ state: 'playing', current_q_id: q.id, start_time: Date.now() }).eq('id', 1);
+    await sleep(500);
+    await admin.from('game_status').update({ state: 'stopped', start_time: Date.now() }).eq('id', 1);
+    await sleep(300);
+
+    // Try late submission while in "stopped" state
+    const t0 = now();
+    const { data, error } = await edgeClient.rpc('submit_response', {
+      p_player_name: latePlayer,
+      p_question_id: q.id,
+      p_choice: 1,
+      p_response_time_ms: 16000,
+      p_qr_token: qrToken,
+    });
+    const dur = now() - t0;
+
+    stats.edgeCases.push({
+      name: 'late-submission-after-stopped',
+      description: '在 stopped 狀態後嘗試提交答案',
+      expected: '行為記錄 (是否接受遲交)',
+      actual: error ? `rejected: ${error.message}` : `allowed (late answer accepted)`,
+      pass: true, // informational — records actual behavior
+    });
+    recordStep('edge-case', 'late-submission', `q=${q.id}`, dur);
+    console.log(`  [EC8] Late submission: ${error ? 'rejected' : 'allowed'} (${fmtMs(dur)})`);
+
+    // Clean up response if created
+    if (!error) await admin.from('responses').delete().eq('player_name', latePlayer).eq('question_id', q.id);
+
+    // Reset game state
+    await admin.from('game_status').update({ state: 'waiting', current_q_id: questions[0].id, start_time: 0 }).eq('id', 1);
+    await sleep(300);
+  }
+
+  // ── Test 9: Submit after question already scored ──
+  {
+    const q = questions[2]; // use third question
+    const scoreTestPlayer = testName;
+
+    // Set up: play -> stopped -> score -> scoring
+    await admin.from('game_status').update({ state: 'playing', current_q_id: q.id, start_time: Date.now() }).eq('id', 1);
+    await sleep(300);
+    await admin.from('game_status').update({ state: 'stopped', start_time: Date.now() }).eq('id', 1);
+    await sleep(300);
+
+    // Score the question
+    await admin.rpc('score_question', { p_question_id: q.id, p_correct_answer: q.answer || 1, p_mode: 'official' });
+    await admin.from('game_status').update({ state: 'scoring', start_time: Date.now() }).eq('id', 1);
+    await sleep(300);
+
+    // Try submitting after scoring
+    const t0 = now();
+    const { data, error } = await edgeClient.rpc('submit_response', {
+      p_player_name: scoreTestPlayer,
+      p_question_id: q.id,
+      p_choice: 2,
+      p_response_time_ms: 5000,
+      p_qr_token: qrToken,
+    });
+    const dur = now() - t0;
+
+    stats.edgeCases.push({
+      name: 'submit-after-scored',
+      description: '在題目已結算後嘗試提交答案',
+      expected: '行為記錄 (是否影響結算)',
+      actual: error ? `rejected: ${error.message}` : `allowed (post-score submission)`,
+      pass: true, // informational
+    });
+    recordStep('edge-case', 'submit-after-scored', `q=${q.id}`, dur);
+    console.log(`  [EC9] Submit after scored: ${error ? 'rejected' : 'allowed'} (${fmtMs(dur)})`);
+
+    // Clean up: remove any response created and reset
+    await admin.from('responses').delete().eq('player_name', scoreTestPlayer).eq('question_id', q.id);
+    // Reset all responses for this question (edge case scoring may have set scored_points)
+    await admin.from('responses').delete().eq('question_id', q.id);
+    // Reset player scores affected by edge case scoring
+    await admin.from('players').update({ score: 0 }).like('name', 'test_%');
+    await admin.from('game_status').update({ state: 'waiting', current_q_id: questions[0].id, start_time: 0 }).eq('id', 1);
+    await sleep(300);
+  }
+
+  const passed = stats.edgeCases.filter(e => e.pass).length;
+  const total = stats.edgeCases.length;
+  console.log(`  Edge cases: ${passed}/${total} passed`);
+  phaseEnd('1.5-edge-cases');
+}
+
+// ─── Data Integrity Validation ────────────────────────────────────────────────
+
+/**
+ * After all questions are scored, validate data integrity:
+ * 1. is_correct flags match choice == answer
+ * 2. scored_points follows the time bonus formula
+ * 3. Player total scores == sum of their scored_points
+ */
+async function validateDataIntegrity(questions) {
+  console.log('\n  [Data Integrity] Validating...');
+  phaseStart('data-integrity');
+
+  // Fetch all test responses (paginate to bypass Supabase default 1000-row limit)
+  const allResponses = [];
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+  let fetchError = null;
+  while (true) {
+    const { data: page, error: re } = await admin
+      .from('responses')
+      .select('id, player_name, question_id, choice, is_correct, response_time_ms, scored_points')
+      .like('player_name', 'test_%')
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (re || !page) {
+      fetchError = re;
+      break;
+    }
+    allResponses.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  if (fetchError || allResponses.length === 0) {
+    stats.dataIntegrity.push({ check: 'fetch-responses', detail: fetchError?.message || 'no data', pass: false });
+    console.log(`  ERROR: Failed to fetch responses: ${fetchError?.message}`);
+    phaseEnd('data-integrity');
+    return;
+  }
+
+  console.log(`  Fetched ${allResponses.length} test responses (${Math.ceil(allResponses.length / PAGE_SIZE)} pages)`);
+
+  // Build question map: id -> { answer, points }
+  const qMap = {};
+  for (const q of questions) {
+    qMap[q.id] = { answer: q.answer, points: q.points || 1000 };
+  }
+
+  // ── Check 1: is_correct flags ──
+  let correctFlagErrors = 0;
+  let correctFlagTotal = 0;
+  for (const r of allResponses) {
+    const q = qMap[r.question_id];
+    if (!q) continue; // response to unknown question
+    correctFlagTotal++;
+    const expectedCorrect = r.choice === q.answer && r.choice !== 0;
+    if (r.is_correct !== expectedCorrect) {
+      correctFlagErrors++;
+      if (correctFlagErrors <= 3) {
+        console.log(`    is_correct mismatch: resp ${r.id}, player=${r.player_name}, q=${r.question_id}, choice=${r.choice}, answer=${q.answer}, is_correct=${r.is_correct}, expected=${expectedCorrect}`);
+      }
+    }
+  }
+  stats.dataIntegrity.push({
+    check: 'is_correct flags',
+    detail: `${correctFlagTotal - correctFlagErrors}/${correctFlagTotal} correct`,
+    pass: correctFlagErrors === 0,
+  });
+  console.log(`  [DI1] is_correct flags: ${correctFlagErrors === 0 ? 'PASS' : 'FAIL'} (${correctFlagErrors} mismatches / ${correctFlagTotal})`);
+
+  // ── Check 2: scored_points formula ──
+  let scoreFormulaErrors = 0;
+  let scoreFormulaTotal = 0;
+  for (const r of allResponses) {
+    const q = qMap[r.question_id];
+    if (!q) continue;
+    scoreFormulaTotal++;
+    const isCorrect = r.choice === q.answer && r.choice !== 0;
+    let expectedScore;
+    if (isCorrect) {
+      const responseTime = r.response_time_ms ?? 15000;
+      expectedScore = Math.round(q.points * (1 + Math.max(0, 15000 - responseTime) / 15000 * 0.75));
+    } else {
+      expectedScore = 0;
+    }
+    if (r.scored_points !== expectedScore) {
+      scoreFormulaErrors++;
+      if (scoreFormulaErrors <= 3) {
+        console.log(`    scored_points mismatch: resp ${r.id}, player=${r.player_name}, q=${r.question_id}, actual=${r.scored_points}, expected=${expectedScore}, time=${r.response_time_ms}`);
+      }
+    }
+  }
+  stats.dataIntegrity.push({
+    check: 'scored_points formula',
+    detail: `${scoreFormulaTotal - scoreFormulaErrors}/${scoreFormulaTotal} correct`,
+    pass: scoreFormulaErrors === 0,
+  });
+  console.log(`  [DI2] scored_points formula: ${scoreFormulaErrors === 0 ? 'PASS' : 'FAIL'} (${scoreFormulaErrors} mismatches / ${scoreFormulaTotal})`);
+
+  // ── Check 3: Player total scores == sum of scored_points ──
+  const { data: allPlayers, error: pe } = await admin
+    .from('players')
+    .select('name, score')
+    .like('name', 'test_%');
+
+  if (pe || !allPlayers) {
+    stats.dataIntegrity.push({ check: 'player-total-scores', detail: pe?.message || 'no data', pass: false });
+    phaseEnd('data-integrity');
+    return;
+  }
+
+  // Compute expected score per player from responses
+  const expectedScores = {};
+  for (const r of allResponses) {
+    if (!expectedScores[r.player_name]) expectedScores[r.player_name] = 0;
+    expectedScores[r.player_name] += r.scored_points || 0;
+  }
+
+  let playerScoreErrors = 0;
+  let playerScoreTotal = 0;
+  for (const p of allPlayers) {
+    playerScoreTotal++;
+    const expected = expectedScores[p.name] || 0;
+    if (p.score !== expected) {
+      playerScoreErrors++;
+      if (playerScoreErrors <= 3) {
+        console.log(`    player score mismatch: ${p.name}, actual=${p.score}, expected=${expected}`);
+      }
+    }
+  }
+  stats.dataIntegrity.push({
+    check: 'player total scores = Σ scored_points',
+    detail: `${playerScoreTotal - playerScoreErrors}/${playerScoreTotal} correct`,
+    pass: playerScoreErrors === 0,
+  });
+  console.log(`  [DI3] Player total scores: ${playerScoreErrors === 0 ? 'PASS' : 'FAIL'} (${playerScoreErrors} mismatches / ${playerScoreTotal})`);
+
+  // ── Check 4: No orphan responses (all player_names exist in players) ──
+  const playerNameSet = new Set(allPlayers.map(p => p.name));
+  const orphanResponses = allResponses.filter(r => !playerNameSet.has(r.player_name));
+  stats.dataIntegrity.push({
+    check: 'no orphan responses',
+    detail: `${orphanResponses.length} orphan responses`,
+    pass: orphanResponses.length === 0,
+  });
+  console.log(`  [DI4] Orphan responses: ${orphanResponses.length === 0 ? 'PASS' : 'FAIL'} (${orphanResponses.length} orphans)`);
+
+  // ── Check 5: No duplicate responses (same player + question) ──
+  const responseKeys = new Map();
+  let duplicateCount = 0;
+  for (const r of allResponses) {
+    const key = `${r.player_name}|${r.question_id}`;
+    const cnt = responseKeys.get(key) || 0;
+    if (cnt > 0) {
+      duplicateCount++;
+      if (duplicateCount <= 3) {
+        console.log(`    duplicate response: ${r.player_name}, q=${r.question_id} (${cnt + 1} copies)`);
+      }
+    }
+    responseKeys.set(key, cnt + 1);
+  }
+  stats.dataIntegrity.push({
+    check: 'no duplicate responses (player+question)',
+    detail: duplicateCount === 0 ? '0 duplicates' : `${duplicateCount} duplicates found`,
+    pass: duplicateCount === 0,
+  });
+  console.log(`  [DI5] Duplicate responses: ${duplicateCount === 0 ? 'PASS' : 'FAIL'} (${duplicateCount} duplicates)`);
+
+  // ── Check 6: Response count per question within expected range ──
+  // DB count should be between succeeded and submitted (inclusive), because
+  // server may process requests that returned transport errors (e.g., 502)
+  const responseCountByQ = {};
+  for (const r of allResponses) {
+    responseCountByQ[r.question_id] = (responseCountByQ[r.question_id] || 0) + 1;
+  }
+  let responseCountErrors = 0;
+  for (const q of questions) {
+    const qs = stats.perQuestion[q.id];
+    if (!qs) continue;
+    const dbCount = responseCountByQ[q.id] || 0;
+    const minExpected = qs.succeeded;
+    const maxExpected = qs.submitted;  // succeeded + failed
+    if (dbCount < minExpected || dbCount > maxExpected) {
+      responseCountErrors++;
+      if (responseCountErrors <= 3) {
+        console.log(`    response count out of range: q=${q.id}, DB=${dbCount}, expected=${minExpected}~${maxExpected}`);
+      }
+    }
+  }
+  stats.dataIntegrity.push({
+    check: 'response count per question (range check)',
+    detail: `${questions.length - responseCountErrors}/${questions.length} within range`,
+    pass: responseCountErrors === 0,
+  });
+  console.log(`  [DI6] Response counts: ${responseCountErrors === 0 ? 'PASS' : 'FAIL'} (${responseCountErrors} out of range)`);
+
+  const diPassed = stats.dataIntegrity.filter(d => d.pass).length;
+  const diTotal = stats.dataIntegrity.length;
+  console.log(`  Data integrity: ${diPassed}/${diTotal} checks passed`);
+  phaseEnd('data-integrity');
+}
+
+// ─── Pass/Fail Criteria ─────────────────────────────────────────────────────
+
+function evaluatePassFail(questions) {
+  const allApiTimes = [];
+  let totalSubmitted = 0, totalSucceeded = 0, totalFailed = 0;
+  for (const q of questions) {
+    const qs = stats.perQuestion[q.id];
+    if (!qs) continue;
+    allApiTimes.push(...qs.apiTimes);
+    totalSubmitted += qs.submitted;
+    totalSucceeded += qs.succeeded;
+    totalFailed += qs.failed;
+  }
+
+  // Criterion 1: API p95 < 2s
+  const apiP95 = allApiTimes.length > 0 ? percentile(allApiTimes, 95) : 0;
+  stats.passFail.push({
+    criterion: 'API p95 (submit_response) < 2000ms',
+    threshold: '< 2000ms',
+    actual: fmtMs(apiP95),
+    pass: apiP95 < 2000,
+  });
+
+  // Criterion 2: API p99 < 5s
+  const apiP99 = allApiTimes.length > 0 ? percentile(allApiTimes, 99) : 0;
+  stats.passFail.push({
+    criterion: 'API p99 (submit_response) < 5000ms',
+    threshold: '< 5000ms',
+    actual: fmtMs(apiP99),
+    pass: apiP99 < 5000,
+  });
+
+  // Criterion 3: Realtime p95 < 3s
+  const rtP95 = timing.realtimeLags.length > 0 ? percentile(timing.realtimeLags, 95) : 0;
+  stats.passFail.push({
+    criterion: 'Realtime propagation p95 < 3000ms',
+    threshold: '< 3000ms',
+    actual: timing.realtimeLags.length > 0 ? fmtMs(rtP95) : 'N/A',
+    pass: timing.realtimeLags.length === 0 || rtP95 < 3000,
+  });
+
+  // Criterion 4: Join success rate >= 95%
+  const joinRate = NUM_PLAYERS > 0 ? (stats.playersCreated / NUM_PLAYERS * 100) : 0;
+  stats.passFail.push({
+    criterion: 'Player join success rate >= 95%',
+    threshold: '>= 95%',
+    actual: `${joinRate.toFixed(1)}%`,
+    pass: joinRate >= 95,
+  });
+
+  // Criterion 5: Answer success rate >= 95%
+  const answerRate = totalSubmitted > 0 ? (totalSucceeded / totalSubmitted * 100) : 0;
+  stats.passFail.push({
+    criterion: 'Answer submission success rate >= 95%',
+    threshold: '>= 95%',
+    actual: `${answerRate.toFixed(1)}% (${totalSucceeded}/${totalSubmitted})`,
+    pass: answerRate >= 95,
+  });
+
+  // Criterion 6: Data integrity all pass
+  const diAllPass = stats.dataIntegrity.length > 0 && stats.dataIntegrity.every(d => d.pass);
+  stats.passFail.push({
+    criterion: 'Data integrity checks all pass',
+    threshold: '100%',
+    actual: `${stats.dataIntegrity.filter(d => d.pass).length}/${stats.dataIntegrity.length}`,
+    pass: diAllPass,
+  });
+
+  // Criterion 7: Edge case critical tests pass
+  const criticalEdgeCases = stats.edgeCases.filter(e =>
+    ['duplicate-player-name', 'invalid-qr-token', 'submit-invalid-qr', 'submit-null-qr'].includes(e.name)
+  );
+  const ecAllPass = criticalEdgeCases.length > 0 && criticalEdgeCases.every(e => e.pass);
+  stats.passFail.push({
+    criterion: 'Critical edge case tests pass',
+    threshold: '100%',
+    actual: `${criticalEdgeCases.filter(e => e.pass).length}/${criticalEdgeCases.length}`,
+    pass: ecAllPass,
+  });
+
+  // Criterion 8: Zero scoring RPC errors
+  const scoringErrors = timing.steps.filter(s => s.step === 'score-question-rpc' && !s.success).length;
+  stats.passFail.push({
+    criterion: 'Zero scoring RPC errors',
+    threshold: '0',
+    actual: String(scoringErrors),
+    pass: scoringErrors === 0,
+  });
+
+  // ── Admin & Player System Response Time Criteria ──
+
+  // Criterion 9: Admin state transition p95 < 1000ms
+  const stateTransitionTimes = timing.steps
+    .filter(s => s.step.startsWith('state->'))
+    .map(s => s.durationMs);
+  const stP95 = stateTransitionTimes.length > 0 ? percentile(stateTransitionTimes, 95) : 0;
+  stats.passFail.push({
+    criterion: 'Admin state transition p95 < 1000ms',
+    threshold: '< 1000ms',
+    actual: stateTransitionTimes.length > 0 ? fmtMs(stP95) : 'N/A',
+    pass: stateTransitionTimes.length === 0 || stP95 < 1000,
+  });
+
+  // Criterion 10: Scoring RPC p95 < 3000ms
+  const scoringRpcTimes = timing.steps
+    .filter(s => s.step === 'score-question-rpc')
+    .map(s => s.durationMs);
+  const scP95 = scoringRpcTimes.length > 0 ? percentile(scoringRpcTimes, 95) : 0;
+  stats.passFail.push({
+    criterion: 'Scoring RPC p95 < 3000ms',
+    threshold: '< 3000ms',
+    actual: scoringRpcTimes.length > 0 ? fmtMs(scP95) : 'N/A',
+    pass: scoringRpcTimes.length === 0 || scP95 < 3000,
+  });
+
+  // Criterion 11: Admin fetch operations p95 < 2000ms
+  const adminFetchTimes = timing.steps
+    .filter(s => ['fetch-leaderboard', 'fetch-response-counts', 'fetch-player-stats'].includes(s.step))
+    .map(s => s.durationMs);
+  const afP95 = adminFetchTimes.length > 0 ? percentile(adminFetchTimes, 95) : 0;
+  stats.passFail.push({
+    criterion: 'Admin fetch operations p95 < 2000ms',
+    threshold: '< 2000ms',
+    actual: adminFetchTimes.length > 0 ? fmtMs(afP95) : 'N/A',
+    pass: adminFetchTimes.length === 0 || afP95 < 2000,
+  });
+
+  // Criterion 12: Player fetch operations p95 < 2000ms
+  const pfP95 = stats.playerFetchTimes.length > 0 ? percentile(stats.playerFetchTimes, 95) : 0;
+  stats.passFail.push({
+    criterion: 'Player fetch operations p95 < 2000ms',
+    threshold: '< 2000ms',
+    actual: stats.playerFetchTimes.length > 0 ? fmtMs(pfP95) : 'N/A',
+    pass: stats.playerFetchTimes.length === 0 || pfP95 < 2000,
+  });
+
+  const passed = stats.passFail.filter(p => p.pass).length;
+  const total = stats.passFail.length;
+  const allPass = passed === total;
+
+  console.log(`\n  PASS/FAIL: ${passed}/${total} criteria met — ${allPass ? 'ALL PASS' : 'SOME FAILED'}`);
+  for (const pf of stats.passFail) {
+    console.log(`    ${pf.pass ? 'PASS' : 'FAIL'}  ${pf.criterion}: ${pf.actual} (threshold: ${pf.threshold})`);
+  }
+
+  return allPass;
+}
+
 // ─── Measure Realtime Propagation ──────────────────────────────────────────────
 
 /**
@@ -469,7 +1125,7 @@ function printReport(questions) {
   console.log('  ' + '-'.repeat(68));
   console.log(
     '  ' + 'Q#'.padEnd(5) + 'Submit'.padEnd(9) + 'OK'.padEnd(6) + 'Fail'.padEnd(6) + 'Skip'.padEnd(6) +
-    'API p50'.padEnd(10) + 'API p95'.padEnd(10) + 'Score RPC'.padEnd(12) + 'RT Lag p50'
+    'API Avg'.padEnd(10) + 'API p95'.padEnd(10) + 'Score RPC'.padEnd(12) + 'RT Lag p50'
   );
   console.log('  ' + '-'.repeat(68));
 
@@ -485,7 +1141,7 @@ function printReport(questions) {
       String(qs.succeeded).padEnd(6) +
       String(qs.failed).padEnd(6) +
       String(qs.skipped).padEnd(6) +
-      fmtMs(percentile(qs.apiTimes, 50)).padEnd(10) +
+      fmtMs(qs.apiTimes.length > 0 ? qs.apiTimes.reduce((s, t) => s + t, 0) / qs.apiTimes.length : 0).padEnd(10) +
       fmtMs(percentile(qs.apiTimes, 95)).padEnd(10) +
       fmtMs(qs.scoringMs).padEnd(12) +
       rtLagP50
@@ -495,11 +1151,29 @@ function printReport(questions) {
   // Overall API timing
   console.log('\n  Overall API (submit_response) Distribution:');
   if (allApiTimes.length > 0) {
+    const mean = allApiTimes.reduce((s, t) => s + t, 0) / allApiTimes.length;
+    console.log(`    mean: ${fmtMs(mean)}`);
+    console.log(`    σ:    ${fmtMs(stdDev(allApiTimes))}`);
     console.log(`    p50:  ${fmtMs(percentile(allApiTimes, 50))}`);
     console.log(`    p90:  ${fmtMs(percentile(allApiTimes, 90))}`);
     console.log(`    p95:  ${fmtMs(percentile(allApiTimes, 95))}`);
     console.log(`    p99:  ${fmtMs(percentile(allApiTimes, 99))}`);
     console.log(`    max:  ${fmtMs(Math.max(...allApiTimes))}`);
+    console.log(`    throughput: ${throughput(allApiTimes.length, timing.testEndMs - timing.testStartMs).toFixed(1)} ops/sec`);
+  }
+
+  // Admin / System operation timing
+  {
+    const stTimes = timing.steps.filter(s => s.step.startsWith('state->')).map(s => s.durationMs);
+    const scTimes = timing.steps.filter(s => s.step === 'score-question-rpc').map(s => s.durationMs);
+    const afTimes = timing.steps.filter(s => ['fetch-leaderboard', 'fetch-response-counts', 'fetch-player-stats'].includes(s.step)).map(s => s.durationMs);
+    const pfTimes = stats.playerFetchTimes;
+
+    console.log('\n  System Operation Timing (Admin + Player):');
+    if (stTimes.length > 0) console.log(`    State transitions:  p50=${fmtMs(percentile(stTimes, 50))}, p95=${fmtMs(percentile(stTimes, 95))}, max=${fmtMs(Math.max(...stTimes))}`);
+    if (scTimes.length > 0) console.log(`    Scoring RPC:        p50=${fmtMs(percentile(scTimes, 50))}, p95=${fmtMs(percentile(scTimes, 95))}, max=${fmtMs(Math.max(...scTimes))}`);
+    if (afTimes.length > 0) console.log(`    Admin fetch:        p50=${fmtMs(percentile(afTimes, 50))}, p95=${fmtMs(percentile(afTimes, 95))}, max=${fmtMs(Math.max(...afTimes))}`);
+    if (pfTimes.length > 0) console.log(`    Player fetch:       p50=${fmtMs(percentile(pfTimes, 50))}, p95=${fmtMs(percentile(pfTimes, 95))}, max=${fmtMs(Math.max(...pfTimes))}`);
   }
 
   // Realtime propagation
@@ -508,6 +1182,31 @@ function printReport(questions) {
     console.log(`    p50:  ${fmtMs(percentile(timing.realtimeLags, 50))}`);
     console.log(`    p95:  ${fmtMs(percentile(timing.realtimeLags, 95))}`);
     console.log(`    max:  ${fmtMs(Math.max(...timing.realtimeLags))}`);
+  }
+
+  // Edge case results
+  if (stats.edgeCases.length > 0) {
+    console.log('\n  Edge Case Tests:');
+    for (const ec of stats.edgeCases) {
+      console.log(`    ${ec.pass ? 'PASS' : 'FAIL'}  ${ec.name}: ${ec.actual}`);
+    }
+  }
+
+  // Data integrity results
+  if (stats.dataIntegrity.length > 0) {
+    console.log('\n  Data Integrity:');
+    for (const di of stats.dataIntegrity) {
+      console.log(`    ${di.pass ? 'PASS' : 'FAIL'}  ${di.check}: ${di.detail}`);
+    }
+  }
+
+  // Pass/Fail criteria
+  if (stats.passFail.length > 0) {
+    const pfPassed = stats.passFail.filter(p => p.pass).length;
+    console.log(`\n  Pass/Fail Criteria: ${pfPassed}/${stats.passFail.length}`);
+    for (const pf of stats.passFail) {
+      console.log(`    ${pf.pass ? 'PASS' : 'FAIL'}  ${pf.criterion}: ${pf.actual}`);
+    }
   }
 
   console.log(`\n  Total errors: ${stats.errors.length}`);
@@ -653,8 +1352,8 @@ function generateHtmlReport(questions) {
   questions.forEach((q, qi) => {
     const qs = stats.perQuestion[q.id];
     if (!qs) return;
-    const avgRT = qs.responseTimes.length > 0
-      ? Math.round(qs.responseTimes.reduce((a, b) => a + b, 0) / qs.responseTimes.length)
+    const apiAvg = qs.apiTimes.length > 0
+      ? Math.round(qs.apiTimes.reduce((a, b) => a + b, 0) / qs.apiTimes.length)
       : 0;
     const rtP50 = qs.realtimePropagation.length > 0 ? fmtMs(percentile(qs.realtimePropagation, 50)) : '-';
     const rtP95 = qs.realtimePropagation.length > 0 ? fmtMs(percentile(qs.realtimePropagation, 95)) : '-';
@@ -674,7 +1373,7 @@ function generateHtmlReport(questions) {
         <td>${qs.succeeded}</td>
         <td${failClass}>${qs.failed}</td>
         <td>${qs.skipped}</td>
-        <td>${avgRT}ms</td>
+        <td>${fmtMs(apiAvg)}</td>
         <td>${fmtMs(percentile(qs.apiTimes, 50))}</td>
         <td>${fmtMs(percentile(qs.apiTimes, 95))}</td>
         <td>${qs.apiTimes.length > 0 ? fmtMs(Math.max(...qs.apiTimes)) : '-'}</td>
@@ -890,17 +1589,81 @@ function generateHtmlReport(questions) {
       <div class="label">Total Errors</div>
       <div class="value ${stats.errors.length > 0 ? 'red' : 'green'}">${stats.errors.length}</div>
     </div>
+    <div class="summary-card">
+      <div class="label">Edge Cases</div>
+      <div class="value ${stats.edgeCases.every(e => e.pass) ? 'green' : 'red'}">${stats.edgeCases.filter(e => e.pass).length}/${stats.edgeCases.length}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Data Integrity</div>
+      <div class="value ${stats.dataIntegrity.every(d => d.pass) ? 'green' : 'red'}">${stats.dataIntegrity.filter(d => d.pass).length}/${stats.dataIntegrity.length}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Throughput</div>
+      <div class="value blue">${throughput(allApiTimes.length, timing.testEndMs - timing.testStartMs).toFixed(1)} <span style="font-size:12px;color:#64748b">ops/s</span></div>
+    </div>
+    <div class="summary-card">
+      <div class="label">API Std Dev</div>
+      <div class="value orange">${allApiTimes.length > 0 ? fmtMs(stdDev(allApiTimes)) : '-'}</div>
+    </div>
+    ${(() => {
+      const stTimes = timing.steps.filter(s => s.step.startsWith('state->')).map(s => s.durationMs);
+      const scTimes = timing.steps.filter(s => s.step === 'score-question-rpc').map(s => s.durationMs);
+      const afTimes = timing.steps.filter(s => ['fetch-leaderboard', 'fetch-response-counts', 'fetch-player-stats'].includes(s.step)).map(s => s.durationMs);
+      const pfTimes = stats.playerFetchTimes;
+      return `
+    <div class="summary-card">
+      <div class="label">State Transition p50/p95</div>
+      <div class="value blue" style="font-size:18px">${stTimes.length > 0 ? fmtMs(percentile(stTimes, 50)) + ' / ' + fmtMs(percentile(stTimes, 95)) : '-'}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Scoring RPC p50/p95</div>
+      <div class="value purple" style="font-size:18px">${scTimes.length > 0 ? fmtMs(percentile(scTimes, 50)) + ' / ' + fmtMs(percentile(scTimes, 95)) : '-'}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Admin Fetch p50/p95</div>
+      <div class="value orange" style="font-size:18px">${afTimes.length > 0 ? fmtMs(percentile(afTimes, 50)) + ' / ' + fmtMs(percentile(afTimes, 95)) : '-'}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Player Fetch p50/p95</div>
+      <div class="value blue" style="font-size:18px">${pfTimes.length > 0 ? fmtMs(percentile(pfTimes, 50)) + ' / ' + fmtMs(percentile(pfTimes, 95)) : '-'}</div>
+    </div>`;
+    })()}
   </div>
+
+  <!-- ── Pass/Fail Banner ── -->
+  ${(() => {
+    const pfPassed = stats.passFail.filter(p => p.pass).length;
+    const pfTotal = stats.passFail.length;
+    const allPass = pfPassed === pfTotal;
+    return `
+  <div class="section" style="border-left:4px solid ${allPass ? '#34d399' : '#ef4444'};margin-bottom:24px">
+    <h2 style="color:${allPass ? '#34d399' : '#f87171'}">${allPass ? 'ALL CRITERIA PASSED' : 'SOME CRITERIA FAILED'} (${pfPassed}/${pfTotal})</h2>
+    <table>
+      <thead><tr><th style="width:50px">Result</th><th>Criterion</th><th>Threshold</th><th>Actual</th></tr></thead>
+      <tbody>${stats.passFail.map(pf => `
+        <tr>
+          <td class="${pf.pass ? 'pass' : 'fail'}">${pf.pass ? 'PASS' : 'FAIL'}</td>
+          <td>${escapeHtml(pf.criterion)}</td>
+          <td>${escapeHtml(pf.threshold)}</td>
+          <td>${escapeHtml(pf.actual)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+  })()}
 
   <!-- ── Tabs ── -->
   <div class="tab-nav">
     <button class="tab-btn active" onclick="showTab('timeline')">Timeline</button>
     <button class="tab-btn" onclick="showTab('questions')">Per-Question</button>
     <button class="tab-btn" onclick="showTab('api')">API Timing</button>
+    <button class="tab-btn" onclick="showTab('system')">System Timing</button>
     <button class="tab-btn" onclick="showTab('scoring')">Scoring & Settlement</button>
     <button class="tab-btn" onclick="showTab('realtime')">Realtime Propagation</button>
     <button class="tab-btn" onclick="showTab('operations')">All Operations</button>
     <button class="tab-btn" onclick="showTab('players')">Player Details</button>
+    <button class="tab-btn" onclick="showTab('edgecases')">Edge Cases</button>
+    <button class="tab-btn" onclick="showTab('integrity')">Data Integrity</button>
     <button class="tab-btn" onclick="showTab('errors')">Errors</button>
   </div>
 
@@ -917,13 +1680,13 @@ function generateHtmlReport(questions) {
   <div id="tab-questions" class="tab-content">
     <div class="section">
       <h2>Per-Question Results (Detailed)</h2>
-      <p style="color:#64748b;font-size:12px;margin-bottom:12px">API latency = round-trip to Supabase for submit_response. RT Lag = realtime push delay to players. Scoring = score_question RPC duration.</p>
+      <p style="color:#64748b;font-size:12px;margin-bottom:12px">API Avg/p50/p95/Max = system round-trip latency for submit_response (excludes player think time). RT Lag = realtime push delay. Scoring = score_question RPC.</p>
       <div style="overflow-x:auto">
       <table>
         <thead>
           <tr>
             <th>#</th><th>Question</th><th>Submit</th><th>OK</th><th>Fail</th><th>Skip</th>
-            <th>Avg RT</th><th>API p50</th><th>API p95</th><th>API Max</th>
+            <th>API Avg</th><th>API p50</th><th>API p95</th><th>API Max</th>
             <th>Scoring RPC</th><th>Resp Fetch</th><th>RT Lag p50</th><th>RT Lag p95</th><th>State Transitions</th>
           </tr>
         </thead>
@@ -946,7 +1709,9 @@ function generateHtmlReport(questions) {
         <div class="percentile-card"><div class="p-label">p99</div><div class="p-value">${allApiTimes.length > 0 ? fmtMs(percentile(allApiTimes, 99)) : '-'}</div></div>
         <div class="percentile-card"><div class="p-label">Max</div><div class="p-value">${allApiTimes.length > 0 ? fmtMs(Math.max(...allApiTimes)) : '-'}</div></div>
         <div class="percentile-card"><div class="p-label">Mean</div><div class="p-value">${allApiTimes.length > 0 ? fmtMs(allApiTimes.reduce((s, t) => s + t, 0) / allApiTimes.length) : '-'}</div></div>
+        <div class="percentile-card"><div class="p-label">Std Dev (σ)</div><div class="p-value">${allApiTimes.length > 0 ? fmtMs(stdDev(allApiTimes)) : '-'}</div></div>
         <div class="percentile-card"><div class="p-label">Total Calls</div><div class="p-value">${allApiTimes.length}</div></div>
+        <div class="percentile-card"><div class="p-label">Throughput</div><div class="p-value">${throughput(allApiTimes.length, timing.testEndMs - timing.testStartMs).toFixed(1)} <span style="font-size:10px">ops/s</span></div></div>
       </div>
     </div>
     <div class="section">
@@ -954,6 +1719,55 @@ function generateHtmlReport(questions) {
       <p style="color:#64748b;font-size:12px;margin-bottom:12px">Blue = p50 (median), Red = p95. Shows how API latency varies across questions under sustained load.</p>
       <div class="chart-container">${qBarSvg}</div>
     </div>
+  </div>
+
+  <!-- ── Tab: System Timing ── -->
+  <div id="tab-system" class="tab-content">
+    ${(() => {
+      const stTimes = timing.steps.filter(s => s.step.startsWith('state->')).map(s => s.durationMs);
+      const scTimes = timing.steps.filter(s => s.step === 'score-question-rpc').map(s => s.durationMs);
+      const afTimes = timing.steps.filter(s => ['fetch-leaderboard', 'fetch-response-counts', 'fetch-player-stats'].includes(s.step)).map(s => s.durationMs);
+      const pfTimes = stats.playerFetchTimes;
+      const joinTimes = Object.values(stats.playerLogs).filter(l => l.joinSuccess).map(l => l.joinTimeMs);
+
+      const renderGrid = (label, times) => {
+        if (times.length === 0) return '<p style="color:#64748b">No data.</p>';
+        return '<div class="percentile-grid">' +
+          '<div class="percentile-card"><div class="p-label">Count</div><div class="p-value">' + times.length + '</div></div>' +
+          '<div class="percentile-card"><div class="p-label">p50</div><div class="p-value">' + fmtMs(percentile(times, 50)) + '</div></div>' +
+          '<div class="percentile-card"><div class="p-label">p90</div><div class="p-value">' + fmtMs(percentile(times, 90)) + '</div></div>' +
+          '<div class="percentile-card"><div class="p-label">p95</div><div class="p-value">' + fmtMs(percentile(times, 95)) + '</div></div>' +
+          '<div class="percentile-card"><div class="p-label">p99</div><div class="p-value">' + fmtMs(percentile(times, 99)) + '</div></div>' +
+          '<div class="percentile-card"><div class="p-label">Max</div><div class="p-value">' + fmtMs(Math.max(...times)) + '</div></div>' +
+          '<div class="percentile-card"><div class="p-label">Mean</div><div class="p-value">' + fmtMs(times.reduce((s,t)=>s+t,0)/times.length) + '</div></div>' +
+          '<div class="percentile-card"><div class="p-label">Std Dev</div><div class="p-value">' + fmtMs(stdDev(times)) + '</div></div>' +
+          '</div>';
+      };
+
+      return `
+    <div class="section">
+      <h2>System Response Time Summary</h2>
+      <p style="color:#64748b;font-size:12px;margin-bottom:12px">所有系統操作的回應時間（不包含玩家思考時間）。如果這些數值過高，表示伺服器/網路有效能問題。</p>
+
+      <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Player Join (join_via_qr RPC)</h3>
+      ${renderGrid('join', joinTimes)}
+
+      <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Answer Submission API (submit_response RPC)</h3>
+      ${renderGrid('submit', allApiTimes)}
+
+      <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Admin State Transitions (game_status UPDATE)</h3>
+      ${renderGrid('state', stTimes)}
+
+      <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Scoring RPC (score_question)</h3>
+      ${renderGrid('scoring', scTimes)}
+
+      <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Admin Fetch Operations (leaderboard, response counts, player stats)</h3>
+      ${renderGrid('admin-fetch', afTimes)}
+
+      <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Player Fetch Operations (score fetch, leaderboard)</h3>
+      ${renderGrid('player-fetch', pfTimes)}
+    </div>`;
+    })()}
   </div>
 
   <!-- ── Tab: Scoring ── -->
@@ -1017,6 +1831,44 @@ function generateHtmlReport(questions) {
         <tbody>${playerRows}</tbody>
       </table>
       </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Edge Cases ── -->
+  <div id="tab-edgecases" class="tab-content">
+    <div class="section">
+      <h2>Edge Case Tests (${stats.edgeCases.filter(e => e.pass).length}/${stats.edgeCases.length} Passed)</h2>
+      <p style="color:#64748b;font-size:12px;margin-bottom:12px">驗證系統對異常輸入的防護：重複暱稱、無效 QR token、重複提交等。</p>
+      <table>
+        <thead><tr><th style="width:50px">Result</th><th>Test Name</th><th>Description</th><th>Expected</th><th>Actual</th></tr></thead>
+        <tbody>${stats.edgeCases.map(ec => `
+          <tr>
+            <td class="${ec.pass ? 'pass' : 'fail'}">${ec.pass ? 'PASS' : 'FAIL'}</td>
+            <td>${escapeHtml(ec.name)}</td>
+            <td>${escapeHtml(ec.description)}</td>
+            <td style="color:#64748b">${escapeHtml(ec.expected)}</td>
+            <td>${escapeHtml(ec.actual)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Tab: Data Integrity ── -->
+  <div id="tab-integrity" class="tab-content">
+    <div class="section">
+      <h2>Data Integrity Validation (${stats.dataIntegrity.filter(d => d.pass).length}/${stats.dataIntegrity.length} Passed)</h2>
+      <p style="color:#64748b;font-size:12px;margin-bottom:12px">驗證結算後的數據一致性：is_correct 標記、scored_points 公式、玩家總分等。</p>
+      <table>
+        <thead><tr><th style="width:50px">Result</th><th>Check</th><th>Detail</th></tr></thead>
+        <tbody>${stats.dataIntegrity.map(di => `
+          <tr>
+            <td class="${di.pass ? 'pass' : 'fail'}">${di.pass ? 'PASS' : 'FAIL'}</td>
+            <td>${escapeHtml(di.check)}</td>
+            <td>${escapeHtml(di.detail)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -1142,6 +1994,11 @@ async function main() {
   phaseEnd('1-player-join');
 
   // ══════════════════════════════════════════════════════════════════════════════
+  // Phase 1.5: Edge case tests
+  // ══════════════════════════════════════════════════════════════════════════════
+  await runEdgeCaseTests(qrToken, questions);
+
+  // ══════════════════════════════════════════════════════════════════════════════
   // Phase 2: Question loop
   // ══════════════════════════════════════════════════════════════════════════════
   phaseStart('2-question-loop');
@@ -1228,13 +2085,13 @@ async function main() {
     // ── Step 8: Players fetch their own score (like scoring-ui) ──
     console.log('  [8] Players fetching scores...');
     const scoreFetchT0 = now();
-    // Sample 10 players for score fetch (to avoid flooding)
-    const samplePlayers = activePlayers.filter((_, i) => i % 10 === 0);
-    const scoreFetches = await Promise.all(samplePlayers.map(p => p.fetchMyScore(q.id)));
+    // All players fetch their score concurrently (stress test)
+    const scoreFetches = await Promise.all(activePlayers.map(p => p.fetchMyScore(q.id)));
     const scoreFetchDur = now() - scoreFetchT0;
     const scoreFetchTimes = scoreFetches.map(r => r.durationMs);
-    recordStep('player', 'fetch-score', `q=${q.id}, sample=${samplePlayers.length}`, scoreFetchDur);
-    console.log(`  [8] Score fetch (${samplePlayers.length} players): p50=${fmtMs(percentile(scoreFetchTimes, 50))}, max=${fmtMs(Math.max(...scoreFetchTimes))}`);
+    recordStep('player', 'fetch-score', `q=${q.id}, count=${activePlayers.length}`, scoreFetchDur);
+    stats.playerFetchTimes.push(...scoreFetchTimes);
+    console.log(`  [8] Score fetch (${activePlayers.length} players): p50=${fmtMs(percentile(scoreFetchTimes, 50))}, p95=${fmtMs(percentile(scoreFetchTimes, 95))}, max=${fmtMs(Math.max(...scoreFetchTimes))}`);
 
     // ── Step 9: Admin fetches leaderboard ──
     console.log('  [9] Admin fetching leaderboard...');
@@ -1275,21 +2132,24 @@ async function main() {
     console.log(`  Realtime propagation: ${endLags.length} received, p50=${fmtMs(percentile(endLags, 50))}`);
   }
 
-  // Players fetch final leaderboard (like end-ui)
+  // Players fetch final leaderboard (like end-ui) — ALL players concurrently
   console.log('  Players fetching final leaderboard...');
   const endFetchT0 = now();
-  const sampleEnd = activePlayers.filter((_, i) => i % 10 === 0);
-  const endFetches = await Promise.all(sampleEnd.map(p => p.fetchEndLeaderboard()));
+  const endFetches = await Promise.all(activePlayers.map(p => p.fetchEndLeaderboard()));
   const endFetchDur = now() - endFetchT0;
   const endFetchTimes = endFetches.map(r => r.durationMs);
-  recordStep('player', 'fetch-end-leaderboard', `sample=${sampleEnd.length}`, endFetchDur);
-  console.log(`  End leaderboard fetch (${sampleEnd.length} players): p50=${fmtMs(percentile(endFetchTimes, 50))}, max=${fmtMs(Math.max(...endFetchTimes))}`);
+  recordStep('player', 'fetch-end-leaderboard', `count=${activePlayers.length}`, endFetchDur);
+  stats.playerFetchTimes.push(...endFetchTimes);
+  console.log(`  End leaderboard fetch (${activePlayers.length} players): p50=${fmtMs(percentile(endFetchTimes, 50))}, p95=${fmtMs(percentile(endFetchTimes, 95))}, max=${fmtMs(Math.max(...endFetchTimes))}`);
 
   // Admin fetches final leaderboard + player stats (for PDF export)
   const finalLb = await fetchLeaderboard();
   console.log(`  Admin final leaderboard: ${fmtMs(finalLb.durationMs)}`);
   const playerStats = await fetchPlayerStats();
   console.log(`  Admin player stats (PDF export): ${fmtMs(playerStats.durationMs)}`);
+
+  // ── Data Integrity Validation ──
+  await validateDataIntegrity(questions);
 
   phaseEnd('3-end-game');
 
@@ -1304,14 +2164,17 @@ async function main() {
 
   timing.testEndMs = Date.now();
 
+  // Evaluate pass/fail criteria
+  const allPass = evaluatePassFail(questions);
+
   // Print console report
   printReport(questions);
 
   // Generate HTML report
   generateHtmlReport(questions);
 
-  console.log('\nLoad test complete.\n');
-  process.exit(0);
+  console.log(`\nLoad test complete. Result: ${allPass ? 'ALL PASS' : 'SOME CRITERIA FAILED'}\n`);
+  process.exit(allPass ? 0 : 1);
 }
 
 main().catch(err => {

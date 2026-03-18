@@ -304,6 +304,14 @@ ALTER TABLE public.game_status ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAU
 -- 測試分數獨立累計
 ALTER TABLE public.players ADD COLUMN IF NOT EXISTS test_score integer DEFAULT 0;
 
+-- ============================================================
+-- 效能索引（加速 score_question、fetchMyScore、leaderboard 查詢）
+-- ============================================================
+CREATE INDEX IF NOT EXISTS idx_responses_player_question ON public.responses(player_name, question_id);
+CREATE INDEX IF NOT EXISTS idx_responses_question_id ON public.responses(question_id);
+CREATE INDEX IF NOT EXISTS idx_players_score_desc ON public.players(score DESC);
+CREATE INDEX IF NOT EXISTS idx_players_test_score_desc ON public.players(test_score DESC);
+
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
 VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')

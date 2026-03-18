@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git:*)",
       "Bash(ls:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(cd D:/User/Developer/quiz-game/e2e-test && node --check load-test.mjs 2>&1)",
+      "Bash(cd:*)"
     ]
   }
 }
