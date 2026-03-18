@@ -650,14 +650,15 @@
                     scoringNoteEl.classList.add('hidden');
                 }
 
-                // 取得本題積分與累計積分
-                const { data: myResponse } = await sbClient.from('responses').select('scored_points').eq('player_name', myName).eq('question_id', status.current_q_id).single();
-                const questionScore = myResponse ? myResponse.scored_points : 0;
+                // 取得本題積分與累計積分（單一 RPC 取代 2 次查詢）
+                const { data: myScoreData } = await sbClient.rpc('get_my_score', {
+                    p_player_name: myName,
+                    p_question_id: status.current_q_id,
+                    p_mode: currentMode
+                });
+                const questionScore = myScoreData?.question_score || 0;
+                const totalScore = myScoreData?.total_score || 0;
                 document.getElementById('scoring-question-score').innerText = `${questionScore} 分`;
-
-                const scoreField = currentMode === 'test' ? 'test_score' : 'score';
-                const { data: myPlayer } = await sbClient.from('players').select(scoreField).eq('name', myName).single();
-                const totalScore = myPlayer ? myPlayer[scoreField] : 0;
                 document.getElementById('scoring-total-score').innerText = `${totalScore} 分`;
             }
             else if (status.state === 'ended') {

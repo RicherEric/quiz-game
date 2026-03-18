@@ -170,7 +170,7 @@ BEGIN
   SET is_correct    = (choice = p_correct_answer AND choice != 0),
       scored_points = CASE
         WHEN (choice = p_correct_answer AND choice != 0)
-        THEN ROUND(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75))
+        THEN FLOOR(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75) + 0.5)::int
         ELSE 0
       END
   WHERE question_id = p_question_id;
@@ -215,6 +215,65 @@ RETURNS TABLE(player_name text, correct_count bigint, avg_time_ms numeric) AS $$
     AVG(response_time_ms) FILTER (WHERE response_time_ms > 0)
   FROM responses
   GROUP BY player_name;
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- 玩家取得自己的本題分數 + 累計分數（合併 2 次查詢為 1 次 RPC）
+CREATE OR REPLACE FUNCTION get_my_score(
+  p_player_name text,
+  p_question_id int,
+  p_mode text DEFAULT 'official'
+)
+RETURNS json AS $$
+DECLARE
+  v_question_score int;
+  v_total_score int;
+BEGIN
+  SELECT COALESCE(scored_points, 0) INTO v_question_score
+    FROM responses
+   WHERE player_name = p_player_name AND question_id = p_question_id
+   LIMIT 1;
+
+  IF p_mode = 'test' THEN
+    SELECT COALESCE(test_score, 0) INTO v_total_score FROM players WHERE name = p_player_name;
+  ELSE
+    SELECT COALESCE(score, 0) INTO v_total_score FROM players WHERE name = p_player_name;
+  END IF;
+
+  RETURN json_build_object('question_score', COALESCE(v_question_score, 0), 'total_score', COALESCE(v_total_score, 0));
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 重置某題作答紀錄（回退分數 + 刪除 responses，取代 O(N) 個別查詢）
+CREATE OR REPLACE FUNCTION reset_question_responses(
+  p_question_id int, p_mode text DEFAULT 'official'
+) RETURNS json AS $$
+DECLARE v_deleted int;
+BEGIN
+  IF p_mode = 'test' THEN
+    UPDATE players p SET test_score = GREATEST(0, test_score - sub.pts)
+    FROM (SELECT player_name, SUM(scored_points) AS pts FROM responses
+          WHERE question_id = p_question_id AND scored_points > 0 GROUP BY player_name) sub
+    WHERE p.name = sub.player_name;
+  ELSE
+    UPDATE players p SET score = GREATEST(0, score - sub.pts)
+    FROM (SELECT player_name, SUM(scored_points) AS pts FROM responses
+          WHERE question_id = p_question_id AND scored_points > 0 GROUP BY player_name) sub
+    WHERE p.name = sub.player_name;
+  END IF;
+  DELETE FROM responses WHERE question_id = p_question_id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  RETURN json_build_object('deleted', v_deleted);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 取得各選項作答人數（取代 client-side 全表掃描）
+CREATE OR REPLACE FUNCTION get_response_counts(p_question_id int)
+RETURNS json AS $$
+  SELECT COALESCE(json_object_agg(choice, cnt), '{}'::json)
+  FROM (
+    SELECT choice, COUNT(*) AS cnt
+    FROM responses WHERE question_id = p_question_id GROUP BY choice
+  ) sub;
 $$ LANGUAGE sql SECURITY DEFINER;
 
 -- ============================================================

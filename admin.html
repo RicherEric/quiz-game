@@ -1355,29 +1355,11 @@
 
             // 開放作答時，若該題已有作答紀錄則先重置（回退分數 + 刪除舊紀錄）
             if (newState === 'playing') {
-                const { data: oldResponses } = await sbClient.from('responses')
-                    .select('player_name, scored_points')
-                    .eq('question_id', parseInt(qId));
-
-                if (oldResponses && oldResponses.length > 0) {
-                    // 回退已結算的分數
-                    const scoreField = currentMode === 'test' ? 'test_score' : 'score';
-                    const playerScores = {};
-                    oldResponses.forEach(r => {
-                        if (r.scored_points > 0) {
-                            playerScores[r.player_name] = (playerScores[r.player_name] || 0) + r.scored_points;
-                        }
-                    });
-                    for (const [name, points] of Object.entries(playerScores)) {
-                        const { data: player } = await sbClient.from('players').select(scoreField).eq('name', name).single();
-                        if (player) {
-                            await sbClient.from('players').update({ [scoreField]: Math.max(0, player[scoreField] - points) }).eq('name', name);
-                        }
-                    }
-                    // 刪除舊作答紀錄
-                    await sbClient.from('responses').delete().eq('question_id', parseInt(qId));
-                    _playersCache = null; // 清除玩家快取
-                }
+                const { data: resetResult, error: resetError } = await sbClient.rpc('reset_question_responses', {
+                    p_question_id: parseInt(qId), p_mode: currentMode
+                });
+                if (resetError) console.error('Reset failed:', resetError);
+                else if (resetResult?.deleted > 0) _playersCache = null;
             }
 
             const updateData = {

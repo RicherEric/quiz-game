@@ -258,12 +258,13 @@ async function adminScoreViaRPC(questionId, correctAnswer) {
  */
 async function fetchResponseCounts(questionId) {
   const t0 = now();
-  const { data, error } = await admin.from('responses').select('choice').eq('question_id', questionId);
+  const { data, error } = await admin.rpc('get_response_counts', { p_question_id: questionId });
   const dur = now() - t0;
   recordStep('admin', 'fetch-response-counts', `q=${questionId}`, dur, !error);
   const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
-  if (data) data.forEach(r => { if (counts[r.choice] !== undefined) counts[r.choice]++; });
-  return { durationMs: dur, counts, total: data?.length || 0 };
+  if (data) Object.entries(data).forEach(([k, v]) => { const key = parseInt(k); if (counts[key] !== undefined) counts[key] = v; });
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  return { durationMs: dur, counts, total };
 }
 
 /**
@@ -409,10 +410,11 @@ function createPlayer(index, qrToken) {
      */
     async fetchMyScore(questionId) {
       const t0 = now();
-      const { data: resp } = await client.from('responses').select('scored_points').eq('player_name', name).eq('question_id', questionId).single();
-      const { data: player } = await client.from('players').select('score').eq('name', name).single();
+      const { data } = await client.rpc('get_my_score', {
+        p_player_name: name, p_question_id: questionId, p_mode: 'official'
+      });
       const dur = now() - t0;
-      return { durationMs: dur, questionScore: resp?.scored_points || 0, totalScore: player?.score || 0 };
+      return { durationMs: dur, questionScore: data?.question_score || 0, totalScore: data?.total_score || 0 };
     },
 
     /**
