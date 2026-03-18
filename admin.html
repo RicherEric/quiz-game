@@ -144,7 +144,7 @@
                 </button>
 
                 <!-- playing 狀態：停止作答 -->
-                <button id="btn-stop" onclick="changeState('stopped')"
+                <button id="btn-stop" onclick="confirmStop()"
                     class="hidden flex-1 md:flex-none bg-gradient-to-r from-amber-600 to-amber-800 hover:from-amber-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-amber-400/50">
                     ⏸️ 停止作答
                 </button>
@@ -312,6 +312,10 @@
                     <div class="flex items-center gap-4">
                         <p class="text-gold-400/90">參賽總人數: <span id="total-players"
                                 class="font-bold text-2xl text-gold-100">0</span></p>
+                        <button onclick="doScoring()"
+                            class="px-5 py-2 bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white font-bold rounded-xl transition shadow-lg text-sm">
+                            💰 結算
+                        </button>
                         <button onclick="exportLeaderboardPDF()"
                             class="px-5 py-2 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg text-sm">
                             📄 匯出 PDF
@@ -1295,7 +1299,7 @@
                 // revealed 狀態不隱藏答案公布區，讓媒體持續顯示
                 document.getElementById('btn-score').classList.remove('hidden');
             } else if (state === 'scoring') {
-                selector.disabled = true;
+                selector.disabled = false;
                 // 如果是最後一題，隱藏「下一題」按鈕
                 const selectEl = document.getElementById('q-selector');
                 const isLastQuestion = selectEl.selectedIndex >= selectEl.options.length - 1;
@@ -1332,6 +1336,13 @@
             if (statsInterval) { clearInterval(statsInterval); statsInterval = null; }
         }
 
+        // 停止作答確認
+        function confirmStop() {
+            if (confirm('是否確定停止作答？')) {
+                changeState('stopped');
+            }
+        }
+
         // 發送指令給所有手機 (更新 game_status)
         async function changeState(newState) {
             const selectEl = document.getElementById('q-selector');
@@ -1340,6 +1351,33 @@
             if (!qId) {
                 alert("題庫尚未載入，無法開放作答！請確認有匯入題目。");
                 return;
+            }
+
+            // 開放作答時，若該題已有作答紀錄則先重置（回退分數 + 刪除舊紀錄）
+            if (newState === 'playing') {
+                const { data: oldResponses } = await sbClient.from('responses')
+                    .select('player_name, scored_points')
+                    .eq('question_id', parseInt(qId));
+
+                if (oldResponses && oldResponses.length > 0) {
+                    // 回退已結算的分數
+                    const scoreField = currentMode === 'test' ? 'test_score' : 'score';
+                    const playerScores = {};
+                    oldResponses.forEach(r => {
+                        if (r.scored_points > 0) {
+                            playerScores[r.player_name] = (playerScores[r.player_name] || 0) + r.scored_points;
+                        }
+                    });
+                    for (const [name, points] of Object.entries(playerScores)) {
+                        const { data: player } = await sbClient.from('players').select(scoreField).eq('name', name).single();
+                        if (player) {
+                            await sbClient.from('players').update({ [scoreField]: Math.max(0, player[scoreField] - points) }).eq('name', name);
+                        }
+                    }
+                    // 刪除舊作答紀錄
+                    await sbClient.from('responses').delete().eq('question_id', parseInt(qId));
+                    _playersCache = null; // 清除玩家快取
+                }
             }
 
             const updateData = {
