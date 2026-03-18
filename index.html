@@ -258,6 +258,7 @@
 
         let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [], qrToken = null, currentMode = 'official';
         let countdownTimer = null;
+        let pendingScore = null; // 暫存 admin broadcast 推送的分數
         const COUNTDOWN_TOTAL = 15000; // 15 seconds in ms
         const COUNTDOWN_CIRCUMFERENCE = 2 * Math.PI * 28; // ~175.93
 
@@ -349,6 +350,16 @@
                 .subscribe((status) => {
                     console.log("廣播連線狀態:", status);
                 });
+
+            // 監聽 admin 廣播的分數（取代 get_my_score RPC）
+            sbClient.channel('score-broadcast')
+                .on('broadcast', { event: 'score-update' }, (msg) => {
+                    const myScore = msg.payload.scores?.[myName];
+                    if (myScore) {
+                        pendingScore = myScore;
+                    }
+                })
+                .subscribe();
 
             // 輪詢備援：每 15 秒檢查一次，防止即時連線漏接（Realtime 為主）
             if (pollInterval) clearInterval(pollInterval);
@@ -650,14 +661,29 @@
                     scoringNoteEl.classList.add('hidden');
                 }
 
-                // 取得本題積分與累計積分（單一 RPC 取代 2 次查詢）
-                const { data: myScoreData } = await sbClient.rpc('get_my_score', {
-                    p_player_name: myName,
-                    p_question_id: status.current_q_id,
-                    p_mode: currentMode
-                });
-                const questionScore = myScoreData?.question_score || 0;
-                const totalScore = myScoreData?.total_score || 0;
+                // 從 admin broadcast 取得分數（fallback: 延遲後 RPC 查詢）
+                let questionScore = 0, totalScore = 0;
+                if (pendingScore) {
+                    questionScore = pendingScore.question_score || 0;
+                    totalScore = pendingScore.total_score || 0;
+                    pendingScore = null;
+                } else {
+                    // Broadcast 漏接時的保底 RPC 查詢
+                    await new Promise(r => setTimeout(r, 1000));
+                    if (pendingScore) {
+                        questionScore = pendingScore.question_score || 0;
+                        totalScore = pendingScore.total_score || 0;
+                        pendingScore = null;
+                    } else {
+                        const { data: myScoreData } = await sbClient.rpc('get_my_score', {
+                            p_player_name: myName,
+                            p_question_id: status.current_q_id,
+                            p_mode: currentMode
+                        });
+                        questionScore = myScoreData?.question_score || 0;
+                        totalScore = myScoreData?.total_score || 0;
+                    }
+                }
                 document.getElementById('scoring-question-score').innerText = `${questionScore} 分`;
                 document.getElementById('scoring-total-score').innerText = `${totalScore} 分`;
             }

@@ -7,14 +7,17 @@
  * - Measures every step: join, realtime propagation, answer submission,
  *   scoring RPC, leaderboard fetch, state transitions
  * - Generates an HTML report with SVG timeline & bar charts
+ * - Opens a player browser (stays open) and admin browser (real-time monitoring)
  *
  * Usage: node load-test.mjs
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { writeFileSync, readFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, extname } from 'node:path';
+import { createServer } from 'node:http';
+import { chromium } from 'playwright';
 
 // ─── Load .env ─────────────────────────────────────────────────────────────────
 
@@ -50,6 +53,93 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ADMIN_PASSWORD) {
 
 const NUM_PLAYERS = 100;
 const COUNTDOWN_MS = 15000;
+
+// ─── Browser Monitoring ───────────────────────────────────────────────────────
+
+let httpServer = null;
+let serverPort = 0;
+let userBrowser = null;
+let adminBrowser = null;
+let adminPage = null;  // Playwright page for admin browser automation
+
+function startHttpServer() {
+  return new Promise((resolve) => {
+    const projectRoot = join(__dirname, '..');
+    const mimeTypes = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.json': 'application/json',
+      '.ico': 'image/x-icon',
+      '.woff': 'font/woff',
+      '.woff2': 'font/woff2',
+    };
+
+    httpServer = createServer((req, res) => {
+      const urlPath = decodeURIComponent(req.url.split('?')[0]);
+      let filePath = join(projectRoot, urlPath === '/' ? 'index.html' : urlPath);
+      if (existsSync(filePath) && statSync(filePath).isDirectory()) {
+        filePath = join(filePath, 'index.html');
+      }
+      if (!existsSync(filePath)) {
+        res.writeHead(404);
+        res.end('Not Found');
+        return;
+      }
+      const ext = extname(filePath).toLowerCase();
+      const contentType = mimeTypes[ext] || 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': contentType });
+      res.end(readFileSync(filePath));
+    });
+
+    httpServer.listen(0, () => {
+      serverPort = httpServer.address().port;
+      console.log(`  Local HTTP server on http://localhost:${serverPort}`);
+      resolve(serverPort);
+    });
+  });
+}
+
+async function launchBrowsers(qrToken) {
+  const port = await startHttpServer();
+  const baseUrl = `http://localhost:${port}`;
+
+  // ── User browser: mobile viewport, stays open throughout ──
+  userBrowser = await chromium.launch({ headless: false });
+  const userCtx = await userBrowser.newContext({
+    viewport: { width: 390, height: 844 },
+  });
+  const userPage = await userCtx.newPage();
+  await userPage.goto(`${baseUrl}/index.html?token=${qrToken}`);
+  await userPage.fill('#p-name', 'test_viewer');
+  await userPage.click('button[onclick="join()"]');
+  await userPage.waitForSelector('#waiting-ui:not(.hidden)', { timeout: 10000 });
+  console.log('  User browser opened (test_viewer joined)');
+
+  // ── Admin browser: desktop viewport, real-time monitoring ──
+  adminBrowser = await chromium.launch({ headless: false });
+  const adminCtx = await adminBrowser.newContext({
+    viewport: { width: 1440, height: 900 },
+  });
+  adminPage = await adminCtx.newPage();
+  await adminPage.goto(`${baseUrl}/admin.html`);
+  await adminPage.fill('#login-username', ADMIN_USERNAME);
+  await adminPage.fill('#login-password', ADMIN_PASSWORD);
+  await adminPage.click('button[onclick="doLogin()"]');
+  await adminPage.waitForSelector('#admin-panel:not(.hidden)', { timeout: 10000 });
+  console.log('  Admin browser opened (logged in)');
+}
+
+async function closeBrowsers() {
+  if (userBrowser) { try { await userBrowser.close(); } catch {} }
+  if (adminBrowser) { try { await adminBrowser.close(); } catch {} }
+  if (httpServer) { httpServer.close(); }
+}
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -124,6 +214,106 @@ function phaseStart(name) {
 }
 function phaseEnd(name) {
   if (timing.phases[name]) timing.phases[name].endMs = now();
+}
+
+// ─── Admin Browser Automation ────────────────────────────────────────────────
+// Drive the admin UI via Playwright clicks so the dashboard reflects real-time data
+
+async function adminSelectQuestion(questionId) {
+  // Wait for the dropdown to be populated with actual question options (not placeholder)
+  await adminPage.waitForFunction(
+    (qId) => {
+      const sel = document.getElementById('q-selector');
+      if (!sel) return false;
+      // Check that the specific question option exists
+      return Array.from(sel.options).some(o => o.value === String(qId));
+    },
+    questionId,
+    { timeout: 15000 }
+  );
+  await adminPage.selectOption('#q-selector', String(questionId));
+  await sleep(300);
+}
+
+async function adminClickStart() {
+  const sentAt = Date.now();
+  const t0 = now();
+  await adminPage.click('#btn-start');
+  await adminPage.waitForFunction(
+    () => document.getElementById('current-state-label')?.innerText?.includes('Playing'),
+    { timeout: 10000 }
+  );
+  const dur = now() - t0;
+  recordStep('admin-browser', 'click-start', '', dur);
+  return { durationMs: dur, sentAt };
+}
+
+async function adminClickStop() {
+  adminPage.once('dialog', dialog => dialog.accept());
+  const sentAt = Date.now();
+  const t0 = now();
+  await adminPage.click('#btn-stop');
+  await adminPage.waitForFunction(
+    () => document.getElementById('current-state-label')?.innerText?.includes('Stopped'),
+    { timeout: 10000 }
+  );
+  const dur = now() - t0;
+  recordStep('admin-browser', 'click-stop', '', dur);
+  return { durationMs: dur, sentAt };
+}
+
+async function adminClickReveal() {
+  const sentAt = Date.now();
+  const t0 = now();
+  await adminPage.click('#btn-reveal');
+  await adminPage.waitForFunction(
+    () => document.getElementById('current-state-label')?.innerText?.includes('Revealed'),
+    { timeout: 10000 }
+  );
+  const dur = now() - t0;
+  recordStep('admin-browser', 'click-reveal', '', dur);
+  return { durationMs: dur, sentAt };
+}
+
+async function adminClickScore() {
+  const sentAt = Date.now();
+  const t0 = now();
+  await adminPage.click('#btn-score');
+  await adminPage.waitForFunction(
+    () => document.getElementById('current-state-label')?.innerText?.includes('Scoring'),
+    { timeout: 30000 }
+  );
+  const dur = now() - t0;
+  recordStep('admin-browser', 'click-score', '', dur);
+  return { durationMs: dur, sentAt };
+}
+
+async function adminClickNext() {
+  const sentAt = Date.now();
+  const t0 = now();
+  await adminPage.click('#btn-next');
+  await adminPage.waitForFunction(
+    () => document.getElementById('current-state-label')?.innerText?.includes('Waiting'),
+    { timeout: 10000 }
+  );
+  const dur = now() - t0;
+  recordStep('admin-browser', 'click-next', '', dur);
+  return { durationMs: dur, sentAt };
+}
+
+async function adminClickEnd() {
+  adminPage.on('dialog', dialog => dialog.dismiss());
+  const sentAt = Date.now();
+  const t0 = now();
+  await adminPage.click('#btn-end');
+  await adminPage.waitForFunction(
+    () => document.getElementById('current-state-label')?.innerText?.includes('Ended'),
+    { timeout: 10000 }
+  );
+  const dur = now() - t0;
+  adminPage.removeAllListeners('dialog');
+  recordStep('admin-browser', 'click-end', '', dur);
+  return { durationMs: dur, sentAt };
 }
 
 // ─── Per-Question Stats ────────────────────────────────────────────────────────
@@ -212,14 +402,31 @@ async function fetchQrToken() {
   return data.token;
 }
 
+async function fetchGameMode() {
+  const { data } = await admin.from('game_status').select('mode').eq('id', 1).single();
+  return data?.mode || 'official';
+}
+
 async function fetchQuestions() {
   const t0 = now();
-  const { data, error } = await admin.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
+  // Read game mode to filter questions the same way admin.html does:
+  // admin.html uses (q.type || 'official') === currentMode
+  const mode = await fetchGameMode();
+  let query = admin.from('questions').select('*');
+  if (mode === 'official') {
+    // Match type='official' OR type IS NULL (admin.html defaults null to 'official')
+    query = query.or('type.eq.official,type.is.null');
+  } else {
+    query = query.eq('type', mode);
+  }
+  const { data, error } = await query
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
   const dur = now() - t0;
-  recordStep('setup', 'fetch-questions', `${data?.length || 0} questions`, dur, !error && !!data);
+  recordStep('setup', 'fetch-questions', `${data?.length || 0} ${mode} questions`, dur, !error && !!data);
   if (error) throw new Error(`Failed to fetch questions: ${error.message}`);
-  if (!data || data.length === 0) throw new Error('No questions found.');
-  console.log(`  ${data.length} questions loaded (${fmtMs(dur)})`);
+  if (!data || data.length === 0) throw new Error(`No questions found for mode "${mode}".`);
+  console.log(`  ${data.length} questions loaded (mode=${mode}, ${fmtMs(dur)})`);
   return data;
 }
 
@@ -1961,6 +2168,11 @@ async function main() {
   const questions = await fetchQuestions();
   const qrToken = await fetchQrToken();
   console.log(`  QR token loaded.`);
+
+  // Launch browser monitors (user page + admin dashboard)
+  console.log('  Launching browser monitors...');
+  await launchBrowsers(qrToken);
+
   phaseEnd('0-setup');
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -2000,6 +2212,22 @@ async function main() {
   // ══════════════════════════════════════════════════════════════════════════════
   await runEdgeCaseTests(qrToken, questions);
 
+  // Reload admin browser after edge case tests to sync state
+  // (edge cases changed game_status via API, admin UI is out of sync)
+  if (adminPage) {
+    console.log('  Reloading admin browser to sync state...');
+    await adminPage.reload({ waitUntil: 'networkidle' });
+    // localStorage may auto-login; only fill credentials if login screen is visible
+    const loginVisible = await adminPage.locator('#login-screen:not(.hidden)').isVisible().catch(() => false);
+    if (loginVisible) {
+      await adminPage.fill('#login-username', ADMIN_USERNAME);
+      await adminPage.fill('#login-password', ADMIN_PASSWORD);
+      await adminPage.click('button[onclick="doLogin()"]');
+    }
+    await adminPage.waitForSelector('#admin-panel:not(.hidden)', { timeout: 10000 });
+    console.log('  Admin browser reloaded and logged in.');
+  }
+
   // ══════════════════════════════════════════════════════════════════════════════
   // Phase 2: Question loop
   // ══════════════════════════════════════════════════════════════════════════════
@@ -2014,9 +2242,17 @@ async function main() {
 
     console.log(`\n[Q${qNum}/${questions.length}] id=${q.id}: ${(q.question || '').slice(0, 40)}...`);
 
-    // ── Step 1: Admin -> playing ──
-    console.log('  [1] Admin -> playing');
-    const playResult = await updateGameStatus('playing', q.id);
+    // ── Step 0: Select question in admin browser ──
+    if (qi === 0) {
+      // First question: select it in the dropdown
+      await adminSelectQuestion(q.id);
+      console.log(`  [0] Admin selected question ${q.id}`);
+    }
+    // Subsequent questions are auto-selected by "下一題" button click
+
+    // ── Step 1: Admin clicks "開放作答" → playing ──
+    console.log('  [1] Admin -> playing (browser click)');
+    const playResult = await adminClickStart();
     qs.stateTransitions['playing'] = playResult.durationMs;
 
     // Measure realtime propagation for "playing"
@@ -2044,15 +2280,15 @@ async function main() {
     console.log(`  [3] Waiting ${(remainWait / 1000).toFixed(1)}s for countdown...`);
     await sleep(remainWait);
 
-    // ── Step 4: Admin -> stopped ──
-    console.log('  [4] Admin -> stopped');
-    const stopResult = await updateGameStatus('stopped');
+    // ── Step 4: Admin clicks "停止作答" → stopped ──
+    console.log('  [4] Admin -> stopped (browser click)');
+    const stopResult = await adminClickStop();
     qs.stateTransitions['stopped'] = stopResult.durationMs;
     await sleep(1000);
 
-    // ── Step 5: Admin -> revealed (fetch response counts like admin.html) ──
-    console.log('  [5] Admin -> revealed');
-    const revealResult = await updateGameStatus('revealed');
+    // ── Step 5: Admin clicks "公布答案" → revealed ──
+    console.log('  [5] Admin -> revealed (browser click)');
+    const revealResult = await adminClickReveal();
     qs.stateTransitions['revealed'] = revealResult.durationMs;
 
     // Measure realtime for "revealed"
@@ -2060,42 +2296,42 @@ async function main() {
     qs.realtimePropagation.push(...revealLags);
     timing.realtimeLags.push(...revealLags);
 
-    // Fetch response counts (like admin.html does)
+    // Fetch response counts (admin browser already does this, also measure via API)
     const respCounts = await fetchResponseCounts(q.id);
     qs.responseCountFetchMs = respCounts.durationMs;
     console.log(`  [5] Response counts: total=${respCounts.total}, fetch=${fmtMs(respCounts.durationMs)}`);
 
     await sleep(2000);
 
-    // ── Step 6: Admin scores via RPC (settlement) ──
-    console.log('  [6] Scoring (settlement)...');
-    const correctAnswer = q.answer || 1;
-    const scoreResult = await adminScoreViaRPC(q.id, correctAnswer);
-    qs.scoringMs = scoreResult.durationMs;
-    console.log(`  [6] score_question RPC: ${fmtMs(scoreResult.durationMs)}, correct=${scoreResult.correctCount}`);
-
-    // ── Step 7: Admin -> scoring ──
-    console.log('  [7] Admin -> scoring');
-    const scoringResult = await updateGameStatus('scoring');
+    // ── Step 6+7: Admin clicks "結算" → scoring RPC + state = scoring ──
+    // In the admin UI, doScoring() calls score_question RPC then changeState('scoring')
+    console.log('  [6+7] Admin scoring + state->scoring (browser click)');
+    const scoringResult = await adminClickScore();
+    qs.scoringMs = scoringResult.durationMs;
     qs.stateTransitions['scoring'] = scoringResult.durationMs;
+    console.log(`  [6+7] Scoring complete: ${fmtMs(scoringResult.durationMs)}`);
 
     // Measure realtime for "scoring"
     const scoringLags = await measureRealtimePropagation(activePlayers, scoringResult.sentAt, 5000);
     qs.realtimePropagation.push(...scoringLags);
     timing.realtimeLags.push(...scoringLags);
 
-    // ── Step 8: Players fetch their own score (like scoring-ui) ──
-    console.log('  [8] Players fetching scores...');
+    // ── Step 8: Score broadcast (no more concurrent RPC fetch) ──
+    // In production, admin broadcasts scores via Realtime channel.
+    // Here we sample-verify a few players via RPC to confirm DB correctness.
+    console.log('  [8] Verifying scores (sample)...');
+    const sampleSize = Math.min(3, activePlayers.length);
+    const samplePlayers = activePlayers.slice(0, sampleSize);
     const scoreFetchT0 = now();
-    // All players fetch their score concurrently (stress test)
-    const scoreFetches = await Promise.all(activePlayers.map(p => p.fetchMyScore(q.id)));
+    const scoreFetches = await Promise.all(samplePlayers.map(p => p.fetchMyScore(q.id)));
     const scoreFetchDur = now() - scoreFetchT0;
     const scoreFetchTimes = scoreFetches.map(r => r.durationMs);
-    recordStep('player', 'fetch-score', `q=${q.id}, count=${activePlayers.length}`, scoreFetchDur);
+    recordStep('player', 'fetch-score-sample', `q=${q.id}, sample=${sampleSize}`, scoreFetchDur);
     stats.playerFetchTimes.push(...scoreFetchTimes);
-    console.log(`  [8] Score fetch (${activePlayers.length} players): p50=${fmtMs(percentile(scoreFetchTimes, 50))}, p95=${fmtMs(percentile(scoreFetchTimes, 95))}, max=${fmtMs(Math.max(...scoreFetchTimes))}`);
+    console.log(`  [8] Score verify (${sampleSize} sampled): p50=${fmtMs(percentile(scoreFetchTimes, 50))}, max=${fmtMs(Math.max(...scoreFetchTimes))}`);
 
     // ── Step 9: Admin fetches leaderboard ──
+    // Admin browser already shows leaderboard (tab auto-switched), also measure via API
     console.log('  [9] Admin fetching leaderboard...');
     const lb = await fetchLeaderboard();
     qs.leaderboardFetchMs = lb.durationMs;
@@ -2103,11 +2339,10 @@ async function main() {
 
     await sleep(2000);
 
-    // ── Step 10: Move to next question ──
+    // ── Step 10: Admin clicks "下一題" or we're on the last question ──
     if (qi < questions.length - 1) {
-      const nextQ = questions[qi + 1];
-      console.log(`  [10] Admin -> waiting (next q=${nextQ.id})`);
-      const waitResult = await updateGameStatus('waiting', nextQ.id);
+      console.log(`  [10] Admin -> next question (browser click)`);
+      const waitResult = await adminClickNext();
       qs.stateTransitions['waiting'] = waitResult.durationMs;
       await sleep(1000);
     }
@@ -2123,9 +2358,9 @@ async function main() {
   phaseStart('3-end-game');
   console.log('\n[Phase 3] Ending game...');
 
-  // Admin -> ended
-  const endResult = await updateGameStatus('ended');
-  console.log(`  state->ended: ${fmtMs(endResult.durationMs)}`);
+  // Admin clicks "結束遊戲" → ended
+  const endResult = await adminClickEnd();
+  console.log(`  state->ended (browser click): ${fmtMs(endResult.durationMs)}`);
 
   // Measure realtime for "ended"
   const endLags = await measureRealtimePropagation(activePlayers, endResult.sentAt, 5000);
@@ -2162,6 +2397,11 @@ async function main() {
   console.log('\n[Phase 4] Cleaning up...');
   await Promise.all(activePlayers.map(p => p.cleanup()));
   console.log(`  ${activePlayers.length} player connections closed.`);
+
+  // Close browser monitors and HTTP server
+  await closeBrowsers();
+  console.log('  Browser monitors closed.');
+
   phaseEnd('4-cleanup');
 
   timing.testEndMs = Date.now();
@@ -2181,5 +2421,5 @@ async function main() {
 
 main().catch(err => {
   console.error('\nFATAL:', err);
-  process.exit(1);
+  closeBrowsers().finally(() => process.exit(1));
 });

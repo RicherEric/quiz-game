@@ -760,6 +760,7 @@
         let answerRevealed = false;
         let statsInterval = null;
         let adminChannel = null;
+        let scoreBroadcastChannel = null;
         let currentMode = 'official';
 
         // ---- Mode switching ----
@@ -1167,6 +1168,10 @@
             // 排行榜和玩家列表完全依靠 Realtime subscription（line 1176-1184）
             startStatsPolling();
 
+            // Score broadcast channel — 結算後推送分數給所有 player
+            scoreBroadcastChannel = sbClient.channel('score-broadcast', { config: { broadcast: { self: false } } });
+            scoreBroadcastChannel.subscribe();
+
             // 即時訂閱：玩家提交答案、新玩家加入、分數更新時立刻刷新
             adminChannel = sbClient.channel('admin-realtime')
                 .on('postgres_changes', {
@@ -1560,6 +1565,25 @@
             }
 
             console.log(`結算完成: ${data.correct_count} 人答對`);
+
+            // 廣播分數給所有 player（取代 player 端 RPC 查詢）
+            const { data: respScores } = await sbClient.from('responses')
+                .select('player_name, scored_points')
+                .eq('question_id', qId);
+
+            const scoreField = currentMode === 'test' ? 'test_score' : 'score';
+            const { data: allPlayers } = await sbClient.from('players')
+                .select(`name, ${scoreField}`);
+
+            const scoreMap = {};
+            if (allPlayers) allPlayers.forEach(p => { scoreMap[p.name] = { total_score: p[scoreField] || 0 }; });
+            if (respScores) respScores.forEach(r => { if (scoreMap[r.player_name]) scoreMap[r.player_name].question_score = r.scored_points || 0; });
+
+            scoreBroadcastChannel.send({
+                type: 'broadcast',
+                event: 'score-update',
+                payload: { question_id: qId, scores: scoreMap }
+            });
 
             // 切換到 scoring 狀態
             changeState('scoring');
