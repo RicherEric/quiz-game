@@ -1160,8 +1160,7 @@
             // 開始定時更新排行榜 & 統計資料 & 玩家列表
             fetchLeaderboard();
             fetchPlayerList();
-            setInterval(fetchLeaderboard, 3000);
-            setInterval(fetchPlayerList, 2000);
+            // 排行榜和玩家列表完全依靠 Realtime subscription（line 1176-1184）
             startStatsPolling();
 
             // 即時訂閱：玩家提交答案、新玩家加入、分數更新時立刻刷新
@@ -1178,6 +1177,7 @@
                     schema: 'public',
                     table: 'players'
                 }, () => {
+                    _playersCacheTime = 0; // 清除快取，強制下次重新查詢
                     fetchPlayerList();
                     fetchCurrentQuestionStats();
                     fetchLeaderboard();
@@ -1219,14 +1219,7 @@
                 })
                 .subscribe();
 
-            // Lottery polling fallback (every 5 seconds)
-            setInterval(() => {
-                if (currentSection !== 'lottery') return;
-                if (currentLotteryTab === 'tab-lottery-groups') fetchLotteryGroups();
-                if (currentLotteryTab === 'tab-lottery-prizes') fetchLotteryPrizes();
-                if (currentLotteryTab === 'tab-lottery-winners') fetchLotteryWinners();
-                if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
-            }, 5000);
+            // Lottery 完全依靠 Realtime subscription（已有 4 個 channel 監聽各表）
         }
 
         let currentState = 'waiting';
@@ -1332,7 +1325,7 @@
         function startStatsPolling() {
             if (statsInterval) return;
             fetchCurrentQuestionStats();
-            statsInterval = setInterval(fetchCurrentQuestionStats, 2000);
+            statsInterval = setInterval(fetchCurrentQuestionStats, 5000);
         }
 
         function stopStatsPolling() {
@@ -1609,16 +1602,28 @@
             }, 1500);
         }
 
+        // Players 快取機制（2 秒 TTL），減少重複查詢
+        let _playersCache = null;
+        let _playersCacheTime = 0;
+        async function getCachedPlayers() {
+            const now = Date.now();
+            if (_playersCache && (now - _playersCacheTime) < 2000) return _playersCache;
+            const { data, count } = await sbClient.from('players').select('*', { count: 'exact' }).order('name');
+            _playersCache = { data: data || [], count: count || 0 };
+            _playersCacheTime = now;
+            return _playersCache;
+        }
+
         // 讀取當前題目的作答統計 + 提交狀況
         async function fetchCurrentQuestionStats() {
             const qId = document.getElementById('q-selector').value;
             if (!qId) return;
 
-            // 取得作答資料
-            const { data: responses } = await sbClient.from('responses').select('player_name, choice').eq('question_id', qId);
-
-            // 取得總玩家數
-            const { count: totalPlayers } = await sbClient.from('players').select('*', { count: 'exact', head: true });
+            // 取得作答資料 + 玩家快取（合併原本 2 次 players 查詢為 1 次）
+            const [{ data: responses }, cached] = await Promise.all([
+                sbClient.from('responses').select('player_name, choice').eq('question_id', qId),
+                getCachedPlayers()
+            ]);
 
             let counts = { 1: 0, 2: 0, 3: 0, 4: 0, 0: 0 };
             const respondedNames = new Set();
@@ -1638,7 +1643,7 @@
 
             // 更新提交進度
             const submittedCount = respondedNames.size;
-            const total = totalPlayers || 0;
+            const total = cached.count;
             document.getElementById('submitted-count').innerText = submittedCount;
             document.getElementById('total-count').innerText = total;
             const pct = total > 0 ? Math.round((submittedCount / total) * 100) : 0;
@@ -1658,17 +1663,17 @@
                 0: 'text-red-400 bg-red-900/40'
             };
 
-            const { data: allPlayers } = await sbClient.from('players').select('name').order('name');
-            if (allPlayers) {
-                renderPlayerStatusList(allPlayers, respondedNames, choiceMap, choiceLabels, choiceColors);
+            if (cached.data.length > 0) {
+                renderPlayerStatusList(cached.data, respondedNames, choiceMap, choiceLabels, choiceColors);
             }
         }
 
         // 獨立的玩家列表刷新（不依賴題目選擇）
         async function fetchPlayerList() {
             try {
-                const { data: allPlayers, count } = await sbClient.from('players').select('*', { count: 'exact' }).order('name');
-                const total = count || 0;
+                const cached = await getCachedPlayers();
+                const allPlayers = cached.data;
+                const total = cached.count;
                 document.getElementById('header-player-count').innerText = total;
                 document.getElementById('total-count').innerText = total;
 
@@ -1705,8 +1710,10 @@
         // 讀取總排行榜
         async function fetchLeaderboard() {
             const scoreField = currentMode === 'test' ? 'test_score' : 'score';
-            const { data: players, count } = await sbClient.from('players').select('*', { count: 'exact' }).order(scoreField, { ascending: false });
-            document.getElementById('total-players').innerText = count || 0;
+            const cached = await getCachedPlayers();
+            const players = [...cached.data].sort((a, b) => (b[scoreField] || 0) - (a[scoreField] || 0));
+            const count = cached.count;
+            document.getElementById('total-players').innerText = count;
 
             // 更新排行榜標題
             const titleEl = document.querySelector('#tab-leaderboard h2');
@@ -1804,6 +1811,9 @@
         }
 
         // 答題紀錄：載入所有已作答題目的每人答案
+        let _historyGroupedData = null; // 快取供排行榜使用
+        let _historyQuestionOrder = []; // 題目順序
+
         async function fetchHistory() {
             const container = document.getElementById('history-container');
             container.innerHTML = '<div class="text-gold-400/50 text-center py-10">載入中...</div>';
@@ -1812,6 +1822,7 @@
             const { data: allResponses } = await sbClient.from('responses').select('*').order('question_id', { ascending: true });
             if (!allResponses || allResponses.length === 0) {
                 container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無答題紀錄</div>';
+                _historyGroupedData = null;
                 return;
             }
 
@@ -1821,11 +1832,21 @@
                 if (!grouped[r.question_id]) grouped[r.question_id] = [];
                 grouped[r.question_id].push(r);
             });
+            _historyGroupedData = grouped;
+
+            // 按 questions 的 sort_order 排列題目順序
+            _historyQuestionOrder = Object.keys(grouped).sort((a, b) => {
+                const qa = questions.find(x => x.id == a);
+                const qb = questions.find(x => x.id == b);
+                const idxA = qa ? questions.indexOf(qa) : 9999;
+                const idxB = qb ? questions.indexOf(qb) : 9999;
+                return idxA - idxB;
+            });
 
             const choiceLabels = { 1: 'A', 2: 'B', 3: 'C', 4: 'D', 0: '未答' };
 
             let html = '';
-            for (const qId of Object.keys(grouped)) {
+            for (const qId of _historyQuestionOrder) {
                 const q = questions.find(x => x.id == qId);
                 const qIdx = questions.findIndex(x => x.id == qId);
                 const qLabel = q ? `Q${qIdx + 1}: ${q.question}` : `題目 #${qId}`;
@@ -1846,24 +1867,39 @@
                     ? `正確答案：<span class="text-emerald-400 font-bold">${correctDisplay}</span>　答對：<span class="text-emerald-400 font-bold">${correctCount}</span> / ${totalCount} 人`
                     : `<span class="text-yellow-400">尚未結算</span>　已作答：${totalCount} 人`;
 
+                const leaderboardBtn = hasScored
+                    ? `<button onclick="event.stopPropagation(); showCumulativeLeaderboard('${qId}')" class="ml-3 px-3 py-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-lg text-sm transition shadow whitespace-nowrap">🏆 積分排行榜</button>`
+                    : '';
+
                 html += `<div class="bg-midnight-900/60 rounded-2xl border border-gold-700/30 overflow-hidden">
                     <div class="px-6 py-4 bg-midnight-900/80 border-b border-gold-700/30 cursor-pointer flex justify-between items-center" onclick="this.nextElementSibling.classList.toggle('hidden')">
-                        <div>
+                        <div class="flex-1 min-w-0">
                             <h3 class="text-xl font-bold text-gold-200">${qLabel}</h3>
                             <p class="text-sm text-gold-400/60 mt-1">${headerInfo}</p>
                         </div>
-                        <span class="text-gold-400/50 text-2xl">▼</span>
+                        <div class="flex items-center shrink-0">
+                            ${leaderboardBtn}
+                            <span class="text-gold-400/50 text-2xl ml-3">▼</span>
+                        </div>
                     </div>
                     <div class="hidden">
-                        <div class="px-6 py-3 grid grid-cols-12 gap-4 text-gold-400/60 font-bold text-sm border-b border-gold-800/30">
-                            <div class="col-span-1">#</div>
-                            <div class="${hasScored ? 'col-span-5' : 'col-span-8'}">玩家</div>
-                            <div class="col-span-3 text-center">答案</div>
-                            ${hasScored ? '<div class="col-span-3 text-center">結果</div>' : ''}
+                        <div class="px-4 py-3 grid ${hasScored ? 'grid-cols-[2rem_1fr_5rem_6rem_5rem_5rem]' : 'grid-cols-[2rem_1fr_5rem_6rem]'} gap-2 text-gold-400/60 font-bold text-sm border-b border-gold-800/30">
+                            <div>#</div>
+                            <div>玩家</div>
+                            <div class="text-center">答題時間</div>
+                            <div class="text-center">答案</div>
+                            ${hasScored ? '<div class="text-center">結果</div><div class="text-center">得分</div>' : ''}
                         </div>
                         <div class="divide-y divide-gold-800/20">`;
 
-                responses.sort((a, b) => a.player_name.localeCompare(b.player_name));
+                responses.sort((a, b) => {
+                    // 已結算：按得分降序，同分按時間升序
+                    if (hasScored) {
+                        if ((b.scored_points || 0) !== (a.scored_points || 0)) return (b.scored_points || 0) - (a.scored_points || 0);
+                        return (a.response_time_ms || 99999) - (b.response_time_ms || 99999);
+                    }
+                    return a.player_name.localeCompare(b.player_name);
+                });
                 responses.forEach((r, i) => {
                     const choiceLabel = choiceLabels[r.choice] || '?';
                     const isCorrect = r.is_correct;
@@ -1874,12 +1910,21 @@
                     const choiceDisplay = r.choice === 0
                         ? '<span class="text-red-400">未答</span>'
                         : `<span class="font-bold">${choiceLabel}. ${optionText}</span>`;
+                    const timeDisplay = r.response_time_ms
+                        ? `<span class="text-sky-300 font-mono">${(r.response_time_ms / 1000).toFixed(1)}s</span>`
+                        : '<span class="text-gold-400/30">-</span>';
+                    const pointsDisplay = hasScored
+                        ? (r.scored_points > 0
+                            ? `<span class="text-gold-300 font-bold font-mono">${r.scored_points}</span>`
+                            : `<span class="text-gold-400/30 font-mono">0</span>`)
+                        : '';
 
-                    html += `<div class="px-6 py-3 grid grid-cols-12 gap-4 items-center ${hasScored && isCorrect ? 'bg-emerald-900/10' : ''}">
-                            <div class="col-span-1 text-gold-400/50">${i + 1}</div>
-                            <div class="${hasScored ? 'col-span-5' : 'col-span-8'} font-bold">${r.player_name}</div>
-                            <div class="col-span-3 text-center text-sm">${choiceDisplay}</div>
-                            ${hasScored ? `<div class="col-span-3 text-center">${resultBadge}</div>` : ''}
+                    html += `<div class="px-4 py-3 grid ${hasScored ? 'grid-cols-[2rem_1fr_5rem_6rem_5rem_5rem]' : 'grid-cols-[2rem_1fr_5rem_6rem]'} gap-2 items-center ${hasScored && isCorrect ? 'bg-emerald-900/10' : ''}">
+                            <div class="text-gold-400/50">${i + 1}</div>
+                            <div class="font-bold truncate">${r.player_name}</div>
+                            <div class="text-center text-sm">${timeDisplay}</div>
+                            <div class="text-center text-sm">${choiceDisplay}</div>
+                            ${hasScored ? `<div class="text-center">${resultBadge}</div><div class="text-center">${pointsDisplay}</div>` : ''}
                         </div>`;
                 });
 
@@ -1887,6 +1932,122 @@
             }
 
             container.innerHTML = html || '<div class="text-gold-400/50 text-center py-10">尚無答題紀錄</div>';
+        }
+
+        // 顯示某題的累計積分排行榜
+        function showCumulativeLeaderboard(targetQId) {
+            if (!_historyGroupedData || !_historyQuestionOrder.length) return;
+
+            const targetIdx = _historyQuestionOrder.indexOf(String(targetQId));
+            if (targetIdx < 0) return;
+
+            // 收集從第一題到目標題的所有已結算題目
+            const questionsUpTo = _historyQuestionOrder.slice(0, targetIdx + 1);
+            const scoredQuestions = questionsUpTo.filter(qId => {
+                const responses = _historyGroupedData[qId];
+                return responses && responses.some(r => r.is_correct !== null);
+            });
+
+            if (scoredQuestions.length === 0) return;
+
+            // 計算每位玩家在每一題的得分與累計
+            const playerScores = {}; // { playerName: { perQuestion: [{qId, qLabel, points}], total: number } }
+
+            scoredQuestions.forEach(qId => {
+                const responses = _historyGroupedData[qId];
+                responses.forEach(r => {
+                    if (!playerScores[r.player_name]) {
+                        playerScores[r.player_name] = { perQuestion: [], total: 0 };
+                    }
+                });
+            });
+
+            scoredQuestions.forEach(qId => {
+                const q = questions.find(x => x.id == qId);
+                const qIdx = questions.findIndex(x => x.id == qId);
+                const qLabel = q ? `Q${qIdx + 1}` : `#${qId}`;
+                const responses = _historyGroupedData[qId];
+                const responseMap = {};
+                responses.forEach(r => { responseMap[r.player_name] = r.scored_points || 0; });
+
+                Object.keys(playerScores).forEach(name => {
+                    const pts = responseMap[name] || 0;
+                    playerScores[name].perQuestion.push({ qId, qLabel, points: pts });
+                    playerScores[name].total += pts;
+                });
+            });
+
+            // 排序：累計分降序
+            const sorted = Object.entries(playerScores).sort((a, b) => b[1].total - a[1].total);
+
+            const targetQ = questions.find(x => x.id == targetQId);
+            const targetQIdx = questions.findIndex(x => x.id == targetQId);
+            const targetLabel = targetQ ? `Q${targetQIdx + 1}` : `#${targetQId}`;
+            const isLastScored = targetIdx === _historyQuestionOrder.length - 1 ||
+                _historyQuestionOrder.slice(targetIdx + 1).every(qId => {
+                    const r = _historyGroupedData[qId];
+                    return !r || !r.some(x => x.is_correct !== null);
+                });
+            const title = isLastScored ? `最終積分排行榜（截至 ${targetLabel}）` : `累計積分排行榜（截至 ${targetLabel}）`;
+
+            // 建立 modal
+            let modalHtml = `
+            <div id="cumulative-lb-modal" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 backdrop-blur-sm" onclick="if(event.target===this)this.remove()">
+                <div class="bg-midnight-900 border border-gold-500/30 rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col mx-4" onclick="event.stopPropagation()">
+                    <div class="px-6 py-4 border-b border-gold-700/30 flex justify-between items-center shrink-0">
+                        <h2 class="text-2xl font-bold text-gold-100">${title}</h2>
+                        <button onclick="document.getElementById('cumulative-lb-modal').remove()" class="text-gold-400/50 hover:text-gold-200 text-3xl leading-none">&times;</button>
+                    </div>
+                    <div class="overflow-auto flex-1 p-6">
+                        <div class="overflow-x-auto">
+                        <table class="w-full text-sm border-collapse">
+                            <thead>
+                                <tr class="border-b border-gold-700/30">
+                                    <th class="text-center text-gold-400/60 font-bold py-3 px-2 sticky left-0 bg-midnight-900 z-10">排名</th>
+                                    <th class="text-left text-gold-400/60 font-bold py-3 px-2 sticky left-[3rem] bg-midnight-900 z-10">玩家</th>`;
+
+            scoredQuestions.forEach(qId => {
+                const q = questions.find(x => x.id == qId);
+                const qIdx = questions.findIndex(x => x.id == qId);
+                const label = q ? `Q${qIdx + 1}` : `#${qId}`;
+                modalHtml += `<th class="text-center text-gold-400/60 font-bold py-3 px-2 whitespace-nowrap">${label}</th>`;
+            });
+
+            modalHtml += `<th class="text-center text-gold-300 font-black py-3 px-3 whitespace-nowrap text-base">累計積分</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+            sorted.forEach(([name, data], i) => {
+                const isTop3 = i < 3;
+                const crown = isTop3 ? ' 👑' : '';
+                const rowBg = isTop3 ? 'bg-gold-500/10' : (i % 2 === 0 ? 'bg-midnight-800/30' : '');
+                let cumulative = 0;
+
+                modalHtml += `<tr class="${rowBg} border-b border-gold-800/20">
+                    <td class="text-center font-bold py-3 px-2 text-lg sticky left-0 bg-midnight-900 z-10 ${isTop3 ? 'text-gold-300' : 'text-gold-400/60'}">${i + 1}${crown}</td>
+                    <td class="font-bold py-3 px-2 text-lg sticky left-[3rem] bg-midnight-900 z-10 whitespace-nowrap">${name}</td>`;
+
+                data.perQuestion.forEach(pq => {
+                    cumulative += pq.points;
+                    const cellColor = pq.points > 0 ? 'text-emerald-400' : 'text-gold-400/30';
+                    modalHtml += `<td class="text-center py-3 px-2 font-mono ${cellColor}">
+                        <div class="text-sm font-bold">${pq.points > 0 ? '+' + pq.points : '0'}</div>
+                        <div class="text-xs text-gold-400/40">${cumulative}</div>
+                    </td>`;
+                });
+
+                modalHtml += `<td class="text-center font-mono font-black text-xl py-3 px-3 text-gold-300">${data.total}</td>
+                    </tr>`;
+            });
+
+            modalHtml += `</tbody></table></div></div></div></div>`;
+
+            // 移除舊 modal（如有）
+            const old = document.getElementById('cumulative-lb-modal');
+            if (old) old.remove();
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
         }
 
         // 分頁切換邏輯
@@ -2150,10 +2311,11 @@
                 probability_pct: base + (i < remainder ? 1 : 0)
             }));
 
-            for (const u of updates) {
-                const { error } = await sbClient.from('lottery_groups').update({ probability_pct: u.probability_pct }).eq('id', u.id);
-                if (error) return alert('初始化失敗：' + error.message);
-            }
+            const results = await Promise.all(updates.map(u =>
+                sbClient.from('lottery_groups').update({ probability_pct: u.probability_pct }).eq('id', u.id)
+            ));
+            const failed = results.find(r => r.error);
+            if (failed) return alert('初始化失敗：' + failed.error.message);
             manuallySetGroups.clear();
             fetchLotteryGroups();
         }
@@ -2181,10 +2343,11 @@
                 probability_pct: base + (i < rem ? 1 : 0)
             }));
 
-            for (const u of updates) {
-                const { error } = await sbClient.from('lottery_groups').update({ probability_pct: u.probability_pct }).eq('id', u.id);
-                if (error) return alert('分配失敗：' + error.message);
-            }
+            const results = await Promise.all(updates.map(u =>
+                sbClient.from('lottery_groups').update({ probability_pct: u.probability_pct }).eq('id', u.id)
+            ));
+            const failed = results.find(r => r.error);
+            if (failed) return alert('分配失敗：' + failed.error.message);
             fetchLotteryGroups();
         }
 
@@ -2240,23 +2403,30 @@
                 await sbClient.from('lottery_members').delete().neq('id', 0);
                 await sbClient.from('lottery_groups').delete().neq('id', 0);
 
-                // 建立群組並新增成員
+                // 批次建立所有群組
                 const probBase = Math.floor(100 / offices.length);
                 const probRem = 100 % offices.length;
 
-                for (let i = 0; i < offices.length; i++) {
-                    const office = offices[i];
-                    const prob = probBase + (i < probRem ? 1 : 0);
-                    const { data: group, error: gErr } = await sbClient.from('lottery_groups')
-                        .insert({ name: office, probability_pct: prob })
-                        .select('id')
-                        .single();
-                    if (gErr) throw new Error(`建立群組 "${office}" 失敗：${gErr.message}`);
+                const allGroups = offices.map((office, i) => ({
+                    name: office,
+                    probability_pct: probBase + (i < probRem ? 1 : 0)
+                }));
+                const { data: insertedGroups, error: gErr } = await sbClient.from('lottery_groups')
+                    .insert(allGroups)
+                    .select('id, name');
+                if (gErr) throw new Error(`建立群組失敗：${gErr.message}`);
 
-                    const memberRows = grouped[office].map(name => ({ name, group_id: group.id }));
-                    const { error: mErr } = await sbClient.from('lottery_members').insert(memberRows);
-                    if (mErr) throw new Error(`新增 "${office}" 成員失敗：${mErr.message}`);
+                // 批次建立所有成員
+                const groupIdMap = {};
+                insertedGroups.forEach(g => { groupIdMap[g.name] = g.id; });
+                const allMembers = [];
+                for (const office of offices) {
+                    grouped[office].forEach(name => {
+                        allMembers.push({ name, group_id: groupIdMap[office] });
+                    });
                 }
+                const { error: mErr } = await sbClient.from('lottery_members').insert(allMembers);
+                if (mErr) throw new Error(`新增成員失敗：${mErr.message}`);
 
                 alert(`匯入成功！已建立 ${offices.length} 個群組`);
                 manuallySetGroups.clear();
@@ -3157,13 +3327,14 @@
 
         async function deletePlayer(name) {
             if (!confirm(`確定刪除玩家「${name}」？將同時刪除其作答紀錄。`)) return;
-            await sbClient.from('responses').delete().eq('player_name', name);
-            await sbClient.from('verified_players').delete().eq('name', name);
-            const { error } = await sbClient.from('players').delete().eq('name', name);
+            const [, , { error }] = await Promise.all([
+                sbClient.from('responses').delete().eq('player_name', name),
+                sbClient.from('verified_players').delete().eq('name', name),
+                sbClient.from('players').delete().eq('name', name)
+            ]);
             if (error) return alert('刪除失敗：' + error.message);
-            fetchPlayersTable();
-            fetchPlayerList();
-            fetchLeaderboard();
+            _playersCacheTime = 0; // 清除快取
+            await Promise.all([fetchPlayersTable(), fetchPlayerList(), fetchLeaderboard()]);
         }
 
         async function resetAllPlayers() {

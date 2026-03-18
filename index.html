@@ -350,9 +350,9 @@
                     console.log("廣播連線狀態:", status);
                 });
 
-            // 輪詢備援：每 2 秒檢查一次，防止即時連線漏接
+            // 輪詢備援：每 15 秒檢查一次，防止即時連線漏接（Realtime 為主）
             if (pollInterval) clearInterval(pollInterval);
-            pollInterval = setInterval(checkCurrentStatus, 2000);
+            pollInterval = setInterval(checkCurrentStatus, 15000);
         }
 
         async function checkCurrentStatus() {
