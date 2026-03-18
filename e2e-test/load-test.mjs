@@ -61,6 +61,7 @@ let serverPort = 0;
 let userBrowser = null;
 let adminBrowser = null;
 let adminPage = null;  // Playwright page for admin browser automation
+let userPage = null;   // Playwright page for test_viewer browser
 
 function startHttpServer() {
   return new Promise((resolve) => {
@@ -114,7 +115,7 @@ async function launchBrowsers(qrToken) {
   const userCtx = await userBrowser.newContext({
     viewport: { width: 390, height: 844 },
   });
-  const userPage = await userCtx.newPage();
+  userPage = await userCtx.newPage();
   await userPage.goto(`${baseUrl}/index.html?token=${qrToken}`);
   await userPage.fill('#p-name', 'test_viewer');
   await userPage.click('button[onclick="join()"]');
@@ -342,6 +343,7 @@ function initQStats(qId) {
       leaderboardFetchMs: 0,
       responseCountFetchMs: 0,
       realtimePropagation: [],  // per-player lag
+      viewerScoringDelayMs: null,  // test_viewer scoring UI delay
     };
   }
 }
@@ -1353,6 +1355,7 @@ function printReport(questions) {
       fmtMs(qs.apiTimes.length > 0 ? qs.apiTimes.reduce((s, t) => s + t, 0) / qs.apiTimes.length : 0).padEnd(10) +
       fmtMs(percentile(qs.apiTimes, 95)).padEnd(10) +
       fmtMs(qs.scoringMs).padEnd(12) +
+      (qs.viewerScoringDelayMs !== null ? fmtMs(qs.viewerScoringDelayMs) : '-').padEnd(14) +
       rtLagP50
     );
   }
@@ -1587,6 +1590,7 @@ function generateHtmlReport(questions) {
         <td>${fmtMs(percentile(qs.apiTimes, 95))}</td>
         <td>${qs.apiTimes.length > 0 ? fmtMs(Math.max(...qs.apiTimes)) : '-'}</td>
         <td>${fmtMs(qs.scoringMs)}</td>
+        <td>${qs.viewerScoringDelayMs !== null ? fmtMs(qs.viewerScoringDelayMs) : '-'}</td>
         <td>${fmtMs(qs.responseCountFetchMs)}</td>
         <td>${rtP50}</td>
         <td>${rtP95}</td>
@@ -1896,7 +1900,7 @@ function generateHtmlReport(questions) {
           <tr>
             <th>#</th><th>Question</th><th>Submit</th><th>OK</th><th>Fail</th><th>Skip</th>
             <th>API Avg</th><th>API p50</th><th>API p95</th><th>API Max</th>
-            <th>Scoring RPC</th><th>Resp Fetch</th><th>RT Lag p50</th><th>RT Lag p95</th><th>State Transitions</th>
+            <th>Scoring RPC</th><th>Viewer Delay</th><th>Resp Fetch</th><th>RT Lag p50</th><th>RT Lag p95</th><th>State Transitions</th>
           </tr>
         </thead>
         <tbody>${questionRows}</tbody>
@@ -2315,6 +2319,25 @@ async function main() {
     const scoringLags = await measureRealtimePropagation(activePlayers, scoringResult.sentAt, 5000);
     qs.realtimePropagation.push(...scoringLags);
     timing.realtimeLags.push(...scoringLags);
+
+    // ── Step 7.5: test_viewer scoring DOM verification ──
+    if (userPage) {
+      try {
+        await userPage.waitForSelector('#scoring-ui:not(.hidden)', { timeout: 8000 });
+        const scoringTiming = await userPage.evaluate(() => window.__scoringTiming);
+        if (scoringTiming && scoringTiming.questionId === q.id) {
+          const delay = scoringTiming.delayMs ?? (scoringTiming.scoreTime - scoringTiming.showTime);
+          qs.viewerScoringDelayMs = delay;
+          recordStep('viewer', 'scoring-ui-delay', `q=${q.id}, delay=${delay}ms`, delay);
+          console.log(`  [7.5] test_viewer scoring UI: visible, score delay=${fmtMs(delay)}`);
+        } else {
+          console.log(`  [7.5] test_viewer scoring UI: visible, but timing data missing or mismatched`);
+        }
+      } catch (e) {
+        console.log(`  [7.5] test_viewer scoring UI: NOT visible within timeout (${e.message})`);
+        recordStep('viewer', 'scoring-ui-delay', `q=${q.id}, TIMEOUT`, 8000);
+      }
+    }
 
     // ── Step 8: Score broadcast (no more concurrent RPC fetch) ──
     // In production, admin broadcasts scores via Realtime channel.

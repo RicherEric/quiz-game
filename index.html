@@ -585,6 +585,8 @@
                 hideAllUI();
                 document.getElementById('scoring-ui').classList.remove('hidden');
 
+                performance.mark('scoring-show');
+
                 // 顯示/隱藏測試模式 badge
                 document.getElementById('test-mode-badge').classList.toggle('hidden', currentMode !== 'test');
 
@@ -670,6 +672,7 @@
                 } else {
                     // Broadcast 漏接時的保底 RPC 查詢
                     await new Promise(r => setTimeout(r, 1000));
+                    if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
                     if (pendingScore) {
                         questionScore = pendingScore.question_score || 0;
                         totalScore = pendingScore.total_score || 0;
@@ -680,12 +683,18 @@
                             p_question_id: status.current_q_id,
                             p_mode: currentMode
                         });
+                        if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
                         questionScore = myScoreData?.question_score || 0;
                         totalScore = myScoreData?.total_score || 0;
                     }
                 }
                 document.getElementById('scoring-question-score').innerText = `${questionScore} 分`;
                 document.getElementById('scoring-total-score').innerText = `${totalScore} 分`;
+
+                performance.mark('scoring-scores-rendered');
+                performance.measure('scoring-delay', 'scoring-show', 'scoring-scores-rendered');
+                const scoringMeasure = performance.getEntriesByName('scoring-delay').pop();
+                window.__scoringTiming = { showTime: scoringMeasure.startTime, scoreTime: scoringMeasure.startTime + scoringMeasure.duration, delayMs: scoringMeasure.duration, questionId: status.current_q_id };
             }
             else if (status.state === 'ended') {
                 hideAllUI();
