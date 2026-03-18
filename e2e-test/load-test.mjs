@@ -52,7 +52,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ADMIN_PASSWORD) {
 }
 
 const NUM_PLAYERS = 100;
-const COUNTDOWN_MS = 15000;
+const ANSWER_TIMEOUT_MS = 30000;  // Admin waits up to 30s for all players to answer
 
 // ─── Browser Monitoring ───────────────────────────────────────────────────────
 
@@ -2270,19 +2270,29 @@ async function main() {
     // Wait for propagation to settle
     await sleep(500);
 
-    // ── Step 2: Players answer concurrently ──
+    // ── Step 2+3: Players answer concurrently, admin waits up to 30s ──
+    // Fire off all player answers (non-blocking), then wait for all to finish
+    // OR 30s timeout — whichever comes first. This mirrors the real flow where
+    // admin independently monitors and stops after countdown.
     console.log('  [2] Players answering...');
     const answerT0 = now();
-    await Promise.all(activePlayers.map(p => p.answer(q.id)));
-    const answerDur = now() - answerT0;
-    recordStep('question', 'all-players-answer', `q=${q.id}`, answerDur);
-    console.log(`  [2] All answers submitted (${fmtMs(answerDur)})`);
+    const answerPromises = activePlayers.map(p => p.answer(q.id).catch(e => recordError(`answer(${p.name})`, e)));
+    const allAnswered = Promise.all(answerPromises);
 
-    // ── Step 3: Wait remaining countdown ──
-    // In real game admin waits 15s. We already spent thinkTime, so wait a bit more.
-    const remainWait = Math.max(1000, 15000 - answerDur);
-    console.log(`  [3] Waiting ${(remainWait / 1000).toFixed(1)}s for countdown...`);
-    await sleep(remainWait);
+    // Wait for all players to finish OR 30s timeout
+    let allDone = false;
+    await Promise.race([
+      allAnswered.then(() => { allDone = true; }),
+      sleep(ANSWER_TIMEOUT_MS),
+    ]);
+    const answerDur = now() - answerT0;
+    const submitted = qs.submitted + qs.skipped;
+    if (allDone) {
+      console.log(`  [2+3] All players answered: ${submitted}/${activePlayers.length} (${fmtMs(answerDur)})`);
+    } else {
+      console.log(`  [2+3] 30s timeout reached, ${submitted}/${activePlayers.length} answered (${fmtMs(answerDur)})`);
+    }
+    recordStep('question', 'answer-phase', `q=${q.id}, answered=${submitted}/${activePlayers.length}, allDone=${allDone}`, answerDur);
 
     // ── Step 4: Admin clicks "停止作答" → stopped ──
     console.log('  [4] Admin -> stopped (browser click)');
@@ -2339,19 +2349,15 @@ async function main() {
       }
     }
 
-    // ── Step 8: Score broadcast (no more concurrent RPC fetch) ──
-    // In production, admin broadcasts scores via Realtime channel.
-    // Here we sample-verify a few players via RPC to confirm DB correctness.
-    console.log('  [8] Verifying scores (sample)...');
-    const sampleSize = Math.min(3, activePlayers.length);
-    const samplePlayers = activePlayers.slice(0, sampleSize);
+    // ── Step 8: All players fetch their own score (record all responses) ──
+    console.log('  [8] Players fetching scores...');
     const scoreFetchT0 = now();
-    const scoreFetches = await Promise.all(samplePlayers.map(p => p.fetchMyScore(q.id)));
+    const scoreFetches = await Promise.all(activePlayers.map(p => p.fetchMyScore(q.id)));
     const scoreFetchDur = now() - scoreFetchT0;
     const scoreFetchTimes = scoreFetches.map(r => r.durationMs);
-    recordStep('player', 'fetch-score-sample', `q=${q.id}, sample=${sampleSize}`, scoreFetchDur);
+    recordStep('player', 'fetch-score', `q=${q.id}, count=${activePlayers.length}`, scoreFetchDur);
     stats.playerFetchTimes.push(...scoreFetchTimes);
-    console.log(`  [8] Score verify (${sampleSize} sampled): p50=${fmtMs(percentile(scoreFetchTimes, 50))}, max=${fmtMs(Math.max(...scoreFetchTimes))}`);
+    console.log(`  [8] Score fetch (${activePlayers.length} players): p50=${fmtMs(percentile(scoreFetchTimes, 50))}, p95=${fmtMs(percentile(scoreFetchTimes, 95))}, max=${fmtMs(Math.max(...scoreFetchTimes))}`);
 
     // ── Step 9: Admin fetches leaderboard ──
     // Admin browser already shows leaderboard (tab auto-switched), also measure via API
