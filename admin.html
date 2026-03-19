@@ -1358,15 +1358,6 @@
                 return;
             }
 
-            // 開放作答時，若該題已有作答紀錄則先重置（回退分數 + 刪除舊紀錄）
-            if (newState === 'playing') {
-                const { data: resetResult, error: resetError } = await sbClient.rpc('reset_question_responses', {
-                    p_question_id: parseInt(qId), p_mode: currentMode
-                });
-                if (resetError) console.error('Reset failed:', resetError);
-                else if (resetResult?.deleted > 0) _playersCache = null;
-            }
-
             const updateData = {
                 current_q_id: parseInt(qId),
                 state: newState,
@@ -1374,7 +1365,18 @@
                 mode: currentMode
             };
 
+            // 先更新 game_status → 玩家立即收到通知，再背景執行 reset
             const { data, error } = await sbClient.from('game_status').update(updateData).eq('id', 1).select();
+
+            // 開放作答時，背景重置舊作答紀錄（不阻塞狀態推播）
+            if (newState === 'playing') {
+                sbClient.rpc('reset_question_responses', {
+                    p_question_id: parseInt(qId), p_mode: currentMode
+                }).then(({ data: resetResult, error: resetError }) => {
+                    if (resetError) console.error('Reset failed:', resetError);
+                    else if (resetResult?.deleted > 0) _playersCache = null;
+                });
+            }
 
             if (error) {
                 alert(`狀態切換失敗！發生錯誤：${error.message}`);

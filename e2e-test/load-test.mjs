@@ -56,6 +56,8 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ADMIN_PASSWORD) {
 const NUM_PLAYERS = 100;
 const ANSWER_TIMEOUT_MS = 30000;  // Admin waits up to 30s for all players to answer
 
+let gameMode = 'official';  // will be set from game_status.mode at runtime
+
 // ─── Browser Monitoring ───────────────────────────────────────────────────────
 
 let httpServer = null;
@@ -434,22 +436,22 @@ async function fetchQuestions() {
   const t0 = now();
   // Read game mode to filter questions the same way admin.html does:
   // admin.html uses (q.type || 'official') === currentMode
-  const mode = await fetchGameMode();
+  gameMode = await fetchGameMode();
   let query = admin.from('questions').select('*');
-  if (mode === 'official') {
+  if (gameMode === 'official') {
     // Match type='official' OR type IS NULL (admin.html defaults null to 'official')
     query = query.or('type.eq.official,type.is.null');
   } else {
-    query = query.eq('type', mode);
+    query = query.eq('type', gameMode);
   }
   const { data, error } = await query
     .order('sort_order', { ascending: true })
     .order('id', { ascending: true });
   const dur = now() - t0;
-  recordStep('setup', 'fetch-questions', `${data?.length || 0} ${mode} questions`, dur, !error && !!data);
+  recordStep('setup', 'fetch-questions', `${data?.length || 0} ${gameMode} questions`, dur, !error && !!data);
   if (error) throw new Error(`Failed to fetch questions: ${error.message}`);
-  if (!data || data.length === 0) throw new Error(`No questions found for mode "${mode}".`);
-  console.log(`  ${data.length} questions loaded (mode=${mode}, ${fmtMs(dur)})`);
+  if (!data || data.length === 0) throw new Error(`No questions found for mode "${gameMode}".`);
+  console.log(`  ${data.length} questions loaded (mode=${gameMode}, ${fmtMs(dur)})`);
   return data;
 }
 
@@ -475,7 +477,7 @@ async function adminScoreViaRPC(questionId, correctAnswer) {
   const { data, error } = await admin.rpc('score_question', {
     p_question_id: questionId,
     p_correct_answer: correctAnswer,
-    p_mode: 'official',
+    p_mode: gameMode,
   });
   const dur = now() - t0;
   recordStep('admin', 'score-question-rpc', `q=${questionId}, correct=${correctAnswer}`, dur, !error);
@@ -502,7 +504,8 @@ async function fetchResponseCounts(questionId) {
  */
 async function fetchLeaderboard() {
   const t0 = now();
-  const { data, error } = await admin.from('players').select('*').order('score', { ascending: false });
+  const scoreField = gameMode === 'test' ? 'test_score' : 'score';
+  const { data, error } = await admin.from('players').select('*').order(scoreField, { ascending: false });
   const dur = now() - t0;
   recordStep('admin', 'fetch-leaderboard', `${data?.length || 0} players`, dur, !error);
   return { durationMs: dur, players: data || [] };
@@ -558,19 +561,39 @@ function createPlayer(index, qrToken) {
 
     /**
      * Subscribe to game_status realtime and record propagation lag.
+     * Returns a Promise that resolves when subscription is confirmed (SUBSCRIBED),
+     * or rejects after timeoutMs.
      */
-    subscribe(onStateChange) {
-      channel = client
-        .channel(`player-${name}`)
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'game_status', filter: 'id=eq.1' },
-          (payload) => {
-            lastStateReceivedAt = Date.now();
-            if (onStateChange) onStateChange(name, payload.new, lastStateReceivedAt);
-          }
-        )
-        .subscribe();
+    subscribe(onStateChange, timeoutMs = 15000) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error(`Realtime subscribe timeout for player-${name}`));
+        }, timeoutMs);
+
+        channel = client
+          .channel(`player-${name}`)
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'game_status', filter: 'id=eq.1' },
+            (payload) => {
+              lastStateReceivedAt = Date.now();
+              if (onStateChange) onStateChange(name, payload.new, lastStateReceivedAt);
+            }
+          )
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              clearTimeout(timer);
+              resolve(true);
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              clearTimeout(timer);
+              reject(new Error(`Realtime subscribe failed for player-${name}: ${status}`));
+            }
+          });
+      });
+    },
+
+    isSubscribed() {
+      return channel && channel.state === 'joined';
     },
 
     getLastStateReceivedAt() {
@@ -635,7 +658,7 @@ function createPlayer(index, qrToken) {
     async fetchMyScore(questionId) {
       const t0 = now();
       const { data } = await client.rpc('get_my_score', {
-        p_player_name: name, p_question_id: questionId, p_mode: 'official'
+        p_player_name: name, p_question_id: questionId, p_mode: gameMode
       });
       const dur = now() - t0;
       return { durationMs: dur, questionScore: data?.question_score || 0, totalScore: data?.total_score || 0 };
@@ -646,7 +669,8 @@ function createPlayer(index, qrToken) {
      */
     async fetchEndLeaderboard() {
       const t0 = now();
-      const { data } = await client.from('players').select('*').order('score', { ascending: false });
+      const scoreField = gameMode === 'test' ? 'test_score' : 'score';
+      const { data } = await client.from('players').select('*').order(scoreField, { ascending: false });
       const dur = now() - t0;
       const rank = data ? data.findIndex(p => p.name === name) + 1 : -1;
       return { durationMs: dur, rank, total: data?.length || 0 };
@@ -840,7 +864,7 @@ async function runEdgeCaseTests(qrToken, questions) {
     const { data, error } = await admin.rpc('score_question', {
       p_question_id: 999999,
       p_correct_answer: 1,
-      p_mode: 'official',
+      p_mode: gameMode,
     });
     const dur = now() - t0;
     stats.edgeCases.push({
@@ -906,7 +930,7 @@ async function runEdgeCaseTests(qrToken, questions) {
     await sleep(300);
 
     // Score the question
-    await admin.rpc('score_question', { p_question_id: q.id, p_correct_answer: q.answer || 1, p_mode: 'official' });
+    await admin.rpc('score_question', { p_question_id: q.id, p_correct_answer: q.answer || 1, p_mode: gameMode });
     await admin.from('game_status').update({ state: 'scoring', start_time: Date.now() }).eq('id', 1);
     await sleep(300);
 
@@ -1047,9 +1071,10 @@ async function validateDataIntegrity(questions) {
   console.log(`  [DI2] scored_points formula: ${scoreFormulaErrors === 0 ? 'PASS' : 'FAIL'} (${scoreFormulaErrors} mismatches / ${scoreFormulaTotal})`);
 
   // ── Check 3: Player total scores == sum of scored_points ──
+  const scoreField = gameMode === 'test' ? 'test_score' : 'score';
   const { data: allPlayers, error: pe } = await admin
     .from('players')
-    .select('name, score')
+    .select(`name, ${scoreField}`)
     .like('name', 'test_%')
     .neq('name', 'test_viewer');
 
@@ -1071,10 +1096,11 @@ async function validateDataIntegrity(questions) {
   for (const p of allPlayers) {
     playerScoreTotal++;
     const expected = expectedScores[p.name] || 0;
-    if (p.score !== expected) {
+    const actual = p[scoreField] || 0;
+    if (actual !== expected) {
       playerScoreErrors++;
       if (playerScoreErrors <= 3) {
-        console.log(`    player score mismatch: ${p.name}, actual=${p.score}, expected=${expected}`);
+        console.log(`    player score mismatch: ${p.name}, actual=${actual}, expected=${expected}`);
       }
     }
   }
@@ -1319,11 +1345,27 @@ async function measureRealtimePropagation(players, sentAt, timeoutMs = 5000) {
     await sleep(50);
   }
 
+  let receivedCount = 0;
+  let staleCount = 0;     // lastStateReceivedAt > 0 but < sentAt (received old event, not this one)
+  let neverCount = 0;     // lastStateReceivedAt === 0 (never received any event)
+  let subscribedCount = 0;
+
   for (const p of players) {
+    if (p.isSubscribed()) subscribedCount++;
     const recv = p.getLastStateReceivedAt();
     if (recv >= sentAt) {
       lags.push(recv - sentAt);
+      receivedCount++;
+    } else if (recv > 0) {
+      staleCount++;
+    } else {
+      neverCount++;
     }
+  }
+
+  // Diagnostic log when not all players received the event
+  if (receivedCount < players.length) {
+    console.log(`    [RT diag] ${receivedCount}/${players.length} received (subscribed: ${subscribedCount}, stale: ${staleCount}, never: ${neverCount})`);
   }
 
   return lags;
@@ -2217,15 +2259,27 @@ async function main() {
     console.log(`  Join time: p50=${fmtMs(percentile(joinTimes, 50))}, p95=${fmtMs(percentile(joinTimes, 95))}, max=${fmtMs(Math.max(...joinTimes))}`);
   }
 
-  // Subscribe all active players to realtime
-  const stateCallbacks = [];
-  for (const p of activePlayers) {
-    p.subscribe((playerName, state, receivedAt) => {
-      // This callback fires for every realtime event received by every player
-    });
+  // Subscribe all active players to realtime (wait for SUBSCRIBED confirmation)
+  console.log('  Subscribing all players to realtime...');
+  const subscribeResults = await Promise.allSettled(
+    activePlayers.map(p =>
+      p.subscribe((playerName, state, receivedAt) => {
+        // This callback fires for every realtime event received by every player
+      })
+    )
+  );
+  const subOk = subscribeResults.filter(r => r.status === 'fulfilled').length;
+  const subFail = subscribeResults.filter(r => r.status === 'rejected').length;
+  if (subFail > 0) {
+    const failures = subscribeResults
+      .filter(r => r.status === 'rejected')
+      .slice(0, 3)
+      .map(r => r.reason?.message || r.reason);
+    console.warn(`  WARNING: ${subFail}/${activePlayers.length} realtime subscriptions failed. First errors: ${failures.join('; ')}`);
   }
-  await sleep(2000);
-  console.log('  All players subscribed to realtime.');
+  console.log(`  Realtime subscribed: ${subOk} ok, ${subFail} failed out of ${activePlayers.length} players.`);
+  // Extra settle time for WebSocket connections to stabilize
+  await sleep(1000);
   phaseEnd('1-player-join');
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -2294,13 +2348,24 @@ async function main() {
     await sleep(500);
 
     // ── Step 2+3: Players answer concurrently, admin waits up to 30s ──
-    // Fire off all player answers (non-blocking), then wait for all to finish
-    // OR 30s timeout — whichever comes first. This mirrors the real flow where
-    // admin independently monitors and stops after countdown.
+    // Fire off all player answers with staggered start (non-blocking), then wait
+    // for all to finish OR 30s timeout. Batches start with a small delay between
+    // them to avoid thundering herd, but do NOT wait for a batch to complete
+    // before starting the next one.
     console.log('  [2] Players answering...');
     const answerT0 = now();
-    const answerTasks = activePlayers.map(p => () => p.answer(q.id).catch(e => recordError(`answer(${p.name})`, e)));
-    const allAnswered = staggeredAll(answerTasks, 10, 50);
+    const answerPromises = [];
+    for (let i = 0; i < activePlayers.length; i += 10) {
+      const batch = activePlayers.slice(i, i + 10);
+      // Each batch starts after a small stagger delay, but all run concurrently
+      const batchDelay = (i / 10) * 50;
+      for (const p of batch) {
+        answerPromises.push(
+          sleep(batchDelay).then(() => p.answer(q.id).catch(e => recordError(`answer(${p.name})`, e)))
+        );
+      }
+    }
+    const allAnswered = Promise.all(answerPromises);
 
     // Wait for all players to finish OR 30s timeout
     let allDone = false;
@@ -2321,6 +2386,12 @@ async function main() {
     console.log('  [4] Admin -> stopped (browser click)');
     const stopResult = await adminClickStop();
     qs.stateTransitions['stopped'] = stopResult.durationMs;
+
+    // Measure realtime for "stopped"
+    const stoppedLags = await measureRealtimePropagation(activePlayers, stopResult.sentAt, 5000);
+    qs.realtimePropagation.push(...stoppedLags);
+    timing.realtimeLags.push(...stoppedLags);
+
     await sleep(1000);
 
     // ── Step 5: Admin clicks "公布答案" → revealed ──
@@ -2399,6 +2470,12 @@ async function main() {
       console.log(`  [10] Admin -> next question (browser click)`);
       const waitResult = await adminClickNext();
       qs.stateTransitions['waiting'] = waitResult.durationMs;
+
+      // Measure realtime for "waiting" (next question)
+      const waitingLags = await measureRealtimePropagation(activePlayers, waitResult.sentAt, 5000);
+      qs.realtimePropagation.push(...waitingLags);
+      timing.realtimeLags.push(...waitingLags);
+
       await sleep(3000);
     }
 

@@ -257,6 +257,7 @@
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
 
         let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [], qrToken = null, currentMode = 'official';
+        let questionsMap = new Map(); // 預載題目內容快取，避免 playing 時 100 人同時 fetch
         let countdownTimer = null;
         let pendingScore = null; // 暫存 admin broadcast 推送的分數
         const COUNTDOWN_TOTAL = 15000; // 15 seconds in ms
@@ -286,8 +287,9 @@
             const savedName = sessionStorage.getItem('quiz_player_name');
             if (savedName) {
                 myName = savedName;
-                const { data: qList } = await sbClient.from('questions').select('id, sort_order, type').order('sort_order', { ascending: true }).order('id', { ascending: true });
-                questionIdOrder = qList || [];
+                const { data: qList } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
+                questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, type: q.type }));
+                questionsMap = new Map((qList || []).map(q => [q.id, q]));
                 document.getElementById('user-display').innerText = myName;
                 document.getElementById('login-ui').classList.add('hidden');
                 document.getElementById('waiting-ui').classList.remove('hidden');
@@ -317,9 +319,10 @@
                 return alert("加入失敗：" + (error.message || "未知錯誤"));
             }
 
-            // 載入題目 ID 順序，用於顯示題號
-            const { data: qList } = await sbClient.from('questions').select('id, sort_order, type').order('sort_order', { ascending: true }).order('id', { ascending: true });
-            questionIdOrder = qList || [];
+            // 預載所有題目內容（含選項），避免 playing 時再逐一 fetch
+            const { data: qList } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
+            questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, type: q.type }));
+            questionsMap = new Map((qList || []).map(q => [q.id, q]));
 
             sessionStorage.setItem('quiz_player_name', myName);
             document.getElementById('user-display').innerText = myName;
@@ -440,8 +443,14 @@
                 // 如果已經在答這一題，不要重複刷新
                 if (currentQ && currentQ.id === status.current_q_id && !document.getElementById('game-ui').classList.contains('hidden')) return;
 
-                const { data: q } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
-                if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
+                // 優先用預載快取，cache miss 時才 fetch
+                let q = questionsMap.get(status.current_q_id);
+                if (!q) {
+                    const { data } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
+                    if (myVersion !== stateVersion) return;
+                    q = data;
+                    if (q) questionsMap.set(q.id, q);
+                }
                 if (q) {
                     currentQ = q;
                     hasAnswered = false;
@@ -465,9 +474,14 @@
             else if (status.state === 'revealed') {
                 stopCountdown();
 
-                // 重新取得題目資料（含正確答案）
-                const { data: revQ } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
-                if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
+                // 優先用預載快取取得題目資料（含正確答案）
+                let revQ = questionsMap.get(status.current_q_id);
+                if (!revQ) {
+                    const { data } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
+                    if (myVersion !== stateVersion) return;
+                    revQ = data;
+                    if (revQ) questionsMap.set(revQ.id, revQ);
+                }
                 if (revQ) currentQ = revQ;
 
                 // 同步刷新題目文字、題號與題目媒體（防止中途進場或重整時只有選項刷新）
