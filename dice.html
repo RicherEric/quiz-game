@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>魚蝦蟹</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="js/tailwind-config.js"></script>
+    <link rel="stylesheet" href="css/shared.css">
+    <style>
+        .sync-btn {
+            @apply fixed top-4 right-4 z-50 bg-gold-600/80 hover:bg-gold-500 text-midnight-950 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all active:scale-90;
+            backdrop-filter: blur(8px);
+        }
+        .sync-btn.syncing svg {
+            animation: spin 0.6s linear;
+        }
+
+        .countdown-ring {
+            transform: rotate(-90deg);
+        }
+        .countdown-ring circle {
+            transition: stroke-dashoffset 0.1s linear;
+        }
+
+        .symbol-card {
+            @apply relative flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all cursor-pointer select-none active:scale-95;
+            min-height: 110px;
+        }
+        .symbol-card.selectable:hover {
+            @apply border-gold-400 shadow-[0_0_20px_rgba(255,210,100,0.3)];
+        }
+        .symbol-card .bet-badge {
+            @apply absolute -top-2 -right-2 bg-gold-500 text-midnight-950 text-xs font-black px-2 py-0.5 rounded-full shadow-md;
+        }
+
+        .chip-btn {
+            @apply px-5 py-3 rounded-full font-black text-lg transition-all active:scale-90 border-2;
+        }
+        .chip-btn.selected {
+            @apply ring-4 ring-gold-400 scale-105 shadow-[0_0_20px_rgba(255,210,100,0.4)];
+            background: linear-gradient(135deg, #ffbc40, #e8a020) !important;
+            color: #182240 !important;
+        }
+
+        .dice-face {
+            @apply text-6xl inline-block;
+            animation: dice-spin 0.15s linear infinite;
+        }
+        .dice-face.settled {
+            animation: dice-land 0.4s ease-out forwards;
+        }
+        @keyframes dice-spin {
+            0% { transform: rotateX(0deg) scale(1); }
+            25% { transform: rotateX(90deg) scale(1.1); }
+            50% { transform: rotateX(180deg) scale(1); }
+            75% { transform: rotateX(270deg) scale(1.1); }
+            100% { transform: rotateX(360deg) scale(1); }
+        }
+        @keyframes dice-land {
+            0% { transform: scale(1.3) rotateX(20deg); }
+            50% { transform: scale(0.9) rotateX(-5deg); }
+            100% { transform: scale(1) rotateX(0deg); }
+        }
+
+        @keyframes slide-up {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .animate-slide-up {
+            animation: slide-up 0.3s ease-out;
+        }
+
+        .toast {
+            @apply fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl text-lg font-bold shadow-2xl transition-all;
+            animation: slide-up 0.3s ease-out;
+        }
+
+        .balance-display {
+            @apply text-4xl font-black text-gold-gradient;
+        }
+    </style>
+</head>
+
+<body class="bg-midnight-900 text-gold-100 font-sans min-h-screen">
+    <!-- Sync button (shown after login) -->
+    <button id="sync-btn" class="sync-btn hidden" onclick="manualRefresh()" title="同步遊戲狀態">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+    </button>
+
+    <div id="app" class="max-w-3xl mx-auto p-6">
+
+        <!-- No Token UI -->
+        <div id="no-token-ui" class="hidden text-center mt-16 space-y-8">
+            <div class="flex flex-col items-center justify-center space-y-6 bg-amber-50 p-8 rounded-3xl">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                    class="h-32 md:h-40 w-auto object-contain drop-shadow-[0_0_15px_rgba(255,210,100,0.2)]">
+                <h1 class="text-5xl md:text-6xl font-black text-teal-900 tracking-tight drop-shadow-lg">魚蝦蟹</h1>
+            </div>
+            <div class="bg-midnight-900/50 p-8 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm">
+                <p class="text-3xl text-gold-200 font-bold mb-4">請掃描 QR Code 加入遊戲</p>
+                <p class="text-xl text-gold-300/80">請在主持人的螢幕上掃描 QR Code 來參與遊戲</p>
+            </div>
+        </div>
+
+        <!-- Login UI -->
+        <div id="login-ui" class="text-center mt-16 space-y-8">
+            <div class="flex flex-col items-center justify-center space-y-6 bg-amber-50 p-8 rounded-3xl">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                    class="h-32 md:h-40 w-auto object-contain drop-shadow-[0_0_15px_rgba(255,210,100,0.2)]">
+                <h1 class="text-5xl md:text-6xl font-black text-teal-900 tracking-tight drop-shadow-lg">魚蝦蟹</h1>
+            </div>
+            <div class="bg-midnight-900/50 p-8 rounded-3xl border border-gold-700/30 shadow-2xl backdrop-blur-sm">
+                <input id="p-name" type="text" placeholder="請輸入您的暱稱"
+                    class="w-full p-5 rounded-2xl text-midnight-950 text-2xl text-center focus:ring-4 focus:ring-gold-500 outline-none shadow-inner bg-gold-100 placeholder-gold-800/50 font-bold border-2 border-gold-600/50">
+                <p class="mt-3 text-gold-300/80 text-base">請輸入您的暱稱，相同的暱稱只能輸入一次，請謹慎輸入完再送出</p>
+                <button onclick="join()"
+                    class="w-full mt-6 bg-gradient-to-r from-gold-500 to-gold-700 py-5 rounded-2xl text-3xl font-black shadow-[0_0_25px_rgba(255,210,100,0.3)] text-midnight-950">加入遊戲</button>
+            </div>
+        </div>
+
+        <!-- Waiting UI -->
+        <div id="waiting-ui" class="hidden text-center mt-20 space-y-10">
+            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+                <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-gold-400 mx-auto"></div>
+                <h2 class="text-4xl font-bold text-gold-100">哈囉，<span id="user-display" class="text-gold-gradient"></span></h2>
+                <p class="text-2xl text-gold-200/80 leading-relaxed">等待莊家開局...</p>
+                <div class="pt-4 border-t border-gold-600/20">
+                    <p class="text-lg text-gold-300/60 mb-2">您的籌碼</p>
+                    <div id="waiting-balance" class="balance-display">--</div>
+                </div>
+                <div id="waiting-round" class="hidden">
+                    <p class="text-lg text-gold-300/60">目前局數</p>
+                    <p id="waiting-round-num" class="text-2xl font-bold text-gold-200"></p>
+                </div>
+            </div>
+            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
+        </div>
+
+        <!-- Betting UI -->
+        <div id="betting-ui" class="hidden space-y-5">
+            <!-- Top Bar -->
+            <div class="flex justify-between items-center bg-midnight-900/60 p-4 rounded-2xl border border-gold-600/30">
+                <div>
+                    <p class="text-sm text-gold-300/60">籌碼餘額</p>
+                    <div id="betting-balance" class="text-2xl font-black text-gold-gradient">0</div>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gold-300/60">第 <span id="betting-round" class="font-bold text-gold-200">0</span> 局</p>
+                </div>
+                <div class="relative flex items-center justify-center">
+                    <svg class="countdown-ring" width="64" height="64" viewBox="0 0 64 64">
+                        <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(187,82,0,0.3)" stroke-width="5" />
+                        <circle id="countdown-circle" cx="32" cy="32" r="28" fill="none" stroke="#ffaa1d"
+                            stroke-width="5" stroke-linecap="round" stroke-dasharray="175.93"
+                            stroke-dashoffset="0" />
+                    </svg>
+                    <span id="countdown-text" class="absolute text-xl font-black text-gold-300">30</span>
+                </div>
+            </div>
+
+            <!-- Symbol Grid (3x2) -->
+            <div id="symbol-grid" class="grid grid-cols-3 gap-3">
+                <!-- Symbols rendered by JS -->
+            </div>
+
+            <!-- Special Bets -->
+            <div id="special-bets" class="hidden space-y-3">
+                <p class="text-sm text-gold-300/60 text-center font-bold">特殊押注</p>
+                <div id="triple-bets" class="hidden">
+                    <p class="text-xs text-gold-300/50 mb-2 text-center">圍骰 (指定三同) - 賠率 1:150</p>
+                    <div class="grid grid-cols-3 gap-2" id="triple-grid">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+                <div id="any-triple-bet" class="hidden flex justify-center">
+                    <button onclick="betSpecial('any_triple', 0)" class="chip-btn bg-red-800/60 border-red-500/40 text-red-200 hover:bg-red-700/60">
+                        全圍 (任意三同) 1:30
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chip Selector -->
+            <div class="bg-midnight-900/60 p-4 rounded-2xl border border-gold-600/30 space-y-3">
+                <p class="text-sm text-gold-300/60 text-center font-bold">選擇籌碼</p>
+                <div id="chip-selector" class="flex justify-center gap-3 flex-wrap">
+                    <button onclick="selectChip(100)" class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200" data-chip="100">100</button>
+                    <button onclick="selectChip(200)" class="chip-btn bg-teal-700/60 border-teal-500/40 text-teal-200" data-chip="200">200</button>
+                    <button onclick="selectChip(500)" class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200" data-chip="500">500</button>
+                </div>
+            </div>
+
+            <!-- My Bets Summary -->
+            <div id="my-bets-summary" class="hidden bg-midnight-900/60 p-4 rounded-2xl border border-gold-600/30 space-y-2">
+                <p class="text-sm text-gold-300/60 font-bold">我的押注</p>
+                <div id="my-bets-list" class="space-y-1"></div>
+                <div class="flex justify-between items-center pt-2 border-t border-gold-600/20">
+                    <span class="text-gold-300/80 font-bold">總押注</span>
+                    <span id="total-bet-amount" class="text-xl font-black text-gold-200">0</span>
+                </div>
+            </div>
+
+            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
+        </div>
+
+        <!-- Stopped UI -->
+        <div id="stopped-ui" class="hidden text-center mt-16 space-y-8">
+            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+                <div class="text-5xl">🎲</div>
+                <h2 class="text-3xl font-bold text-gold-100">押注已截止</h2>
+                <p class="text-xl text-gold-200/80">等待莊家擲骰...</p>
+                <div id="stopped-bets-summary" class="text-left space-y-2 mt-4"></div>
+                <div class="pt-4 border-t border-gold-600/20">
+                    <p class="text-gold-300/60 text-sm">總押注</p>
+                    <p id="stopped-total-bet" class="text-2xl font-black text-gold-200">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rolling UI -->
+        <div id="rolling-ui" class="hidden text-center mt-16 space-y-8">
+            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+                <h2 class="text-3xl font-bold text-gold-100">莊家擲骰中...</h2>
+                <div id="dice-display" class="flex justify-center gap-6 py-6">
+                    <span class="dice-face" id="dice-1">🎲</span>
+                    <span class="dice-face" id="dice-2">🎲</span>
+                    <span class="dice-face" id="dice-3">🎲</span>
+                </div>
+                <p class="text-lg text-gold-200/60">請稍候...</p>
+            </div>
+        </div>
+
+        <!-- Resolved UI -->
+        <div id="resolved-ui" class="hidden text-center mt-10 space-y-6">
+            <div class="bg-midnight-900/60 p-8 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+                <!-- Dice Result -->
+                <div>
+                    <p class="text-lg text-gold-300/60 mb-2">骰子結果</p>
+                    <div id="resolved-dice" class="flex justify-center gap-4 text-5xl"></div>
+                    <p id="resolved-triple" class="hidden text-2xl font-black text-red-400 mt-2 animate-pulse">圍骰！</p>
+                </div>
+
+                <!-- My Bet Results -->
+                <div id="resolved-bets" class="space-y-2 text-left"></div>
+
+                <!-- Net Result -->
+                <div class="pt-4 border-t border-gold-600/20 space-y-3">
+                    <div>
+                        <p class="text-sm text-gold-300/60">本局結果</p>
+                        <p id="resolved-net" class="text-3xl font-black"></p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gold-300/60">目前餘額</p>
+                        <div id="resolved-balance" class="balance-display">0</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-center gap-4 pt-2">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-3 border-gold-400"></div>
+                    <p class="text-lg text-gold-200/50">等待下一局...</p>
+                </div>
+            </div>
+            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
+        </div>
+
+        <!-- Ended UI -->
+        <div id="ended-ui" class="hidden text-center mt-20 space-y-8">
+            <div class="flex flex-col items-center justify-center space-y-6 bg-amber-50 p-8 rounded-3xl">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                    class="h-32 md:h-40 w-auto object-contain drop-shadow-[0_0_15px_rgba(255,210,100,0.2)]">
+                <h1 class="text-5xl md:text-6xl font-black text-teal-900 tracking-tight drop-shadow-lg">遊戲結束！</h1>
+            </div>
+            <!-- My Rank and Balance -->
+            <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-10 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
+                <div id="end-rank" class="text-5xl font-black text-gold-300"></div>
+                <div id="end-balance" class="text-3xl text-gold-200 font-bold"></div>
+            </div>
+            <!-- Leaderboard -->
+            <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-8 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
+                <h2 class="text-3xl font-black text-gold-100">排行榜</h2>
+                <div id="end-top" class="space-y-3"></div>
+            </div>
+            <p class="text-xl text-gold-200/60">感謝您的參與！</p>
+        </div>
+
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
+    <script>
+        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+
+        // Symbol definitions
+        const SYMBOLS = {
+            1: { name: '魚', emoji: '🐟' },
+            2: { name: '蝦', emoji: '🦐' },
+            3: { name: '蟹', emoji: '🦀' },
+            4: { name: '雞', emoji: '🐓' },
+            5: { name: '葫蘆', emoji: '🍐' },
+            6: { name: '錢幣', emoji: '🪙' }
+        };
+
+        // State
+        let sbClient, myName = "", roomId = null, myBalance = 0;
+        let currentRound = 0, currentState = 'waiting';
+        let selectedChip = 0;
+        let myBets = {}; // { "single_1": 200, "single_3": 500, "triple_4": 100, "any_triple_0": 100 }
+        let pendingResult = null;
+        let lastProcessedKey = '', pollInterval = null, qrToken = null;
+        let countdownTimer = null;
+        let stateVersion = 0;
+        let channel = null;
+        let roomConfig = {}; // betting_seconds, max_bet_per_symbol, house_wins_on_triple, allow_triple_bet, allow_any_triple_bet
+        let diceAnimTimer = null;
+
+        const COUNTDOWN_CIRCUMFERENCE = 2 * Math.PI * 28; // ~175.93
+
+        /**
+         * Transient error retry with exponential backoff
+         */
+        async function withRetry(fn, maxRetries = 3) {
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                const result = await fn();
+                const msg = result.error?.message || '';
+                const isTransient = /50[234]|bad gateway|service unavailable|gateway timeout|fetch failed|network/i.test(msg);
+                if (!result.error || !isTransient || attempt === maxRetries) return result;
+                const delay = 1000 * Math.pow(2, attempt) + Math.random() * 500;
+                console.warn(`[retry ${attempt + 1}/${maxRetries}] ${msg.slice(0, 80)}... ${Math.round(delay)}ms`);
+                await new Promise(r => setTimeout(r, delay));
+            }
+        }
+
+        function showToast(message, type = 'error') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'error' ? 'bg-red-800/90 text-red-100' : type === 'success' ? 'bg-green-800/90 text-green-100' : 'bg-gold-800/90 text-gold-100';
+            toast.className = `toast ${bgColor}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        // ========== INIT ==========
+
+        window.onload = async () => {
+            if (!window.supabase) {
+                alert("網路不穩定，通訊元件載入失敗，請重新整理網頁");
+                return;
+            }
+            sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+            const urlParams = new URLSearchParams(window.location.search);
+            qrToken = urlParams.get('token');
+
+            if (!qrToken) {
+                document.getElementById('login-ui').classList.add('hidden');
+                document.getElementById('no-token-ui').classList.remove('hidden');
+                return;
+            }
+
+            console.log("Supabase initialized");
+
+            // Auto-rejoin from sessionStorage
+            const savedName = sessionStorage.getItem('dice_player_name');
+            const savedRoom = sessionStorage.getItem('dice_room_id');
+            if (savedName && savedRoom) {
+                myName = savedName;
+                roomId = parseInt(savedRoom);
+                // Verify player still exists by calling join again (idempotent)
+                const { data, error } = await withRetry(() => sbClient.rpc('dice_join_room', {
+                    p_token: qrToken,
+                    p_player_name: myName
+                }));
+                if (error) {
+                    // Player no longer valid, show login
+                    sessionStorage.removeItem('dice_player_name');
+                    sessionStorage.removeItem('dice_room_id');
+                    return;
+                }
+                if (data) {
+                    applyRoomConfig(data);
+                    myBalance = data.balance || 0;
+                }
+                document.getElementById('user-display').innerText = myName;
+                document.getElementById('waiting-balance').innerText = myBalance;
+                document.getElementById('login-ui').classList.add('hidden');
+                document.getElementById('waiting-ui').classList.remove('hidden');
+                document.getElementById('sync-btn').classList.remove('hidden');
+                listenToHost();
+                return;
+            }
+        };
+
+        function applyRoomConfig(data) {
+            roomConfig = {
+                bettingSeconds: data.betting_seconds || 30,
+                maxBetPerSymbol: data.max_bet_per_symbol || 0,
+                houseWinsOnTriple: data.house_wins_on_triple !== false,
+                allowTripleBet: data.allow_triple_bet || false,
+                allowAnyTripleBet: data.allow_any_triple_bet || false,
+                initialBalance: data.initial_balance || 0,
+                roomName: data.room_name || ''
+            };
+        }
+
+        // ========== JOIN ==========
+
+        async function join() {
+            myName = document.getElementById('p-name').value.trim();
+            if (!myName) return alert("請輸入暱稱");
+
+            const { data, error } = await withRetry(() => sbClient.rpc('dice_join_room', {
+                p_token: qrToken,
+                p_player_name: myName
+            }));
+            if (error) {
+                console.error("dice_join_room error:", error);
+                if (error.message && error.message.includes('Invalid')) {
+                    return alert("無效的 QR Code，請重新掃描！");
+                }
+                if (error.message && (error.message.includes('duplicate') || error.message.includes('already') || error.message.includes('unique') || error.message.includes('已存在') || error.message.includes('暱稱'))) {
+                    return alert("此暱稱已被使用，請換一個暱稱再試！");
+                }
+                return alert("加入失敗：" + (error.message || "未知錯誤"));
+            }
+
+            if (data && data.success === false) {
+                return alert(data.message || "加入失敗");
+            }
+
+            roomId = data.room_id;
+            myBalance = data.balance || 0;
+            applyRoomConfig(data);
+
+            sessionStorage.setItem('dice_player_name', myName);
+            sessionStorage.setItem('dice_room_id', String(roomId));
+            document.getElementById('user-display').innerText = myName;
+            document.getElementById('waiting-balance').innerText = myBalance;
+            document.getElementById('login-ui').classList.add('hidden');
+            document.getElementById('waiting-ui').classList.remove('hidden');
+            document.getElementById('sync-btn').classList.remove('hidden');
+
+            listenToHost();
+        }
+
+        // ========== REALTIME ==========
+
+        function listenToHost() {
+            checkCurrentStatus();
+
+            if (channel) sbClient.removeChannel(channel);
+
+            // Layer 1: Broadcast (lowest latency)
+            sbClient.channel('dice-state-broadcast', { config: { broadcast: { self: false } } })
+                .on('broadcast', { event: 'state-change' }, (msg) => {
+                    const d = msg.payload;
+                    if (d.room_id !== roomId) return;
+                    console.log("broadcast state:", d.state);
+                    const key = `${d.state}_${d.current_round}_${d.start_time}`;
+                    if (key !== lastProcessedKey) {
+                        lastProcessedKey = key;
+                        handleStateChange(d);
+                    }
+                })
+                .subscribe();
+
+            // Layer 1b: Result broadcast
+            sbClient.channel('dice-result-broadcast', { config: { broadcast: { self: false } } })
+                .on('broadcast', { event: 'round-result' }, (msg) => {
+                    const p = msg.payload;
+                    if (p.room_id !== roomId) return;
+                    const myResult = p.results?.[myName];
+                    if (myResult) {
+                        pendingResult = {
+                            ...myResult,
+                            dice_result: p.dice_result,
+                            is_triple: p.is_triple,
+                            symbol_counts: p.symbol_counts
+                        };
+                    }
+                })
+                .subscribe();
+
+            // Layer 2: postgres_changes fallback
+            channel = sbClient.channel('dice-control', { config: { broadcast: { self: false } } })
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'dice_game_status'
+                }, (payload) => {
+                    if (payload.new.room_id !== roomId) return;
+                    const key = `${payload.new.state}_${payload.new.current_round}_${payload.new.start_time}`;
+                    if (key !== lastProcessedKey) {
+                        console.log("postgres_changes fallback:", payload.new.state);
+                        lastProcessedKey = key;
+                        handleStateChange(payload.new);
+                    }
+                })
+                .subscribe((status) => {
+                    console.log("Realtime connection:", status);
+                });
+
+            // Layer 3: Polling fallback every 15s
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(checkCurrentStatus, 15000);
+        }
+
+        async function checkCurrentStatus() {
+            if (!roomId) return;
+            const { data } = await withRetry(() => sbClient.from('dice_game_status').select('*').eq('room_id', roomId).single(), 1);
+            if (data) {
+                const key = `${data.state}_${data.current_round}_${data.start_time}`;
+                if (key !== lastProcessedKey) {
+                    lastProcessedKey = key;
+                    handleStateChange(data);
+                }
+            }
+        }
+
+        function manualRefresh() {
+            const btn = document.getElementById('sync-btn');
+            btn.classList.add('syncing');
+            checkCurrentStatus().finally(() => {
+                setTimeout(() => btn.classList.remove('syncing'), 600);
+            });
+        }
+
+        // ========== STATE MACHINE ==========
+
+        function hideAllUI() {
+            ['waiting-ui', 'betting-ui', 'stopped-ui', 'rolling-ui', 'resolved-ui', 'ended-ui'].forEach(id =>
+                document.getElementById(id).classList.add('hidden')
+            );
+        }
+
+        async function handleStateChange(status) {
+            const myVersion = ++stateVersion;
+            const state = status.state;
+            currentRound = status.current_round || 0;
+            currentState = state;
+
+            if (state === 'waiting') {
+                hideAllUI();
+                stopCountdown();
+                stopDiceAnimation();
+                document.getElementById('waiting-ui').classList.remove('hidden');
+                document.getElementById('waiting-balance').innerText = myBalance;
+                if (currentRound > 0) {
+                    document.getElementById('waiting-round').classList.remove('hidden');
+                    document.getElementById('waiting-round-num').innerText = `第 ${currentRound} 局`;
+                } else {
+                    document.getElementById('waiting-round').classList.add('hidden');
+                }
+                // Reset bets for next round
+                myBets = {};
+                selectedChip = 0;
+                pendingResult = null;
+            }
+            else if (state === 'betting') {
+                hideAllUI();
+                stopDiceAnimation();
+                // Reset bets for new round
+                myBets = {};
+                selectedChip = 0;
+                pendingResult = null;
+                document.getElementById('betting-ui').classList.remove('hidden');
+                document.getElementById('betting-balance').innerText = myBalance;
+                document.getElementById('betting-round').innerText = currentRound;
+                renderSymbolGrid();
+                renderSpecialBets();
+                updateBettingUI();
+                startCountdown(roomConfig.bettingSeconds || 30);
+            }
+            else if (state === 'stopped') {
+                hideAllUI();
+                stopCountdown();
+                document.getElementById('stopped-ui').classList.remove('hidden');
+                renderStoppedBets();
+            }
+            else if (state === 'rolling') {
+                hideAllUI();
+                stopCountdown();
+                document.getElementById('rolling-ui').classList.remove('hidden');
+                startDiceAnimation(status.dice_result || null);
+            }
+            else if (state === 'resolved') {
+                hideAllUI();
+                stopCountdown();
+                document.getElementById('resolved-ui').classList.remove('hidden');
+
+                // Get result from broadcast or fallback RPC
+                let result = pendingResult;
+                if (!result) {
+                    // Wait 1s for broadcast to arrive
+                    await new Promise(r => setTimeout(r, 1000));
+                    if (myVersion !== stateVersion) return;
+                    result = pendingResult;
+                }
+                if (!result) {
+                    // RPC fallback
+                    const { data } = await withRetry(() => sbClient.rpc('dice_get_my_result', {
+                        p_player_name: myName,
+                        p_room_id: roomId,
+                        p_round: currentRound
+                    }), 2);
+                    if (myVersion !== stateVersion) return;
+                    if (data) {
+                        result = data;
+                        // dice_result might come from status
+                        if (!result.dice_result && status.dice_result) {
+                            result.dice_result = status.dice_result;
+                        }
+                    }
+                }
+
+                if (result) {
+                    renderResolvedUI(result, status);
+                    myBalance = result.balance || myBalance;
+                    pendingResult = null;
+                } else {
+                    // Minimal display if no result available
+                    renderResolvedUI({ total_bet: 0, total_payout: 0, bets: [], balance: myBalance, dice_result: status.dice_result }, status);
+                }
+            }
+            else if (state === 'ended') {
+                hideAllUI();
+                stopCountdown();
+                stopDiceAnimation();
+                document.getElementById('ended-ui').classList.remove('hidden');
+
+                // Fetch leaderboard
+                const { data: leaderboard } = await withRetry(() => sbClient.rpc('dice_get_leaderboard', {
+                    p_room_id: roomId
+                }), 2);
+                if (myVersion !== stateVersion) return;
+
+                if (leaderboard && leaderboard.length > 0) {
+                    const myRank = leaderboard.findIndex(p => p.player_name === myName) + 1;
+                    const myData = leaderboard.find(p => p.player_name === myName);
+                    const myFinalBalance = myData ? myData.balance : myBalance;
+                    const crownIcons = { 1: '', 2: '', 3: '' };
+                    document.getElementById('end-rank').innerHTML = myRank <= 3 ? `第 ${myRank} 名` : `第 ${myRank} 名`;
+                    document.getElementById('end-balance').innerText = `籌碼：${myFinalBalance}`;
+
+                    const rankEmojis = ['🥇', '🥈', '🥉'];
+                    let topHtml = '';
+                    const topN = leaderboard.slice(0, 10);
+                    topN.forEach((p, i) => {
+                        const isMe = p.player_name === myName;
+                        const meBorder = isMe ? ' ring-2 ring-gold-400/70' : '';
+                        const bg = 'bg-gradient-to-r from-gold-500/25 to-gold-700/20 border border-gold-500/40';
+                        const emoji = i < 3 ? rankEmojis[i] : `#${i + 1}`;
+                        topHtml += `<div class="flex items-center justify-between px-6 py-3 rounded-xl ${bg}${meBorder}">
+                            <span class="text-2xl font-bold text-gold-100">${emoji} ${p.player_name}${isMe ? '（你）' : ''}</span>
+                            <span class="text-2xl font-black text-gold-300">${p.balance}</span>
+                        </div>`;
+                    });
+                    // Show self if not in top 10
+                    if (myRank > 10) {
+                        topHtml += `<div class="border-t border-gold-500/20 pt-3 mt-1"></div>`;
+                        topHtml += `<div class="flex items-center justify-between px-6 py-3 rounded-xl bg-[#1e3350]/60 border border-gold-700/15 ring-2 ring-gold-400/70">
+                            <span class="text-2xl font-bold text-gold-100">#${myRank} ${myName}（你）</span>
+                            <span class="text-2xl font-black text-gold-300">${myFinalBalance}</span>
+                        </div>`;
+                    }
+                    document.getElementById('end-top').innerHTML = topHtml;
+                }
+
+                confetti({ particleCount: 400, spread: 120, origin: { y: 0.4 }, colors: ['#fbbf24', '#ffffff'] });
+            }
+            else if (state === 'dismissed') {
+                sessionStorage.removeItem('dice_player_name');
+                sessionStorage.removeItem('dice_room_id');
+                hideAllUI();
+                if (channel) { sbClient.removeChannel(channel); channel = null; }
+                if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+                stopCountdown();
+                stopDiceAnimation();
+                myName = '';
+                roomId = null;
+                currentRound = 0;
+                myBets = {};
+                selectedChip = 0;
+                lastProcessedKey = '';
+                document.getElementById('p-name').value = '';
+                document.getElementById('login-ui').classList.remove('hidden');
+                document.getElementById('sync-btn').classList.add('hidden');
+            }
+        }
+
+        // ========== COUNTDOWN ==========
+
+        function startCountdown(seconds) {
+            stopCountdown();
+            const totalMs = seconds * 1000;
+            const countdownStart = Date.now();
+            const textEl = document.getElementById('countdown-text');
+            const circleEl = document.getElementById('countdown-circle');
+
+            countdownTimer = setInterval(() => {
+                const elapsed = Date.now() - countdownStart;
+                const remaining = Math.max(0, totalMs - elapsed);
+                const secs = Math.ceil(remaining / 1000);
+
+                textEl.innerText = secs;
+                const offset = COUNTDOWN_CIRCUMFERENCE * (1 - remaining / totalMs);
+                circleEl.setAttribute('stroke-dashoffset', offset);
+
+                if (remaining < 5000) {
+                    circleEl.setAttribute('stroke', '#ef4444');
+                    textEl.classList.remove('text-gold-300');
+                    textEl.classList.add('text-red-400');
+                } else {
+                    circleEl.setAttribute('stroke', '#ffaa1d');
+                    textEl.classList.remove('text-red-400');
+                    textEl.classList.add('text-gold-300');
+                }
+
+                if (remaining <= 0) {
+                    stopCountdown();
+                }
+            }, 100);
+        }
+
+        function stopCountdown() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+        }
+
+        // ========== SYMBOL GRID ==========
+
+        function renderSymbolGrid() {
+            const grid = document.getElementById('symbol-grid');
+            grid.innerHTML = '';
+            for (let i = 1; i <= 6; i++) {
+                const s = SYMBOLS[i];
+                const card = document.createElement('div');
+                card.id = `symbol-card-${i}`;
+                card.className = 'symbol-card selectable bg-midnight-800/60 border-teal-600/30 hover:border-gold-400';
+                card.onclick = () => betOnSymbol(i);
+                card.innerHTML = `
+                    <span class="text-4xl mb-1">${s.emoji}</span>
+                    <span class="text-sm font-bold text-gold-200">${s.name}</span>
+                    <span class="text-xs text-gold-300/50 mt-1" id="symbol-bet-${i}"></span>
+                    <div class="bet-badge hidden" id="symbol-badge-${i}">0</div>
+                `;
+                grid.appendChild(card);
+            }
+        }
+
+        function renderSpecialBets() {
+            const specialContainer = document.getElementById('special-bets');
+            const tripleContainer = document.getElementById('triple-bets');
+            const anyTripleContainer = document.getElementById('any-triple-bet');
+
+            let hasSpecial = false;
+
+            if (roomConfig.allowTripleBet) {
+                tripleContainer.classList.remove('hidden');
+                const tripleGrid = document.getElementById('triple-grid');
+                tripleGrid.innerHTML = '';
+                for (let i = 1; i <= 6; i++) {
+                    const s = SYMBOLS[i];
+                    const btn = document.createElement('button');
+                    btn.className = 'chip-btn bg-purple-800/60 border-purple-500/40 text-purple-200 hover:bg-purple-700/60 text-sm';
+                    btn.onclick = () => betSpecial('triple', i);
+                    btn.innerHTML = `${s.emoji}x3`;
+                    btn.id = `triple-btn-${i}`;
+                    tripleGrid.appendChild(btn);
+                }
+                hasSpecial = true;
+            } else {
+                tripleContainer.classList.add('hidden');
+            }
+
+            if (roomConfig.allowAnyTripleBet) {
+                anyTripleContainer.classList.remove('hidden');
+                hasSpecial = true;
+            } else {
+                anyTripleContainer.classList.add('hidden');
+            }
+
+            specialContainer.classList.toggle('hidden', !hasSpecial);
+        }
+
+        // ========== CHIP SELECTION ==========
+
+        function selectChip(amount) {
+            selectedChip = (selectedChip === amount) ? 0 : amount;
+            document.querySelectorAll('#chip-selector .chip-btn').forEach(btn => {
+                const chipVal = parseInt(btn.dataset.chip);
+                btn.classList.toggle('selected', chipVal === selectedChip);
+            });
+        }
+
+        // ========== BETTING ==========
+
+        async function betOnSymbol(symbol) {
+            if (currentState !== 'betting') return;
+            if (selectedChip <= 0) {
+                showToast('請先選擇籌碼金額', 'info');
+                return;
+            }
+            if (myBalance < selectedChip) {
+                showToast('籌碼不足', 'error');
+                return;
+            }
+
+            const betKey = `single_${symbol}`;
+            const currentBet = myBets[betKey] || 0;
+            if (roomConfig.maxBetPerSymbol > 0 && currentBet + selectedChip > roomConfig.maxBetPerSymbol) {
+                showToast(`每個符號最多押注 ${roomConfig.maxBetPerSymbol}`, 'error');
+                return;
+            }
+
+            const { data, error } = await withRetry(() => sbClient.rpc('dice_place_bet', {
+                p_player_name: myName,
+                p_room_id: roomId,
+                p_round: currentRound,
+                p_bet_type: 'single',
+                p_symbol: symbol,
+                p_amount: selectedChip
+            }));
+
+            if (error) {
+                showToast(error.message || '押注失敗', 'error');
+                return;
+            }
+            if (data && data.success === false) {
+                showToast(data.message || '押注失敗', 'error');
+                return;
+            }
+
+            myBalance = data.remaining_balance;
+            myBets[betKey] = (myBets[betKey] || 0) + selectedChip;
+            updateBettingUI();
+            showToast(`${SYMBOLS[symbol].emoji} ${SYMBOLS[symbol].name} +${selectedChip}`, 'success');
+        }
+
+        async function betSpecial(betType, symbol) {
+            if (currentState !== 'betting') return;
+            if (selectedChip <= 0) {
+                showToast('請先選擇籌碼金額', 'info');
+                return;
+            }
+            if (myBalance < selectedChip) {
+                showToast('籌碼不足', 'error');
+                return;
+            }
+
+            const { data, error } = await withRetry(() => sbClient.rpc('dice_place_bet', {
+                p_player_name: myName,
+                p_room_id: roomId,
+                p_round: currentRound,
+                p_bet_type: betType,
+                p_symbol: symbol,
+                p_amount: selectedChip
+            }));
+
+            if (error) {
+                showToast(error.message || '押注失敗', 'error');
+                return;
+            }
+            if (data && data.success === false) {
+                showToast(data.message || '押注失敗', 'error');
+                return;
+            }
+
+            myBalance = data.remaining_balance;
+            const betKey = `${betType}_${symbol}`;
+            myBets[betKey] = (myBets[betKey] || 0) + selectedChip;
+            updateBettingUI();
+            const label = betType === 'triple' ? `圍骰 ${SYMBOLS[symbol].emoji}` : '全圍';
+            showToast(`${label} +${selectedChip}`, 'success');
+        }
+
+        async function cancelBet(betType, symbol) {
+            if (currentState !== 'betting') return;
+
+            const { data, error } = await withRetry(() => sbClient.rpc('dice_cancel_bet', {
+                p_player_name: myName,
+                p_room_id: roomId,
+                p_round: currentRound,
+                p_bet_type: betType,
+                p_symbol: symbol
+            }));
+
+            if (error) {
+                showToast(error.message || '取消失敗', 'error');
+                return;
+            }
+            if (data && data.success === false) {
+                showToast(data.message || '取消失敗', 'error');
+                return;
+            }
+
+            myBalance = data.remaining_balance;
+            const betKey = `${betType}_${symbol}`;
+            delete myBets[betKey];
+            updateBettingUI();
+            showToast('已取消押注', 'info');
+        }
+
+        function updateBettingUI() {
+            document.getElementById('betting-balance').innerText = myBalance;
+
+            // Update symbol badges
+            for (let i = 1; i <= 6; i++) {
+                const betKey = `single_${i}`;
+                const amount = myBets[betKey] || 0;
+                const badge = document.getElementById(`symbol-badge-${i}`);
+                const betText = document.getElementById(`symbol-bet-${i}`);
+                if (amount > 0) {
+                    badge.classList.remove('hidden');
+                    badge.innerText = amount;
+                    betText.innerText = `$${amount}`;
+                } else {
+                    badge.classList.add('hidden');
+                    betText.innerText = '';
+                }
+            }
+
+            // Update bets summary
+            const summaryEl = document.getElementById('my-bets-summary');
+            const listEl = document.getElementById('my-bets-list');
+            const entries = Object.entries(myBets).filter(([, v]) => v > 0);
+
+            if (entries.length > 0) {
+                summaryEl.classList.remove('hidden');
+                listEl.innerHTML = entries.map(([key, amount]) => {
+                    const [type, sym] = key.split('_');
+                    let label = '';
+                    if (type === 'single') {
+                        const s = SYMBOLS[parseInt(sym)];
+                        label = `${s.emoji} ${s.name}`;
+                    } else if (type === 'triple') {
+                        const s = SYMBOLS[parseInt(sym)];
+                        label = `圍骰 ${s.emoji}`;
+                    } else if (type === 'any') {
+                        label = '全圍';
+                    }
+                    return `<div class="flex items-center justify-between text-sm">
+                        <span class="text-gold-200">${label}</span>
+                        <span class="flex items-center gap-2">
+                            <span class="text-gold-300 font-bold">$${amount}</span>
+                            <button onclick="cancelBet('${type}', ${parseInt(sym) || 0})" class="text-red-400/70 hover:text-red-300 text-lg leading-none" title="取消押注">&times;</button>
+                        </span>
+                    </div>`;
+                }).join('');
+
+                const totalBet = entries.reduce((sum, [, v]) => sum + v, 0);
+                document.getElementById('total-bet-amount').innerText = `$${totalBet}`;
+            } else {
+                summaryEl.classList.add('hidden');
+            }
+        }
+
+        // ========== STOPPED ==========
+
+        function renderStoppedBets() {
+            const summaryEl = document.getElementById('stopped-bets-summary');
+            const entries = Object.entries(myBets).filter(([, v]) => v > 0);
+
+            if (entries.length > 0) {
+                summaryEl.innerHTML = entries.map(([key, amount]) => {
+                    const [type, sym] = key.split('_');
+                    let label = '';
+                    if (type === 'single') {
+                        const s = SYMBOLS[parseInt(sym)];
+                        label = `${s.emoji} ${s.name}`;
+                    } else if (type === 'triple') {
+                        const s = SYMBOLS[parseInt(sym)];
+                        label = `圍骰 ${s.emoji}`;
+                    } else if (type === 'any') {
+                        label = '全圍';
+                    }
+                    return `<div class="flex items-center justify-between text-sm px-4">
+                        <span class="text-gold-200">${label}</span>
+                        <span class="text-gold-300 font-bold">$${amount}</span>
+                    </div>`;
+                }).join('');
+            } else {
+                summaryEl.innerHTML = '<p class="text-gold-300/50 text-center">本局未押注</p>';
+            }
+
+            const totalBet = entries.reduce((sum, [, v]) => sum + v, 0);
+            document.getElementById('stopped-total-bet').innerText = `$${totalBet}`;
+        }
+
+        // ========== DICE ANIMATION ==========
+
+        function startDiceAnimation(finalResult) {
+            stopDiceAnimation();
+            const symbolEmojis = Object.values(SYMBOLS).map(s => s.emoji);
+
+            // Rapid cycling
+            let cycleCount = 0;
+            diceAnimTimer = setInterval(() => {
+                for (let d = 1; d <= 3; d++) {
+                    const el = document.getElementById(`dice-${d}`);
+                    el.textContent = symbolEmojis[Math.floor(Math.random() * 6)];
+                    el.classList.remove('settled');
+                }
+                cycleCount++;
+
+                // After ~2 seconds, settle the dice one by one
+                if (cycleCount > 15 && finalResult && Array.isArray(finalResult)) {
+                    settleDice(finalResult);
+                }
+            }, 120);
+
+            // Auto-settle after 3 seconds even without result
+            setTimeout(() => {
+                if (diceAnimTimer && finalResult && Array.isArray(finalResult)) {
+                    settleDice(finalResult);
+                }
+            }, 3000);
+        }
+
+        function settleDice(result) {
+            stopDiceAnimation();
+            for (let d = 0; d < 3; d++) {
+                const el = document.getElementById(`dice-${d + 1}`);
+                setTimeout(() => {
+                    const sym = SYMBOLS[result[d]];
+                    el.textContent = sym ? sym.emoji : '🎲';
+                    el.classList.add('settled');
+                }, d * 300);
+            }
+        }
+
+        function stopDiceAnimation() {
+            if (diceAnimTimer) {
+                clearInterval(diceAnimTimer);
+                diceAnimTimer = null;
+            }
+        }
+
+        // ========== RESOLVED ==========
+
+        function renderResolvedUI(result, status) {
+            // Show dice result
+            const diceContainer = document.getElementById('resolved-dice');
+            const diceResult = result.dice_result || status.dice_result || [];
+            diceContainer.innerHTML = diceResult.map(d => {
+                const s = SYMBOLS[d];
+                return `<span>${s ? s.emoji : '🎲'}</span>`;
+            }).join('');
+
+            // Check triple
+            const isTriple = result.is_triple || (diceResult.length === 3 && diceResult[0] === diceResult[1] && diceResult[1] === diceResult[2]);
+            document.getElementById('resolved-triple').classList.toggle('hidden', !isTriple);
+
+            // Count symbols in dice
+            const symbolCounts = result.symbol_counts || {};
+            if (diceResult.length === 3 && Object.keys(symbolCounts).length === 0) {
+                diceResult.forEach(d => { symbolCounts[d] = (symbolCounts[d] || 0) + 1; });
+            }
+
+            // Show bet results
+            const betsContainer = document.getElementById('resolved-bets');
+            const bets = result.bets || [];
+            if (bets.length > 0) {
+                betsContainer.innerHTML = '<p class="text-sm text-gold-300/60 font-bold mb-1">押注結果</p>' +
+                    bets.map(b => {
+                        let label = '';
+                        if (b.bet_type === 'single') {
+                            const s = SYMBOLS[b.symbol];
+                            label = s ? `${s.emoji} ${s.name}` : `#${b.symbol}`;
+                        } else if (b.bet_type === 'triple') {
+                            const s = SYMBOLS[b.symbol];
+                            label = `圍骰 ${s ? s.emoji : ''}`;
+                        } else {
+                            label = '全圍';
+                        }
+                        const payout = b.payout || 0;
+                        const isWin = payout > 0;
+                        const winClass = isWin ? 'text-green-400' : 'text-red-400/70';
+                        const winText = isWin ? `+${payout}` : `-${b.amount}`;
+                        return `<div class="flex items-center justify-between px-4 py-2 rounded-xl bg-midnight-800/40 border border-gold-700/20">
+                            <span class="text-gold-200 text-sm">${label} ($${b.amount})</span>
+                            <span class="font-bold ${winClass}">${winText}</span>
+                        </div>`;
+                    }).join('');
+            } else {
+                // Reconstruct from myBets
+                const entries = Object.entries(myBets).filter(([, v]) => v > 0);
+                if (entries.length > 0) {
+                    betsContainer.innerHTML = '<p class="text-sm text-gold-300/60 font-bold mb-1">押注結果</p>' +
+                        entries.map(([key, amount]) => {
+                            const [type, sym] = key.split('_');
+                            let label = '';
+                            let isWin = false;
+                            if (type === 'single') {
+                                const s = SYMBOLS[parseInt(sym)];
+                                label = s ? `${s.emoji} ${s.name}` : `#${sym}`;
+                                const count = symbolCounts[parseInt(sym)] || 0;
+                                isWin = count > 0 && !isTriple;
+                            } else if (type === 'triple') {
+                                const s = SYMBOLS[parseInt(sym)];
+                                label = `圍骰 ${s ? s.emoji : ''}`;
+                                isWin = isTriple && diceResult[0] === parseInt(sym);
+                            } else {
+                                label = '全圍';
+                                isWin = isTriple;
+                            }
+                            const winClass = isWin ? 'text-green-400' : 'text-red-400/70';
+                            return `<div class="flex items-center justify-between px-4 py-2 rounded-xl bg-midnight-800/40 border border-gold-700/20">
+                                <span class="text-gold-200 text-sm">${label} ($${amount})</span>
+                                <span class="font-bold ${winClass}">${isWin ? 'WIN' : 'LOSE'}</span>
+                            </div>`;
+                        }).join('');
+                } else {
+                    betsContainer.innerHTML = '<p class="text-gold-300/50 text-center text-sm">本局未押注</p>';
+                }
+            }
+
+            // Net result
+            const totalBet = result.total_bet || Object.values(myBets).reduce((s, v) => s + v, 0);
+            const totalPayout = result.total_payout || 0;
+            const net = result.net !== undefined ? result.net : (totalPayout - totalBet);
+            const netEl = document.getElementById('resolved-net');
+            if (net > 0) {
+                netEl.className = 'text-3xl font-black text-green-400';
+                netEl.innerText = `+${net}`;
+            } else if (net < 0) {
+                netEl.className = 'text-3xl font-black text-red-400';
+                netEl.innerText = `${net}`;
+            } else {
+                netEl.className = 'text-3xl font-black text-gold-300';
+                netEl.innerText = '0';
+            }
+
+            // Balance
+            myBalance = result.balance || myBalance;
+            document.getElementById('resolved-balance').innerText = myBalance;
+        }
+
+        // ========== EXIT ==========
+
+        function exitGame() {
+            if (!confirm('確定要退出遊戲嗎？')) return;
+            sessionStorage.removeItem('dice_player_name');
+            sessionStorage.removeItem('dice_room_id');
+            if (channel) { sbClient.removeChannel(channel); channel = null; }
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+            stopCountdown();
+            stopDiceAnimation();
+            hideAllUI();
+            myName = '';
+            roomId = null;
+            currentRound = 0;
+            myBets = {};
+            selectedChip = 0;
+            lastProcessedKey = '';
+            document.getElementById('p-name').value = '';
+            document.getElementById('login-ui').classList.remove('hidden');
+            document.getElementById('sync-btn').classList.add('hidden');
+        }
+    </script>
+</body>
+
+</html>

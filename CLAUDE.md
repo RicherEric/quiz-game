@@ -17,6 +17,8 @@
 | `css/shared.css` | 共用樣式（金色漸層、動畫） |
 | `e2e-test/load-test.mjs` | E2E 負載測試（100 玩家 + 1 Admin Playwright 自動化） |
 | `lottery.html` | 抽獎功能 |
+| `dice.html` | 魚蝦蟹玩家端（加入房間、押注、開獎、排行榜） |
+| `dice-admin.html` | 魚蝦蟹莊家控台（房間管理、擲骰、結算） |
 
 ## 遊戲狀態機（嚴格遵守）
 
@@ -283,6 +285,70 @@ cd e2e-test && node load-test.mjs
 - **冪等**：所有語句用 `IF NOT EXISTS` / `ON CONFLICT DO NOTHING`，可重複執行
 - **RPC = SECURITY DEFINER**：繞過 RLS，在函數內部做驗證
 - **新增欄位用 `ADD COLUMN IF NOT EXISTS`**，不可刪除既有欄位
+
+## 魚蝦蟹骰子遊戲
+
+### 符號對照
+
+| 編號 | 符號 | Emoji |
+|------|------|-------|
+| 1 | 魚 | 🐟 |
+| 2 | 蝦 | 🦐 |
+| 3 | 蟹 | 🦀 |
+| 4 | 雞 | 🐓 |
+| 5 | 葫蘆 | 🍐 |
+| 6 | 錢幣 | 🪙 |
+
+### 狀態機
+
+```
+waiting → betting → stopped → rolling → resolved → waiting (下一局) / ended
+```
+
+| 狀態 | Admin 操作 | Player 看到 |
+|------|-----------|-------------|
+| `waiting` | 準備開局 | 等待畫面 + 餘額 |
+| `betting` | 點「開放押注」→ 倒數開始 | 6 符號押注區 + 籌碼選擇 + 倒數 |
+| `stopped` | 點「停止押注」 | 鎖定押注 |
+| `rolling` | 擲骰（隨機或手動） | 骰子動畫 |
+| `resolved` | 系統結算 + 廣播 | 結果 + 輸贏 + 餘額 |
+| `ended` | 結束遊戲 | 排行榜 |
+
+### 獨立架構
+
+- **獨立 QR Code**：每個 `dice_rooms` 有自己的 `qr_token`，玩家掃碼進 `dice.html?token=XXX`
+- **獨立玩家系統**：`dice_players` 表，不共用 `players` 表
+- **獨立房間**：`dice_rooms` 表（不複用 `question_groups`）
+- **獨立狀態**：`dice_game_status` 表（不影響 `game_status`）
+
+### 賠率
+
+- **單面押注**（single）：出現 1 次 → 1:1、2 次 → 1:2、3 次 → 1:3
+- **圍骰通殺**：`house_wins_on_triple=true` 時，三顆一樣所有 single 押注歸莊
+- **指定圍骰**（triple）：三顆一樣且符合指定符號 → 1:N（N=triple_payout，預設 150）
+- **全圍**（any_triple）：三顆一樣任何符號 → 1:N（N=any_triple_payout，預設 24）
+
+### RPC 函數
+
+```sql
+dice_join_room(p_token, p_player_name) → json
+dice_place_bet(p_player_name, p_room_id, p_round, p_bet_type, p_symbol, p_amount) → json
+dice_cancel_bet(p_player_name, p_room_id, p_round, p_bet_type, p_symbol) → json
+dice_resolve_round(p_room_id, p_round, p_dice_result int[]) → json
+dice_get_my_result(p_player_name, p_room_id, p_round) → json
+dice_get_leaderboard(p_room_id) → json
+dice_get_bet_stats(p_room_id, p_round) → json
+```
+
+### Realtime Channel
+
+| Channel | 類型 | 方向 | 事件 | 用途 |
+|---------|------|------|------|------|
+| `dice-state-broadcast` | broadcast | Admin→Player | `state-change` | 狀態推播 |
+| `dice-result-broadcast` | broadcast | Admin→Player | `round-result` | 結算結果 |
+| `dice-control` | postgres_changes | DB→Player | `dice_game_status` UPDATE | 狀態 fallback |
+| `admin-dice-bets-sync` | postgres_changes | DB→Admin | `dice_bets` INSERT | 即時押注統計 |
+| `admin-dice-players-sync` | postgres_changes | DB→Admin | `dice_players` * | 玩家列表 |
 
 ## 開發注意事項
 

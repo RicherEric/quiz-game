@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>魚蝦蟹 - 莊家控台</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="js/tailwind-config.js"></script>
+    <link rel="stylesheet" href="css/shared.css">
+    <style>
+        .tab-btn {
+            @apply px-3 md:px-6 py-2 md:py-3 font-bold text-sm md:text-lg rounded-t-xl transition bg-midnight-900 text-gold-500/50 hover:text-gold-300;
+        }
+
+        .tab-active {
+            @apply bg-midnight-800 text-gold-300 border-t-4 border-gold-400;
+        }
+
+        @keyframes revealRow {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .reveal-row {
+            animation: revealRow 0.35s ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes diceRoll {
+            0% { transform: rotateX(0deg) rotateY(0deg); }
+            25% { transform: rotateX(90deg) rotateY(90deg); }
+            50% { transform: rotateX(180deg) rotateY(180deg); }
+            75% { transform: rotateX(270deg) rotateY(90deg); }
+            100% { transform: rotateX(360deg) rotateY(360deg); }
+        }
+
+        .dice-rolling {
+            animation: diceRoll 0.4s ease-in-out infinite;
+            display: inline-block;
+        }
+
+        .dice-symbol {
+            font-size: 3rem;
+            line-height: 1;
+        }
+
+        .dice-symbol-lg {
+            font-size: 5rem;
+            line-height: 1;
+        }
+
+        @keyframes tripleFlash {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.05); }
+        }
+
+        .triple-flash {
+            animation: tripleFlash 0.6s ease-in-out infinite;
+        }
+    </style>
+</head>
+
+<body class="bg-midnight-950 text-gold-100 font-sans min-h-screen p-4 md:p-8">
+
+    <!-- Login Guard -->
+    <div id="login-guard" class="flex items-center justify-center min-h-[80vh]">
+        <div class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
+            <div class="text-center bg-amber-50 p-6 rounded-2xl">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                    class="h-20 mx-auto drop-shadow-md mb-4">
+                <h1 class="text-3xl font-black text-teal-900">莊家控台</h1>
+                <p class="text-teal-800/70 mt-1">請先從管理員頁面登入</p>
+            </div>
+            <button onclick="location.href='admin.html'"
+                class="w-full bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-8 py-4 rounded-xl font-black text-xl transition shadow-lg">
+                前往登入
+            </button>
+        </div>
+    </div>
+
+    <!-- Betting Timer (fixed top-right) -->
+    <div id="betting-timer" class="hidden fixed top-4 right-4 z-50 bg-midnight-900/90 border-2 border-orange-500 rounded-2xl px-5 py-3 shadow-2xl backdrop-blur-sm">
+        <div class="text-center">
+            <p class="text-xs font-bold text-orange-300/80 mb-1">押注倒數</p>
+            <span id="betting-timer-text" class="text-3xl font-black text-orange-400 tabular-nums">30s</span>
+        </div>
+    </div>
+
+    <!-- Main Admin Panel -->
+    <div id="admin-panel" class="hidden max-w-7xl mx-auto space-y-8">
+
+        <!-- Header -->
+        <header class="bg-midnight-800/90 border border-gold-700/50 rounded-3xl p-4 md:p-6 shadow-2xl flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+            <div class="flex items-center space-x-4 md:space-x-6 bg-amber-50 p-4 rounded-2xl">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                    class="h-12 md:h-20 drop-shadow-md">
+                <div class="min-w-0">
+                    <h1 class="text-xl md:text-3xl font-black text-teal-900">魚蝦蟹 - 莊家控台</h1>
+                    <p class="text-teal-800/70 text-sm md:text-base">狀態：<span id="current-state-label"
+                            class="text-slate-400 font-bold">讀取中...</span></p>
+                    <p class="text-teal-800/70 text-sm md:text-base">玩家人數：<span id="header-player-count"
+                            class="text-emerald-400 font-bold text-lg">0</span> 人 | 第 <span id="header-round"
+                            class="text-gold-500 font-bold text-lg">0</span> 局</p>
+                </div>
+                <button onclick="refreshAll()" id="btn-refresh-all"
+                    class="ml-auto lg:ml-4 bg-midnight-800 hover:bg-midnight-950 text-gold-300 hover:text-gold-100 px-3 md:px-4 py-2 md:py-3 rounded-xl font-bold text-sm transition border border-gold-700/50 hover:border-gold-400 flex items-center space-x-2 shrink-0"
+                    title="手動刷新所有狀態">
+                    <span class="text-lg">&#x1f504;</span>
+                    <span class="hidden md:inline">更新狀態</span>
+                </button>
+            </div>
+
+            <div id="control-panel"
+                class="flex flex-wrap items-center gap-2 md:gap-4 bg-midnight-950 p-3 rounded-2xl border border-gold-800/50">
+                <select id="room-selector" onchange="switchRoom(parseInt(this.value))"
+                    class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-base border border-gold-700/50 focus:border-gold-400 transition cursor-pointer">
+                    <option value="">載入房間中...</option>
+                </select>
+
+                <!-- waiting: open betting -->
+                <button id="btn-start-betting" onclick="changeState('betting')"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-emerald-400/50">
+                    &#x25B6;&#xFE0F; 開放押注
+                </button>
+
+                <!-- betting: rebroadcast -->
+                <button id="btn-rebroadcast" onclick="reBroadcast()"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-cyan-400/50">
+                    &#x1f504; 重新推播
+                </button>
+
+                <!-- betting: stop betting -->
+                <button id="btn-stop-betting" onclick="changeState('stopped')"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-amber-600 to-amber-800 hover:from-amber-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-amber-400/50">
+                    &#x23F8;&#xFE0F; 停止押注
+                </button>
+
+                <!-- stopped: roll dice (random) -->
+                <button id="btn-roll-random" onclick="rollDice(false)"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-purple-400/50">
+                    &#x1F3B2; 擲骰（隨機）
+                </button>
+
+                <!-- stopped: roll dice (manual) -->
+                <button id="btn-roll-manual" onclick="showManualDiceModal()"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-indigo-400/50">
+                    &#x270D;&#xFE0F; 擲骰（手動）
+                </button>
+
+                <!-- rolling: show result (auto after animation) -->
+                <button id="btn-show-result" onclick="showResolvedResult()"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-blue-400/50">
+                    &#x1F4CA; 公布結果
+                </button>
+
+                <!-- resolved: next round + end game -->
+                <button id="btn-next-round" onclick="nextRound()"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-emerald-400/50">
+                    &#x27A1;&#xFE0F; 下一局
+                </button>
+                <button id="btn-end-game" onclick="endGame()"
+                    class="hidden flex-1 md:flex-none bg-red-800 hover:bg-red-700 text-white px-4 md:px-6 py-3 md:py-4 rounded-xl font-bold text-base md:text-lg transition">
+                    &#x1F3C6; 結束遊戲
+                </button>
+
+                <!-- ended: restart -->
+                <button id="btn-restart" onclick="restartGame()"
+                    class="hidden flex-1 md:flex-none bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-emerald-400/50">
+                    &#x1f504; 重新開始
+                </button>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="flex flex-wrap gap-1 md:gap-2 border-b border-gold-800/50">
+            <button onclick="switchTab('tab-control')" id="btn-tab-control" class="tab-btn tab-active">&#x1F3AE; 遊戲控制</button>
+            <button onclick="switchTab('tab-rooms')" id="btn-tab-rooms" class="tab-btn">&#x1F3E0; 房間管理</button>
+            <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">&#x1F3C6; 排行榜</button>
+            <button onclick="switchTab('tab-players')" id="btn-tab-players" class="tab-btn">&#x1F465; 玩家管理</button>
+        </div>
+
+        <!-- Main Content Area -->
+        <main class="bg-midnight-800/50 rounded-b-3xl rounded-tr-3xl border border-gold-700/30 shadow-2xl p-4 md:p-8 min-h-[500px]">
+
+            <!-- Tab 1: Game Control -->
+            <div id="tab-control" class="space-y-6">
+                <!-- Dice Animation Area -->
+                <div id="dice-display" class="bg-midnight-900/60 p-8 rounded-2xl border border-gold-700/30 text-center">
+                    <h3 class="text-2xl font-bold text-gold-200 mb-4">骰子結果</h3>
+                    <div id="dice-result-area" class="flex justify-center items-center gap-6 min-h-[100px]">
+                        <span class="dice-symbol-lg text-gold-500/30">?</span>
+                        <span class="dice-symbol-lg text-gold-500/30">?</span>
+                        <span class="dice-symbol-lg text-gold-500/30">?</span>
+                    </div>
+                    <div id="triple-badge" class="hidden mt-4">
+                        <span class="triple-flash inline-block bg-gradient-to-r from-red-600 to-red-800 text-white px-6 py-2 rounded-full font-black text-2xl border-2 border-red-400/50 shadow-lg">
+                            圍骰！
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Live Bet Stats -->
+                <div id="bet-stats-area" class="bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-2xl font-bold text-gold-200">押注統計</h3>
+                        <div class="flex items-center gap-3">
+                            <span class="text-gold-400 font-bold">總押注：<span id="total-bet-pool" class="text-gold-100 text-xl">0</span></span>
+                            <button onclick="fetchBetStats()"
+                                class="text-gold-400 hover:text-gold-200 underline text-sm">手動刷新</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" id="symbol-stats-grid">
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-blue-500/30 text-center" data-symbol="1">
+                            <div class="text-4xl mb-1">&#x1F41F;</div>
+                            <div class="text-sm font-bold text-blue-300">魚</div>
+                            <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-1">0</span> 注</div>
+                            <div class="text-sm text-gold-400">$<span id="stat-amount-1">0</span></div>
+                        </div>
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-orange-500/30 text-center" data-symbol="2">
+                            <div class="text-4xl mb-1">&#x1F990;</div>
+                            <div class="text-sm font-bold text-orange-300">蝦</div>
+                            <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-2">0</span> 注</div>
+                            <div class="text-sm text-gold-400">$<span id="stat-amount-2">0</span></div>
+                        </div>
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-red-500/30 text-center" data-symbol="3">
+                            <div class="text-4xl mb-1">&#x1F980;</div>
+                            <div class="text-sm font-bold text-red-300">蟹</div>
+                            <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-3">0</span> 注</div>
+                            <div class="text-sm text-gold-400">$<span id="stat-amount-3">0</span></div>
+                        </div>
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-yellow-500/30 text-center" data-symbol="4">
+                            <div class="text-4xl mb-1">&#x1F413;</div>
+                            <div class="text-sm font-bold text-yellow-300">雞</div>
+                            <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-4">0</span> 注</div>
+                            <div class="text-sm text-gold-400">$<span id="stat-amount-4">0</span></div>
+                        </div>
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-green-500/30 text-center" data-symbol="5">
+                            <div class="text-4xl mb-1">&#x1F350;</div>
+                            <div class="text-sm font-bold text-green-300">葫蘆</div>
+                            <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-5">0</span> 注</div>
+                            <div class="text-sm text-gold-400">$<span id="stat-amount-5">0</span></div>
+                        </div>
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-amber-500/30 text-center" data-symbol="6">
+                            <div class="text-4xl mb-1">&#x1FA99;</div>
+                            <div class="text-sm font-bold text-amber-300">錢幣</div>
+                            <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-6">0</span> 注</div>
+                            <div class="text-sm text-gold-400">$<span id="stat-amount-6">0</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Round Results (shown in resolved state) -->
+                <div id="round-results-area" class="hidden bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30">
+                    <h3 class="text-2xl font-bold text-gold-200 mb-2">本局結算</h3>
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="text-lg text-gold-400">莊家盈虧：<span id="house-profit" class="font-black text-2xl">0</span></span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b border-gold-700/30">
+                                    <th class="px-4 py-3 text-gold-300 font-bold">玩家</th>
+                                    <th class="px-4 py-3 text-gold-300 font-bold text-right">總押注</th>
+                                    <th class="px-4 py-3 text-gold-300 font-bold text-right">總派彩</th>
+                                    <th class="px-4 py-3 text-gold-300 font-bold text-right">淨損益</th>
+                                    <th class="px-4 py-3 text-gold-300 font-bold text-right">餘額</th>
+                                </tr>
+                            </thead>
+                            <tbody id="round-results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Room Management -->
+            <div id="tab-rooms" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-gold-100">房間管理</h2>
+                    <button onclick="showCreateRoomModal()"
+                        class="bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 text-white px-6 py-3 rounded-xl font-bold text-lg transition shadow-lg border border-emerald-400/50">
+                        + 新增房間
+                    </button>
+                </div>
+
+                <div id="rooms-list" class="space-y-4">
+                    <div class="text-gold-400/50 text-center py-10">載入中...</div>
+                </div>
+            </div>
+
+            <!-- Tab 3: Leaderboard -->
+            <div id="tab-leaderboard" class="hidden">
+                <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] rounded-3xl p-8 border border-gold-500/25 shadow-xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-bold text-gold-100">籌碼排行榜</h2>
+                        <p class="text-gold-400/90">參賽總人數: <span id="total-players"
+                                class="font-bold text-2xl text-gold-100">0</span></p>
+                    </div>
+                    <div class="bg-[#1a2f4d]/90 px-8 py-4 border-b border-gold-500/30 grid grid-cols-12 gap-4 text-gold-300/90 font-bold uppercase text-sm rounded-t-2xl">
+                        <div class="col-span-2 text-center">排名</div>
+                        <div class="col-span-4">玩家</div>
+                        <div class="col-span-3 text-right">餘額</div>
+                        <div class="col-span-3 text-right">淨損益</div>
+                    </div>
+                    <div id="leaderboard-container" class="space-y-2 mt-2"></div>
+                </div>
+            </div>
+
+            <!-- Tab 4: Player Management -->
+            <div id="tab-players" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-gold-100">玩家管理</h2>
+                    <div class="flex gap-3">
+                        <button onclick="resetAllBalances()"
+                            class="px-5 py-2 bg-red-900/80 text-red-200 hover:bg-red-800 font-bold rounded-xl transition border border-red-600/50 text-sm">
+                            重置所有餘額
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="border-b border-gold-700/30">
+                                <th class="px-4 py-3 text-gold-300 font-bold">玩家名稱</th>
+                                <th class="px-4 py-3 text-gold-300 font-bold text-right">餘額</th>
+                                <th class="px-4 py-3 text-gold-300 font-bold text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="players-table-body">
+                            <tr><td colspan="3" class="text-center text-gold-400/50 py-10">載入中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Manual Dice Modal -->
+    <div id="manual-dice-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+        <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-lg space-y-6">
+            <h3 class="text-2xl font-bold text-gold-200 text-center">手動設定骰子結果</h3>
+            <div class="flex justify-center gap-4">
+                <div>
+                    <label class="block text-gold-300 font-bold mb-2 text-center">骰子 1</label>
+                    <select id="manual-dice-1" class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
+                        <option value="1">&#x1F41F; 魚</option>
+                        <option value="2">&#x1F990; 蝦</option>
+                        <option value="3">&#x1F980; 蟹</option>
+                        <option value="4">&#x1F413; 雞</option>
+                        <option value="5">&#x1F350; 葫蘆</option>
+                        <option value="6">&#x1FA99; 錢幣</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-2 text-center">骰子 2</label>
+                    <select id="manual-dice-2" class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
+                        <option value="1">&#x1F41F; 魚</option>
+                        <option value="2">&#x1F990; 蝦</option>
+                        <option value="3">&#x1F980; 蟹</option>
+                        <option value="4">&#x1F413; 雞</option>
+                        <option value="5">&#x1F350; 葫蘆</option>
+                        <option value="6">&#x1FA99; 錢幣</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-2 text-center">骰子 3</label>
+                    <select id="manual-dice-3" class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
+                        <option value="1">&#x1F41F; 魚</option>
+                        <option value="2">&#x1F990; 蝦</option>
+                        <option value="3">&#x1F980; 蟹</option>
+                        <option value="4">&#x1F413; 雞</option>
+                        <option value="5">&#x1F350; 葫蘆</option>
+                        <option value="6">&#x1FA99; 錢幣</option>
+                    </select>
+                </div>
+            </div>
+            <div id="manual-dice-preview" class="text-center">
+                <div class="flex justify-center gap-4 text-5xl">
+                    <span id="preview-dice-1">&#x1F41F;</span>
+                    <span id="preview-dice-2">&#x1F41F;</span>
+                    <span id="preview-dice-3">&#x1F41F;</span>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closeManualDiceModal()"
+                    class="flex-1 bg-midnight-800 hover:bg-midnight-950 text-gold-300 px-6 py-3 rounded-xl font-bold transition border border-gold-700/50">
+                    取消
+                </button>
+                <button onclick="confirmManualDice()"
+                    class="flex-1 bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg border border-purple-400/50">
+                    確認擲骰
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Room Modal -->
+    <div id="room-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+        <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 id="room-modal-title" class="text-2xl font-bold text-gold-200 text-center">新增房間</h3>
+            <input type="hidden" id="room-edit-id" value="">
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">房間名稱</label>
+                <input id="room-name" type="text" placeholder="例如：第一桌"
+                    class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">QR Token</label>
+                <div class="flex gap-2">
+                    <input id="room-qr-token" type="text" placeholder="自動產生或手動輸入"
+                        class="flex-1 bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                    <button onclick="generateQRToken()"
+                        class="bg-gold-700/80 text-gold-100 px-4 py-2 rounded-xl font-bold hover:bg-gold-600 transition text-sm">
+                        自動產生
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">初始籌碼</label>
+                    <input id="room-initial-balance" type="number" value="1000"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">單一符號押注上限</label>
+                    <input id="room-max-bet" type="number" value="500"
+                        class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+            </div>
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">押注時間（秒）</label>
+                <input id="room-betting-seconds" type="number" value="30"
+                    class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div class="space-y-3 bg-midnight-800/50 p-4 rounded-xl border border-gold-700/30">
+                <h4 class="text-gold-300 font-bold">進階設定</h4>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input id="room-house-wins-triple" type="checkbox" checked class="w-5 h-5 accent-gold-500">
+                    <span class="text-gold-200 font-bold">圍骰通殺</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input id="room-allow-triple" type="checkbox" class="w-5 h-5 accent-gold-500">
+                    <span class="text-gold-200 font-bold">允許圍骰押注</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input id="room-allow-any-triple" type="checkbox" class="w-5 h-5 accent-gold-500">
+                    <span class="text-gold-200 font-bold">允許全圍押注</span>
+                </label>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-gold-300 font-bold mb-1">圍骰賠率</label>
+                        <input id="room-triple-payout" type="number" value="150"
+                            class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                    </div>
+                    <div>
+                        <label class="block text-gold-300 font-bold mb-1">全圍賠率</label>
+                        <input id="room-any-triple-payout" type="number" value="24"
+                            class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button onclick="closeRoomModal()"
+                    class="flex-1 bg-midnight-800 hover:bg-midnight-950 text-gold-300 px-6 py-3 rounded-xl font-bold transition border border-gold-700/50">
+                    取消
+                </button>
+                <button onclick="saveRoom()"
+                    class="flex-1 bg-gradient-to-r from-emerald-600 to-emerald-800 hover:from-emerald-500 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg border border-emerald-400/50">
+                    儲存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div id="qr-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+        <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-md space-y-4 text-center">
+            <h3 class="text-2xl font-bold text-gold-200">QR Code</h3>
+            <p id="qr-room-name" class="text-gold-400 font-bold"></p>
+            <img id="qr-code-img" src="" alt="QR Code" class="mx-auto rounded-xl bg-white p-4" style="max-width:300px">
+            <p id="qr-url-text" class="text-gold-400/70 text-sm break-all"></p>
+            <button onclick="closeQRModal()"
+                class="bg-midnight-800 hover:bg-midnight-950 text-gold-300 px-6 py-3 rounded-xl font-bold transition border border-gold-700/50 w-full">
+                關閉
+            </button>
+        </div>
+    </div>
+
+    <!-- Adjust Balance Modal -->
+    <div id="balance-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+        <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-sm space-y-4">
+            <h3 class="text-2xl font-bold text-gold-200 text-center">調整餘額</h3>
+            <p class="text-gold-400 text-center">玩家：<span id="balance-player-name" class="font-bold text-gold-100"></span></p>
+            <div>
+                <label class="block text-gold-300 font-bold mb-1">新餘額</label>
+                <input id="balance-new-value" type="number"
+                    class="w-full bg-midnight-800 text-gold-200 p-3 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closeBalanceModal()"
+                    class="flex-1 bg-midnight-800 hover:bg-midnight-950 text-gold-300 px-6 py-3 rounded-xl font-bold transition border border-gold-700/50">
+                    取消
+                </button>
+                <button onclick="saveBalance()"
+                    class="flex-1 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg border border-blue-400/50">
+                    儲存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== Supabase Init =====
+        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
+        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+        // ===== Symbol Map =====
+        const SYMBOLS = {
+            1: { name: '魚', emoji: '\u{1F41F}' },
+            2: { name: '蝦', emoji: '\u{1F990}' },
+            3: { name: '蟹', emoji: '\u{1F980}' },
+            4: { name: '雞', emoji: '\u{1F413}' },
+            5: { name: '葫蘆', emoji: '\u{1F350}' },
+            6: { name: '錢幣', emoji: '\u{1FA99}' }
+        };
+
+        const STATE_LABELS = {
+            waiting: '等待中',
+            betting: '押注中',
+            stopped: '已停止押注',
+            rolling: '擲骰中',
+            resolved: '已結算',
+            ended: '已結束'
+        };
+
+        // ===== State =====
+        let currentRoomId = null;
+        let currentState = 'waiting';
+        let currentRound = 0;
+        let rooms = [];
+        let roundResults = null;
+        let bettingTimerInterval = null;
+        let bettingStartTime = null;
+        let bettingSeconds = 30;
+        let betStatsPollingInterval = null;
+        let leaderboardPollingInterval = null;
+        let currentRoomSettings = null;
+
+        // ===== Channels =====
+        let diceStateBroadcast = null;
+        let diceResultBroadcast = null;
+        let adminBetsChannel = null;
+        let adminPlayersChannel = null;
+
+        // ===== Init =====
+        function initAdmin() {
+            loadRooms();
+            setupManualDicePreview();
+        }
+
+        // ===== Tab Switching =====
+        function switchTab(tabId) {
+            const tabs = ['tab-control', 'tab-rooms', 'tab-leaderboard', 'tab-players'];
+            tabs.forEach(t => {
+                document.getElementById(t).classList.toggle('hidden', t !== tabId);
+                const btn = document.getElementById('btn-' + t);
+                if (btn) {
+                    btn.classList.toggle('tab-active', t === tabId);
+                }
+            });
+
+            if (tabId === 'tab-leaderboard') fetchLeaderboard();
+            if (tabId === 'tab-players') fetchPlayers();
+            if (tabId === 'tab-rooms') renderRoomsList();
+        }
+
+        // ===== Room Loading =====
+        async function loadRooms() {
+            const { data, error } = await sbClient.from('dice_rooms').select('*').order('id');
+            if (error) { console.error('loadRooms error:', error); return; }
+            rooms = data || [];
+            renderRoomSelector();
+            renderRoomsList();
+
+            if (rooms.length > 0 && !currentRoomId) {
+                switchRoom(rooms[0].id);
+            }
+        }
+
+        function renderRoomSelector() {
+            const sel = document.getElementById('room-selector');
+            if (rooms.length === 0) {
+                sel.innerHTML = '<option value="">無可用房間</option>';
+                return;
+            }
+            sel.innerHTML = rooms.map(r =>
+                `<option value="${r.id}" ${r.id === currentRoomId ? 'selected' : ''}>${r.name}</option>`
+            ).join('');
+        }
+
+        async function switchRoom(roomId) {
+            if (!roomId) return;
+            currentRoomId = roomId;
+            currentRoomSettings = rooms.find(r => r.id === roomId);
+            bettingSeconds = currentRoomSettings ? currentRoomSettings.betting_seconds : 30;
+
+            // Cleanup old channels
+            cleanupChannels();
+
+            // Load game status
+            await loadGameStatus();
+
+            // Setup realtime channels
+            setupChannels();
+
+            // Refresh data
+            fetchBetStats();
+            fetchPlayerCount();
+            fetchLeaderboard();
+            fetchPlayers();
+
+            // Start polling
+            startPolling();
+        }
+
+        // ===== Game Status =====
+        async function loadGameStatus() {
+            const { data, error } = await sbClient.from('dice_game_status')
+                .select('*')
+                .eq('room_id', currentRoomId)
+                .single();
+
+            if (error) {
+                console.error('loadGameStatus error:', error);
+                return;
+            }
+            if (data) {
+                currentState = data.state || 'waiting';
+                currentRound = data.current_round || 0;
+                if (data.dice_result && data.dice_result.length === 3) {
+                    displayDiceResult(data.dice_result);
+                }
+                updateStateUI();
+            }
+        }
+
+        // ===== State UI Update =====
+        function updateStateUI() {
+            document.getElementById('current-state-label').textContent = STATE_LABELS[currentState] || currentState;
+            document.getElementById('header-round').textContent = currentRound;
+
+            // Hide all control buttons
+            const btns = ['btn-start-betting', 'btn-rebroadcast', 'btn-stop-betting',
+                'btn-roll-random', 'btn-roll-manual', 'btn-show-result',
+                'btn-next-round', 'btn-end-game', 'btn-restart'];
+            btns.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+            // Show relevant buttons
+            switch (currentState) {
+                case 'waiting':
+                    document.getElementById('btn-start-betting').classList.remove('hidden');
+                    document.getElementById('round-results-area').classList.add('hidden');
+                    break;
+                case 'betting':
+                    document.getElementById('btn-rebroadcast').classList.remove('hidden');
+                    document.getElementById('btn-stop-betting').classList.remove('hidden');
+                    document.getElementById('round-results-area').classList.add('hidden');
+                    startBettingTimer();
+                    break;
+                case 'stopped':
+                    document.getElementById('btn-roll-random').classList.remove('hidden');
+                    document.getElementById('btn-roll-manual').classList.remove('hidden');
+                    stopBettingTimer();
+                    break;
+                case 'rolling':
+                    document.getElementById('btn-show-result').classList.remove('hidden');
+                    stopBettingTimer();
+                    break;
+                case 'resolved':
+                    document.getElementById('btn-next-round').classList.remove('hidden');
+                    document.getElementById('btn-end-game').classList.remove('hidden');
+                    document.getElementById('round-results-area').classList.remove('hidden');
+                    stopBettingTimer();
+                    break;
+                case 'ended':
+                    document.getElementById('btn-restart').classList.remove('hidden');
+                    document.getElementById('round-results-area').classList.add('hidden');
+                    stopBettingTimer();
+                    break;
+            }
+
+            // State label color
+            const labelEl = document.getElementById('current-state-label');
+            labelEl.className = 'font-bold';
+            switch (currentState) {
+                case 'waiting': labelEl.classList.add('text-slate-400'); break;
+                case 'betting': labelEl.classList.add('text-emerald-400'); break;
+                case 'stopped': labelEl.classList.add('text-amber-400'); break;
+                case 'rolling': labelEl.classList.add('text-purple-400'); break;
+                case 'resolved': labelEl.classList.add('text-blue-400'); break;
+                case 'ended': labelEl.classList.add('text-red-400'); break;
+            }
+        }
+
+        // ===== Betting Timer =====
+        function startBettingTimer() {
+            stopBettingTimer();
+            bettingStartTime = Date.now();
+            const timerEl = document.getElementById('betting-timer');
+            const timerText = document.getElementById('betting-timer-text');
+            timerEl.classList.remove('hidden');
+
+            bettingTimerInterval = setInterval(() => {
+                const elapsed = (Date.now() - bettingStartTime) / 1000;
+                const remaining = Math.max(0, bettingSeconds - elapsed);
+                timerText.textContent = Math.ceil(remaining) + 's';
+
+                if (remaining <= 0) {
+                    stopBettingTimer();
+                    // Auto-stop betting
+                    changeState('stopped');
+                }
+            }, 200);
+        }
+
+        function stopBettingTimer() {
+            if (bettingTimerInterval) {
+                clearInterval(bettingTimerInterval);
+                bettingTimerInterval = null;
+            }
+            document.getElementById('betting-timer').classList.add('hidden');
+        }
+
+        // ===== State Change =====
+        async function changeState(newState) {
+            const startTime = Date.now();
+            const updatePayload = {
+                state: newState,
+                start_time: startTime
+            };
+
+            if (newState === 'betting') {
+                updatePayload.current_round = currentRound + 1;
+                updatePayload.dice_result = [];
+            }
+
+            const { error } = await sbClient.from('dice_game_status')
+                .update(updatePayload)
+                .eq('room_id', currentRoomId);
+
+            if (error) { alert('狀態更新失敗：' + error.message); return; }
+
+            // Broadcast to players
+            if (diceStateBroadcast) {
+                await diceStateBroadcast.send({
+                    type: 'broadcast',
+                    event: 'state-change',
+                    payload: {
+                        room_id: currentRoomId,
+                        state: newState,
+                        current_round: newState === 'betting' ? currentRound + 1 : currentRound,
+                        dice_result: [],
+                        start_time: startTime
+                    }
+                });
+            }
+
+            if (newState === 'betting') {
+                currentRound++;
+                resetBetStatsUI();
+            }
+            currentState = newState;
+            updateStateUI();
+
+            if (newState === 'betting') {
+                bettingStartTime = Date.now();
+            }
+        }
+
+        // ===== Re-broadcast =====
+        async function reBroadcast() {
+            const startTime = Date.now();
+            await sbClient.from('dice_game_status')
+                .update({ start_time: startTime })
+                .eq('room_id', currentRoomId);
+
+            if (diceStateBroadcast) {
+                await diceStateBroadcast.send({
+                    type: 'broadcast',
+                    event: 'state-change',
+                    payload: {
+                        room_id: currentRoomId,
+                        state: currentState,
+                        current_round: currentRound,
+                        dice_result: [],
+                        start_time: startTime
+                    }
+                });
+            }
+        }
+
+        // ===== Dice Rolling =====
+        async function rollDice(manual, manualResult) {
+            let diceResult;
+            if (manual && manualResult) {
+                diceResult = manualResult;
+            } else {
+                diceResult = [
+                    Math.floor(Math.random() * 6) + 1,
+                    Math.floor(Math.random() * 6) + 1,
+                    Math.floor(Math.random() * 6) + 1
+                ];
+            }
+
+            // Change to rolling state
+            const startTime = Date.now();
+            await sbClient.from('dice_game_status')
+                .update({ state: 'rolling', start_time: startTime, dice_result: diceResult })
+                .eq('room_id', currentRoomId);
+
+            if (diceStateBroadcast) {
+                await diceStateBroadcast.send({
+                    type: 'broadcast',
+                    event: 'state-change',
+                    payload: {
+                        room_id: currentRoomId,
+                        state: 'rolling',
+                        current_round: currentRound,
+                        dice_result: diceResult,
+                        start_time: startTime
+                    }
+                });
+            }
+
+            currentState = 'rolling';
+            updateStateUI();
+
+            // Show rolling animation
+            showDiceAnimation(diceResult);
+
+            // After 3 seconds, resolve
+            setTimeout(async () => {
+                const { data, error } = await sbClient.rpc('dice_resolve_round', {
+                    p_room_id: currentRoomId,
+                    p_round: currentRound,
+                    p_dice_result: diceResult
+                });
+
+                if (error) {
+                    alert('結算失敗：' + error.message);
+                    return;
+                }
+
+                // Broadcast results
+                if (diceResultBroadcast) {
+                    await diceResultBroadcast.send({
+                        type: 'broadcast',
+                        event: 'round-result',
+                        payload: {
+                            room_id: currentRoomId,
+                            round: currentRound,
+                            ...data
+                        }
+                    });
+                }
+
+                roundResults = data;
+
+                // Display result
+                displayDiceResult(diceResult);
+                displayRoundResults(data);
+
+                // Change to resolved
+                const resolvedTime = Date.now();
+                await sbClient.from('dice_game_status')
+                    .update({ state: 'resolved', start_time: resolvedTime })
+                    .eq('room_id', currentRoomId);
+
+                if (diceStateBroadcast) {
+                    await diceStateBroadcast.send({
+                        type: 'broadcast',
+                        event: 'state-change',
+                        payload: {
+                            room_id: currentRoomId,
+                            state: 'resolved',
+                            current_round: currentRound,
+                            dice_result: diceResult,
+                            start_time: resolvedTime
+                        }
+                    });
+                }
+
+                currentState = 'resolved';
+                updateStateUI();
+            }, 3000);
+        }
+
+        function showDiceAnimation(finalResult) {
+            const area = document.getElementById('dice-result-area');
+            document.getElementById('triple-badge').classList.add('hidden');
+
+            let frame = 0;
+            const totalFrames = 15;
+            const interval = setInterval(() => {
+                if (frame >= totalFrames) {
+                    clearInterval(interval);
+                    displayDiceResult(finalResult);
+                    return;
+                }
+                const r1 = Math.floor(Math.random() * 6) + 1;
+                const r2 = Math.floor(Math.random() * 6) + 1;
+                const r3 = Math.floor(Math.random() * 6) + 1;
+                area.innerHTML = `
+                    <span class="dice-symbol-lg dice-rolling">${SYMBOLS[r1].emoji}</span>
+                    <span class="dice-symbol-lg dice-rolling">${SYMBOLS[r2].emoji}</span>
+                    <span class="dice-symbol-lg dice-rolling">${SYMBOLS[r3].emoji}</span>
+                `;
+                frame++;
+            }, 180);
+        }
+
+        function displayDiceResult(result) {
+            if (!result || result.length !== 3) return;
+            const area = document.getElementById('dice-result-area');
+            area.innerHTML = result.map(d =>
+                `<span class="dice-symbol-lg">${SYMBOLS[d].emoji}</span>`
+            ).join('');
+
+            // Check triple
+            const isTriple = result[0] === result[1] && result[1] === result[2];
+            document.getElementById('triple-badge').classList.toggle('hidden', !isTriple);
+        }
+
+        function showResolvedResult() {
+            // Already shown via rollDice flow; this is for manual trigger if needed
+            if (roundResults) {
+                displayRoundResults(roundResults);
+            }
+        }
+
+        function displayRoundResults(data) {
+            if (!data) return;
+            const area = document.getElementById('round-results-area');
+            area.classList.remove('hidden');
+
+            const results = data.results || {};
+            const tbody = document.getElementById('round-results-body');
+            let totalHouseProfit = 0;
+            const rows = [];
+
+            for (const [name, info] of Object.entries(results)) {
+                const net = (info.total_payout || 0) - (info.total_bet || 0);
+                totalHouseProfit -= net;
+                rows.push({ name, ...info, net });
+            }
+
+            rows.sort((a, b) => b.net - a.net);
+
+            tbody.innerHTML = rows.map(r => `
+                <tr class="border-b border-gold-700/20 reveal-row">
+                    <td class="px-4 py-3 font-bold text-gold-100">${escapeHtml(r.name)}</td>
+                    <td class="px-4 py-3 text-right text-gold-300">${r.total_bet || 0}</td>
+                    <td class="px-4 py-3 text-right text-gold-300">${r.total_payout || 0}</td>
+                    <td class="px-4 py-3 text-right font-bold ${r.net >= 0 ? 'text-emerald-400' : 'text-red-400'}">${r.net >= 0 ? '+' : ''}${r.net}</td>
+                    <td class="px-4 py-3 text-right text-gold-200 font-bold">${r.balance || 0}</td>
+                </tr>
+            `).join('');
+
+            const profitEl = document.getElementById('house-profit');
+            profitEl.textContent = (totalHouseProfit >= 0 ? '+' : '') + totalHouseProfit;
+            profitEl.className = 'font-black text-2xl ' + (totalHouseProfit >= 0 ? 'text-emerald-400' : 'text-red-400');
+        }
+
+        // ===== Next Round / End / Restart =====
+        async function nextRound() {
+            roundResults = null;
+            resetBetStatsUI();
+            resetDiceDisplay();
+            await changeState('waiting');
+        }
+
+        async function endGame() {
+            if (!confirm('確定要結束遊戲嗎？')) return;
+            await changeState('ended');
+        }
+
+        async function restartGame() {
+            if (!confirm('確定要重新開始嗎？這將重置局數。')) return;
+            currentRound = 0;
+            roundResults = null;
+            resetBetStatsUI();
+            resetDiceDisplay();
+
+            await sbClient.from('dice_game_status')
+                .update({ state: 'waiting', current_round: 0, dice_result: [], start_time: Date.now() })
+                .eq('room_id', currentRoomId);
+
+            if (diceStateBroadcast) {
+                await diceStateBroadcast.send({
+                    type: 'broadcast',
+                    event: 'state-change',
+                    payload: {
+                        room_id: currentRoomId,
+                        state: 'waiting',
+                        current_round: 0,
+                        dice_result: [],
+                        start_time: Date.now()
+                    }
+                });
+            }
+
+            currentState = 'waiting';
+            updateStateUI();
+        }
+
+        function resetDiceDisplay() {
+            document.getElementById('dice-result-area').innerHTML = `
+                <span class="dice-symbol-lg text-gold-500/30">?</span>
+                <span class="dice-symbol-lg text-gold-500/30">?</span>
+                <span class="dice-symbol-lg text-gold-500/30">?</span>
+            `;
+            document.getElementById('triple-badge').classList.add('hidden');
+            document.getElementById('round-results-area').classList.add('hidden');
+        }
+
+        // ===== Manual Dice Modal =====
+        function showManualDiceModal() {
+            document.getElementById('manual-dice-modal').classList.remove('hidden');
+            updateManualDicePreview();
+        }
+
+        function closeManualDiceModal() {
+            document.getElementById('manual-dice-modal').classList.add('hidden');
+        }
+
+        function setupManualDicePreview() {
+            ['manual-dice-1', 'manual-dice-2', 'manual-dice-3'].forEach(id => {
+                document.getElementById(id).addEventListener('change', updateManualDicePreview);
+            });
+        }
+
+        function updateManualDicePreview() {
+            for (let i = 1; i <= 3; i++) {
+                const val = parseInt(document.getElementById('manual-dice-' + i).value);
+                document.getElementById('preview-dice-' + i).textContent = SYMBOLS[val].emoji;
+            }
+        }
+
+        function confirmManualDice() {
+            const result = [
+                parseInt(document.getElementById('manual-dice-1').value),
+                parseInt(document.getElementById('manual-dice-2').value),
+                parseInt(document.getElementById('manual-dice-3').value)
+            ];
+            closeManualDiceModal();
+            rollDice(true, result);
+        }
+
+        // ===== Bet Stats =====
+        async function fetchBetStats() {
+            if (!currentRoomId || !currentRound) return;
+
+            const { data, error } = await sbClient.rpc('dice_get_bet_stats', {
+                p_room_id: currentRoomId,
+                p_round: currentRound
+            });
+
+            if (error) { console.error('fetchBetStats error:', error); return; }
+            if (data) renderBetStats(data);
+        }
+
+        function renderBetStats(stats) {
+            let totalPool = 0;
+            for (let i = 1; i <= 6; i++) {
+                const key = 'single_' + i;
+                const info = stats[key] || { count: 0, total_amount: 0 };
+                document.getElementById('stat-count-' + i).textContent = info.count || 0;
+                document.getElementById('stat-amount-' + i).textContent = info.total_amount || 0;
+                totalPool += (info.total_amount || 0);
+            }
+            // Also handle triple and any_triple bet types if present
+            for (const [key, info] of Object.entries(stats)) {
+                if (!key.startsWith('single_')) {
+                    totalPool += (info.total_amount || 0);
+                }
+            }
+            document.getElementById('total-bet-pool').textContent = totalPool;
+        }
+
+        function resetBetStatsUI() {
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById('stat-count-' + i).textContent = '0';
+                document.getElementById('stat-amount-' + i).textContent = '0';
+            }
+            document.getElementById('total-bet-pool').textContent = '0';
+        }
+
+        // ===== Player Count =====
+        async function fetchPlayerCount() {
+            if (!currentRoomId) return;
+            const { count, error } = await sbClient.from('dice_players')
+                .select('*', { count: 'exact', head: true })
+                .eq('room_id', currentRoomId);
+            if (!error) {
+                document.getElementById('header-player-count').textContent = count || 0;
+            }
+        }
+
+        // ===== Leaderboard =====
+        async function fetchLeaderboard() {
+            if (!currentRoomId) return;
+
+            const { data, error } = await sbClient.rpc('dice_get_leaderboard', {
+                p_room_id: currentRoomId
+            });
+
+            if (error) { console.error('fetchLeaderboard error:', error); return; }
+            if (!data) return;
+
+            const initialBalance = currentRoomSettings ? currentRoomSettings.initial_balance : 1000;
+            const container = document.getElementById('leaderboard-container');
+            document.getElementById('total-players').textContent = data.length;
+
+            if (data.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無玩家加入</div>';
+                return;
+            }
+
+            container.innerHTML = data.map((p, i) => {
+                const rank = i + 1;
+                const net = (p.balance || 0) - initialBalance;
+                const netClass = net >= 0 ? 'text-emerald-400' : 'text-red-400';
+                const netText = (net >= 0 ? '+' : '') + net;
+
+                let rankBadge = '';
+                if (rank === 1) rankBadge = '<span class="text-3xl">&#x1F947;</span>';
+                else if (rank === 2) rankBadge = '<span class="text-3xl">&#x1F948;</span>';
+                else if (rank === 3) rankBadge = '<span class="text-3xl">&#x1F949;</span>';
+                else rankBadge = `<span class="text-gold-400/60 font-black text-2xl">${rank}</span>`;
+
+                return `
+                    <div class="reveal-row bg-midnight-900/40 hover:bg-midnight-800/60 px-8 py-4 rounded-xl grid grid-cols-12 gap-4 items-center border border-gold-500/10 transition" style="animation-delay: ${i * 50}ms">
+                        <div class="col-span-2 text-center">${rankBadge}</div>
+                        <div class="col-span-4 font-bold text-lg text-gold-100">${escapeHtml(p.player_name)}</div>
+                        <div class="col-span-3 text-right font-black text-xl text-gold-200">${p.balance || 0}</div>
+                        <div class="col-span-3 text-right font-bold text-lg ${netClass}">${netText}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ===== Player Management =====
+        async function fetchPlayers() {
+            if (!currentRoomId) return;
+            const { data, error } = await sbClient.from('dice_players')
+                .select('*')
+                .eq('room_id', currentRoomId)
+                .order('balance', { ascending: false });
+
+            if (error) { console.error('fetchPlayers error:', error); return; }
+
+            const tbody = document.getElementById('players-table-body');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-gold-400/50 py-10">尚無玩家加入</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(p => `
+                <tr class="border-b border-gold-700/20 hover:bg-midnight-800/40 transition">
+                    <td class="px-4 py-3 font-bold text-gold-100">${escapeHtml(p.player_name)}</td>
+                    <td class="px-4 py-3 text-right font-bold text-gold-200">${p.balance}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="showBalanceModal('${escapeHtml(p.player_name)}', ${p.balance})"
+                            class="px-3 py-1 bg-blue-700/60 text-blue-200 rounded-lg text-sm font-bold hover:bg-blue-600 transition mr-2">
+                            調整餘額
+                        </button>
+                        <button onclick="kickPlayer('${escapeHtml(p.player_name)}')"
+                            class="px-3 py-1 bg-red-700/60 text-red-200 rounded-lg text-sm font-bold hover:bg-red-600 transition">
+                            踢出
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function showBalanceModal(name, currentBalance) {
+            document.getElementById('balance-player-name').textContent = name;
+            document.getElementById('balance-new-value').value = currentBalance;
+            document.getElementById('balance-modal').classList.remove('hidden');
+        }
+
+        function closeBalanceModal() {
+            document.getElementById('balance-modal').classList.add('hidden');
+        }
+
+        async function saveBalance() {
+            const name = document.getElementById('balance-player-name').textContent;
+            const newBalance = parseInt(document.getElementById('balance-new-value').value);
+            if (isNaN(newBalance)) { alert('請輸入有效數字'); return; }
+
+            const { error } = await sbClient.from('dice_players')
+                .update({ balance: newBalance })
+                .eq('player_name', name)
+                .eq('room_id', currentRoomId);
+
+            if (error) { alert('更新失敗：' + error.message); return; }
+            closeBalanceModal();
+            fetchPlayers();
+            fetchLeaderboard();
+        }
+
+        async function kickPlayer(name) {
+            if (!confirm(`確定要踢出玩家「${name}」嗎？`)) return;
+
+            const { error } = await sbClient.from('dice_players')
+                .delete()
+                .eq('player_name', name)
+                .eq('room_id', currentRoomId);
+
+            if (error) { alert('踢出失敗：' + error.message); return; }
+            fetchPlayers();
+            fetchPlayerCount();
+        }
+
+        async function resetAllBalances() {
+            if (!confirm('確定要重置所有玩家餘額為初始值嗎？')) return;
+            const initialBalance = currentRoomSettings ? currentRoomSettings.initial_balance : 1000;
+
+            const { error } = await sbClient.from('dice_players')
+                .update({ balance: initialBalance })
+                .eq('room_id', currentRoomId);
+
+            if (error) { alert('重置失敗：' + error.message); return; }
+            fetchPlayers();
+            fetchLeaderboard();
+        }
+
+        // ===== Room Management =====
+        function renderRoomsList() {
+            const container = document.getElementById('rooms-list');
+            if (rooms.length === 0) {
+                container.innerHTML = '<div class="text-gold-400/50 text-center py-10">尚無房間，請新增房間</div>';
+                return;
+            }
+
+            container.innerHTML = rooms.map(r => `
+                <div class="bg-midnight-900/60 p-5 rounded-2xl border border-gold-700/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div class="flex-1 space-y-1">
+                        <h4 class="text-xl font-bold text-gold-100">${escapeHtml(r.name)}</h4>
+                        <div class="text-sm text-gold-400 space-x-4">
+                            <span>初始籌碼: ${r.initial_balance}</span>
+                            <span>押注上限: ${r.max_bet_per_symbol}</span>
+                            <span>押注秒數: ${r.betting_seconds}s</span>
+                            <span>圍骰通殺: ${r.house_wins_on_triple ? '是' : '否'}</span>
+                        </div>
+                        <div class="text-xs text-gold-500/70">Token: ${escapeHtml(r.qr_token)}</div>
+                    </div>
+                    <div class="flex gap-2 flex-wrap">
+                        <button onclick="showRoomQRCode(${r.id})"
+                            class="px-4 py-2 bg-gold-700/60 text-gold-100 rounded-xl font-bold text-sm hover:bg-gold-600 transition">
+                            QR Code
+                        </button>
+                        <button onclick="editRoom(${r.id})"
+                            class="px-4 py-2 bg-blue-700/60 text-blue-200 rounded-xl font-bold text-sm hover:bg-blue-600 transition">
+                            編輯
+                        </button>
+                        <button onclick="deleteRoom(${r.id})"
+                            class="px-4 py-2 bg-red-700/60 text-red-200 rounded-xl font-bold text-sm hover:bg-red-600 transition">
+                            刪除
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showCreateRoomModal() {
+            document.getElementById('room-modal-title').textContent = '新增房間';
+            document.getElementById('room-edit-id').value = '';
+            document.getElementById('room-name').value = '';
+            document.getElementById('room-qr-token').value = '';
+            document.getElementById('room-initial-balance').value = '1000';
+            document.getElementById('room-max-bet').value = '500';
+            document.getElementById('room-betting-seconds').value = '30';
+            document.getElementById('room-house-wins-triple').checked = true;
+            document.getElementById('room-allow-triple').checked = false;
+            document.getElementById('room-allow-any-triple').checked = false;
+            document.getElementById('room-triple-payout').value = '150';
+            document.getElementById('room-any-triple-payout').value = '24';
+            generateQRToken();
+            document.getElementById('room-modal').classList.remove('hidden');
+        }
+
+        function editRoom(roomId) {
+            const room = rooms.find(r => r.id === roomId);
+            if (!room) return;
+
+            document.getElementById('room-modal-title').textContent = '編輯房間';
+            document.getElementById('room-edit-id').value = room.id;
+            document.getElementById('room-name').value = room.name;
+            document.getElementById('room-qr-token').value = room.qr_token;
+            document.getElementById('room-initial-balance').value = room.initial_balance;
+            document.getElementById('room-max-bet').value = room.max_bet_per_symbol;
+            document.getElementById('room-betting-seconds').value = room.betting_seconds;
+            document.getElementById('room-house-wins-triple').checked = room.house_wins_on_triple;
+            document.getElementById('room-allow-triple').checked = room.allow_triple_bet;
+            document.getElementById('room-allow-any-triple').checked = room.allow_any_triple_bet;
+            document.getElementById('room-triple-payout').value = room.triple_payout;
+            document.getElementById('room-any-triple-payout').value = room.any_triple_payout;
+            document.getElementById('room-modal').classList.remove('hidden');
+        }
+
+        function closeRoomModal() {
+            document.getElementById('room-modal').classList.add('hidden');
+        }
+
+        function generateQRToken() {
+            const name = document.getElementById('room-name').value.trim() || 'room';
+            const hex = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+            document.getElementById('room-qr-token').value = `dice-${name}-${hex}`;
+        }
+
+        async function saveRoom() {
+            const editId = document.getElementById('room-edit-id').value;
+            const payload = {
+                name: document.getElementById('room-name').value.trim(),
+                qr_token: document.getElementById('room-qr-token').value.trim(),
+                initial_balance: parseInt(document.getElementById('room-initial-balance').value) || 1000,
+                max_bet_per_symbol: parseInt(document.getElementById('room-max-bet').value) || 500,
+                betting_seconds: parseInt(document.getElementById('room-betting-seconds').value) || 30,
+                house_wins_on_triple: document.getElementById('room-house-wins-triple').checked,
+                allow_triple_bet: document.getElementById('room-allow-triple').checked,
+                allow_any_triple_bet: document.getElementById('room-allow-any-triple').checked,
+                triple_payout: parseInt(document.getElementById('room-triple-payout').value) || 150,
+                any_triple_payout: parseInt(document.getElementById('room-any-triple-payout').value) || 24
+            };
+
+            if (!payload.name) { alert('請輸入房間名稱'); return; }
+            if (!payload.qr_token) { alert('請輸入 QR Token'); return; }
+
+            if (editId) {
+                // Update existing
+                const { error } = await sbClient.from('dice_rooms')
+                    .update(payload)
+                    .eq('id', parseInt(editId));
+                if (error) { alert('更新失敗：' + error.message); return; }
+            } else {
+                // Insert new room
+                const { data, error } = await sbClient.from('dice_rooms')
+                    .insert(payload)
+                    .select()
+                    .single();
+                if (error) { alert('新增失敗：' + error.message); return; }
+
+                // Also create game status row for this room
+                if (data) {
+                    await sbClient.from('dice_game_status').insert({
+                        room_id: data.id,
+                        state: 'waiting',
+                        current_round: 0,
+                        dice_result: [],
+                        start_time: Date.now()
+                    });
+                }
+            }
+
+            closeRoomModal();
+            await loadRooms();
+        }
+
+        async function deleteRoom(roomId) {
+            if (!confirm('確定要刪除此房間嗎？相關的遊戲資料也會被清除。')) return;
+
+            // Delete in order: bets -> players -> game_status -> room
+            await sbClient.from('dice_bets').delete().eq('room_id', roomId);
+            await sbClient.from('dice_players').delete().eq('room_id', roomId);
+            await sbClient.from('dice_game_status').delete().eq('room_id', roomId);
+            const { error } = await sbClient.from('dice_rooms').delete().eq('id', roomId);
+
+            if (error) { alert('刪除失敗：' + error.message); return; }
+
+            if (currentRoomId === roomId) {
+                currentRoomId = null;
+                cleanupChannels();
+            }
+
+            await loadRooms();
+        }
+
+        // ===== QR Code =====
+        function showRoomQRCode(roomId) {
+            const room = rooms.find(r => r.id === roomId);
+            if (!room) return;
+            const url = `${location.origin}/dice.html?token=${room.qr_token}`;
+            const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
+
+            document.getElementById('qr-room-name').textContent = room.name;
+            document.getElementById('qr-code-img').src = qrImg;
+            document.getElementById('qr-url-text').textContent = url;
+            document.getElementById('qr-modal').classList.remove('hidden');
+        }
+
+        function closeQRModal() {
+            document.getElementById('qr-modal').classList.add('hidden');
+        }
+
+        // ===== Realtime Channels =====
+        function setupChannels() {
+            if (!currentRoomId) return;
+
+            // Broadcast channel for state changes
+            diceStateBroadcast = sbClient.channel('dice-state-broadcast', {
+                config: { broadcast: { self: false } }
+            });
+            diceStateBroadcast.subscribe();
+
+            // Broadcast channel for round results
+            diceResultBroadcast = sbClient.channel('dice-result-broadcast', {
+                config: { broadcast: { self: false } }
+            });
+            diceResultBroadcast.subscribe();
+
+            // Listen for bet inserts (realtime)
+            adminBetsChannel = sbClient.channel('admin-dice-bets-sync')
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'dice_bets',
+                    filter: `room_id=eq.${currentRoomId}`
+                }, (payload) => {
+                    // Refresh bet stats on new bet
+                    fetchBetStats();
+                })
+                .subscribe();
+
+            // Listen for player changes
+            adminPlayersChannel = sbClient.channel('admin-dice-players-sync')
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'dice_players',
+                    filter: `room_id=eq.${currentRoomId}`
+                }, (payload) => {
+                    fetchPlayerCount();
+                })
+                .subscribe();
+        }
+
+        function cleanupChannels() {
+            if (diceStateBroadcast) { sbClient.removeChannel(diceStateBroadcast); diceStateBroadcast = null; }
+            if (diceResultBroadcast) { sbClient.removeChannel(diceResultBroadcast); diceResultBroadcast = null; }
+            if (adminBetsChannel) { sbClient.removeChannel(adminBetsChannel); adminBetsChannel = null; }
+            if (adminPlayersChannel) { sbClient.removeChannel(adminPlayersChannel); adminPlayersChannel = null; }
+        }
+
+        // ===== Polling =====
+        function startPolling() {
+            stopPolling();
+
+            betStatsPollingInterval = setInterval(() => {
+                if (currentState === 'betting') {
+                    fetchBetStats();
+                }
+            }, 5000);
+
+            leaderboardPollingInterval = setInterval(() => {
+                fetchPlayerCount();
+                // Refresh leaderboard if tab is visible
+                if (!document.getElementById('tab-leaderboard').classList.contains('hidden')) {
+                    fetchLeaderboard();
+                }
+            }, 15000);
+        }
+
+        function stopPolling() {
+            if (betStatsPollingInterval) { clearInterval(betStatsPollingInterval); betStatsPollingInterval = null; }
+            if (leaderboardPollingInterval) { clearInterval(leaderboardPollingInterval); leaderboardPollingInterval = null; }
+        }
+
+        // ===== Refresh All =====
+        async function refreshAll() {
+            const icon = document.getElementById('btn-refresh-all');
+            icon.disabled = true;
+
+            await Promise.all([
+                loadGameStatus(),
+                fetchBetStats(),
+                fetchPlayerCount(),
+                fetchLeaderboard(),
+                fetchPlayers()
+            ]);
+
+            icon.disabled = false;
+        }
+
+        // ===== Utility =====
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ===== Login Guard =====
+        if (localStorage.getItem('admin_logged_in') !== '1') {
+            document.getElementById('login-guard').classList.remove('hidden');
+            document.getElementById('admin-panel').classList.add('hidden');
+        } else {
+            document.getElementById('login-guard').classList.add('hidden');
+            document.getElementById('admin-panel').classList.remove('hidden');
+            initAdmin();
+        }
+    </script>
+
+    <script src="js/shared.js"></script>
+</body>
+
+</html>

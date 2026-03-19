@@ -511,3 +511,456 @@ VALUES (1, 'qz-w10-8f3a2b1c4d5e6f7a')
 ON CONFLICT (id) DO NOTHING;
 
 
+-- ============================================================
+-- 魚蝦蟹骰子遊戲（獨立於問答遊戲）
+-- 符號對照：1=魚 2=蝦 3=蟹 4=雞 5=葫蘆 6=錢幣
+-- ============================================================
+
+-- 骰子遊戲房間
+CREATE TABLE IF NOT EXISTS public.dice_rooms (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name text NOT NULL UNIQUE,
+  qr_token text NOT NULL UNIQUE,
+  initial_balance integer NOT NULL DEFAULT 1000,
+  max_bet_per_symbol integer NOT NULL DEFAULT 500,
+  betting_seconds integer NOT NULL DEFAULT 30,
+  house_wins_on_triple boolean NOT NULL DEFAULT true,
+  allow_triple_bet boolean NOT NULL DEFAULT false,
+  allow_any_triple_bet boolean NOT NULL DEFAULT false,
+  triple_payout integer NOT NULL DEFAULT 150,
+  any_triple_payout integer NOT NULL DEFAULT 24,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT dice_rooms_pkey PRIMARY KEY (id)
+);
+
+-- 骰子遊戲狀態（每房間一列）
+CREATE TABLE IF NOT EXISTS public.dice_game_status (
+  room_id integer NOT NULL,
+  state text NOT NULL DEFAULT 'waiting',
+  current_round integer NOT NULL DEFAULT 0,
+  dice_result integer[] DEFAULT '{}',
+  start_time bigint DEFAULT 0,
+  CONSTRAINT dice_game_status_pkey PRIMARY KEY (room_id),
+  CONSTRAINT dice_game_status_room_fk FOREIGN KEY (room_id) REFERENCES public.dice_rooms(id) ON DELETE CASCADE
+);
+
+-- 骰子遊戲玩家餘額（per room，獨立於問答 players）
+CREATE TABLE IF NOT EXISTS public.dice_players (
+  player_name text NOT NULL,
+  room_id integer NOT NULL,
+  balance integer NOT NULL DEFAULT 1000,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT dice_players_pkey PRIMARY KEY (player_name, room_id),
+  CONSTRAINT dice_players_room_fk FOREIGN KEY (room_id) REFERENCES public.dice_rooms(id) ON DELETE CASCADE
+);
+
+-- 效能調優：餘額頻繁 UPDATE
+ALTER TABLE public.dice_players SET (
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_threshold = 20,
+  fillfactor = 80
+);
+
+-- 排行榜索引（按餘額降序）
+CREATE INDEX IF NOT EXISTS idx_dice_players_room_balance
+  ON public.dice_players(room_id, balance DESC);
+
+-- 押注紀錄
+CREATE TABLE IF NOT EXISTS public.dice_bets (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  player_name text NOT NULL,
+  room_id integer NOT NULL,
+  round integer NOT NULL,
+  bet_type text NOT NULL DEFAULT 'single',
+  symbol integer,
+  amount integer NOT NULL CHECK (amount > 0),
+  payout integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT dice_bets_pkey PRIMARY KEY (id),
+  CONSTRAINT dice_bets_room_fk FOREIGN KEY (room_id) REFERENCES public.dice_rooms(id) ON DELETE CASCADE,
+  CONSTRAINT dice_bets_symbol_check CHECK (
+    (bet_type = 'any_triple' AND symbol IS NULL)
+    OR (bet_type IN ('single', 'triple') AND symbol BETWEEN 1 AND 6)
+  ),
+  CONSTRAINT dice_bets_type_check CHECK (bet_type IN ('single', 'triple', 'any_triple')),
+  CONSTRAINT dice_bets_unique UNIQUE (player_name, room_id, round, bet_type, symbol)
+);
+
+-- 效能調優：高頻 UPDATE (payout)
+ALTER TABLE public.dice_bets SET (
+  autovacuum_vacuum_scale_factor = 0.01,
+  autovacuum_vacuum_threshold = 50,
+  fillfactor = 80
+);
+
+-- 押注查詢索引
+CREATE INDEX IF NOT EXISTS idx_dice_bets_round ON public.dice_bets(room_id, round);
+CREATE INDEX IF NOT EXISTS idx_dice_bets_player ON public.dice_bets(player_name, room_id);
+
+-- RLS 政策（骰子遊戲表）
+ALTER TABLE public.dice_rooms ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow anon all dice_rooms" ON public.dice_rooms;
+CREATE POLICY "Allow anon all dice_rooms" ON public.dice_rooms FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.dice_game_status ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow anon all dice_game_status" ON public.dice_game_status;
+CREATE POLICY "Allow anon all dice_game_status" ON public.dice_game_status FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.dice_players ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow anon all dice_players" ON public.dice_players;
+CREATE POLICY "Allow anon all dice_players" ON public.dice_players FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.dice_bets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow anon all dice_bets" ON public.dice_bets;
+CREATE POLICY "Allow anon all dice_bets" ON public.dice_bets FOR ALL USING (true) WITH CHECK (true);
+
+-- ============================================================
+-- 骰子遊戲 RPC 函數
+-- ============================================================
+
+-- 加入骰子房間（驗證 QR token → 初始化餘額）
+CREATE OR REPLACE FUNCTION dice_join_room(p_token text, p_player_name text)
+RETURNS json AS $$
+DECLARE
+  v_room record;
+BEGIN
+  -- 驗證 token 並取得房間資訊
+  SELECT * INTO v_room FROM dice_rooms WHERE qr_token = p_token;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invalid QR token';
+  END IF;
+
+  -- 驗證暱稱長度
+  IF length(trim(p_player_name)) < 1 THEN
+    RAISE EXCEPTION '暱稱不可為空';
+  END IF;
+
+  -- UPSERT 玩家餘額（重複加入不重置餘額）
+  INSERT INTO dice_players (player_name, room_id, balance)
+  VALUES (trim(p_player_name), v_room.id, v_room.initial_balance)
+  ON CONFLICT (player_name, room_id) DO NOTHING;
+
+  RETURN json_build_object(
+    'success', true,
+    'room_id', v_room.id,
+    'room_name', v_room.name,
+    'balance', (SELECT balance FROM dice_players WHERE player_name = trim(p_player_name) AND room_id = v_room.id),
+    'initial_balance', v_room.initial_balance,
+    'max_bet_per_symbol', v_room.max_bet_per_symbol,
+    'betting_seconds', v_room.betting_seconds,
+    'house_wins_on_triple', v_room.house_wins_on_triple,
+    'allow_triple_bet', v_room.allow_triple_bet,
+    'allow_any_triple_bet', v_room.allow_any_triple_bet
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 提交押注（單一符號或特殊押注）
+-- 押注時立即扣款，結算時加回 payout
+CREATE OR REPLACE FUNCTION dice_place_bet(
+  p_player_name text,
+  p_room_id integer,
+  p_round integer,
+  p_bet_type text,
+  p_symbol integer,
+  p_amount integer
+)
+RETURNS json AS $$
+DECLARE
+  v_balance integer;
+  v_max_bet integer;
+  v_state text;
+  v_current_round integer;
+  v_room record;
+  v_existing_amount integer;
+  v_total_on_symbol integer;
+BEGIN
+  -- 檢查房間設定
+  SELECT * INTO v_room FROM dice_rooms WHERE id = p_room_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '房間不存在';
+  END IF;
+
+  -- 檢查遊戲狀態
+  SELECT state, current_round INTO v_state, v_current_round
+  FROM dice_game_status WHERE room_id = p_room_id;
+  IF v_state != 'betting' OR v_current_round != p_round THEN
+    RAISE EXCEPTION '目前不開放押注';
+  END IF;
+
+  -- 檢查押注類型是否允許
+  IF p_bet_type = 'triple' AND NOT v_room.allow_triple_bet THEN
+    RAISE EXCEPTION '此房間不允許圍骰押注';
+  END IF;
+  IF p_bet_type = 'any_triple' AND NOT v_room.allow_any_triple_bet THEN
+    RAISE EXCEPTION '此房間不允許全圍押注';
+  END IF;
+
+  -- 檢查餘額
+  SELECT balance INTO v_balance FROM dice_players
+  WHERE player_name = p_player_name AND room_id = p_room_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '玩家不存在';
+  END IF;
+  IF v_balance < p_amount THEN
+    RAISE EXCEPTION '餘額不足（目前：%）', v_balance;
+  END IF;
+
+  -- 檢查該符號累計押注不超過上限（single 類型）
+  IF p_bet_type = 'single' THEN
+    SELECT COALESCE(SUM(amount), 0) INTO v_total_on_symbol
+    FROM dice_bets
+    WHERE player_name = p_player_name AND room_id = p_room_id
+      AND round = p_round AND bet_type = 'single' AND symbol = p_symbol;
+    IF v_total_on_symbol + p_amount > v_room.max_bet_per_symbol THEN
+      RAISE EXCEPTION '超過單一符號押注上限（上限：%，已押：%）', v_room.max_bet_per_symbol, v_total_on_symbol;
+    END IF;
+  END IF;
+
+  -- 扣除餘額
+  UPDATE dice_players SET balance = balance - p_amount
+  WHERE player_name = p_player_name AND room_id = p_room_id;
+
+  -- 插入或追加押注
+  INSERT INTO dice_bets (player_name, room_id, round, bet_type, symbol, amount)
+  VALUES (p_player_name, p_room_id, p_round, p_bet_type, p_symbol, p_amount)
+  ON CONFLICT (player_name, room_id, round, bet_type, symbol)
+  DO UPDATE SET amount = dice_bets.amount + EXCLUDED.amount;
+
+  -- 回傳剩餘餘額
+  SELECT balance INTO v_balance FROM dice_players
+  WHERE player_name = p_player_name AND room_id = p_room_id;
+
+  RETURN json_build_object(
+    'success', true,
+    'remaining_balance', v_balance
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 結算回合（Admin 呼叫，批次計算所有玩家 payout）
+-- 賠率：single 出現 n 次 → payout = amount * (1+n)，0 次 → 0
+--       triple 三顆一樣且符合 → payout = amount * (1+triple_payout)
+--       any_triple 三顆一樣 → payout = amount * (1+any_triple_payout)
+-- 圍骰通殺：house_wins_on_triple=true 且三顆一樣時，所有 single 押注 payout=0
+CREATE OR REPLACE FUNCTION dice_resolve_round(
+  p_room_id integer,
+  p_round integer,
+  p_dice_result integer[]
+)
+RETURNS json AS $$
+DECLARE
+  v_room record;
+  v_is_triple boolean;
+  v_triple_symbol integer;
+  v_results json;
+  v_symbol_counts integer[];
+  i integer;
+BEGIN
+  -- 驗證骰子結果
+  IF array_length(p_dice_result, 1) != 3 THEN
+    RAISE EXCEPTION '必須提供 3 顆骰子結果';
+  END IF;
+  FOR i IN 1..3 LOOP
+    IF p_dice_result[i] < 1 OR p_dice_result[i] > 6 THEN
+      RAISE EXCEPTION '骰子值必須為 1~6';
+    END IF;
+  END LOOP;
+
+  -- 取得房間設定
+  SELECT * INTO v_room FROM dice_rooms WHERE id = p_room_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '房間不存在';
+  END IF;
+
+  -- 儲存骰子結果
+  UPDATE dice_game_status SET dice_result = p_dice_result
+  WHERE room_id = p_room_id;
+
+  -- 計算各符號出現次數（1~6）
+  v_symbol_counts := ARRAY[0,0,0,0,0,0];
+  FOR i IN 1..3 LOOP
+    v_symbol_counts[p_dice_result[i]] := v_symbol_counts[p_dice_result[i]] + 1;
+  END LOOP;
+
+  -- 判斷是否圍骰
+  v_is_triple := (p_dice_result[1] = p_dice_result[2] AND p_dice_result[2] = p_dice_result[3]);
+  IF v_is_triple THEN
+    v_triple_symbol := p_dice_result[1];
+  END IF;
+
+  -- 批次計算 payout（單一 UPDATE，零 N+1）
+  UPDATE dice_bets b SET payout = CASE
+    -- single 押注
+    WHEN b.bet_type = 'single' THEN
+      CASE
+        -- 圍骰通殺
+        WHEN v_is_triple AND v_room.house_wins_on_triple THEN 0
+        -- 符號出現次數
+        WHEN v_symbol_counts[b.symbol] > 0 THEN b.amount * (1 + v_symbol_counts[b.symbol])
+        ELSE 0
+      END
+    -- 指定圍骰
+    WHEN b.bet_type = 'triple' THEN
+      CASE
+        WHEN v_is_triple AND v_triple_symbol = b.symbol THEN b.amount * (1 + v_room.triple_payout)
+        ELSE 0
+      END
+    -- 任意圍骰
+    WHEN b.bet_type = 'any_triple' THEN
+      CASE
+        WHEN v_is_triple THEN b.amount * (1 + v_room.any_triple_payout)
+        ELSE 0
+      END
+    ELSE 0
+  END
+  WHERE b.room_id = p_room_id AND b.round = p_round;
+
+  -- 批次加回 payout 到玩家餘額
+  UPDATE dice_players dp SET balance = dp.balance + sub.total_payout
+  FROM (
+    SELECT player_name, SUM(payout) AS total_payout
+    FROM dice_bets
+    WHERE room_id = p_room_id AND round = p_round AND payout > 0
+    GROUP BY player_name
+  ) sub
+  WHERE dp.player_name = sub.player_name AND dp.room_id = p_room_id;
+
+  -- 建構每位玩家結算結果
+  SELECT COALESCE(json_object_agg(
+    agg.player_name,
+    json_build_object(
+      'total_bet', agg.total_bet,
+      'total_payout', agg.total_payout,
+      'net', agg.total_payout - agg.total_bet,
+      'balance', agg.balance
+    )
+  ), '{}'::json) INTO v_results
+  FROM (
+    SELECT
+      dp.player_name,
+      COALESCE(bet_sum.total_bet, 0) AS total_bet,
+      COALESCE(bet_sum.total_payout, 0) AS total_payout,
+      dp.balance
+    FROM dice_players dp
+    LEFT JOIN (
+      SELECT player_name, SUM(amount) AS total_bet, SUM(payout) AS total_payout
+      FROM dice_bets WHERE room_id = p_room_id AND round = p_round
+      GROUP BY player_name
+    ) bet_sum ON bet_sum.player_name = dp.player_name
+    WHERE dp.room_id = p_room_id
+  ) agg;
+
+  RETURN json_build_object(
+    'dice_result', p_dice_result,
+    'is_triple', v_is_triple,
+    'symbol_counts', v_symbol_counts,
+    'results', v_results
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 玩家取得自己的本局結果（broadcast fallback 用）
+CREATE OR REPLACE FUNCTION dice_get_my_result(
+  p_player_name text,
+  p_room_id integer,
+  p_round integer
+)
+RETURNS json AS $$
+  SELECT json_build_object(
+    'balance', dp.balance,
+    'bets', COALESCE((
+      SELECT json_agg(json_build_object(
+        'bet_type', b.bet_type,
+        'symbol', b.symbol,
+        'amount', b.amount,
+        'payout', b.payout
+      ))
+      FROM dice_bets b
+      WHERE b.player_name = p_player_name AND b.room_id = p_room_id AND b.round = p_round
+    ), '[]'::json),
+    'total_bet', COALESCE((
+      SELECT SUM(b.amount) FROM dice_bets b
+      WHERE b.player_name = p_player_name AND b.room_id = p_room_id AND b.round = p_round
+    ), 0),
+    'total_payout', COALESCE((
+      SELECT SUM(b.payout) FROM dice_bets b
+      WHERE b.player_name = p_player_name AND b.room_id = p_room_id AND b.round = p_round
+    ), 0)
+  )
+  FROM dice_players dp
+  WHERE dp.player_name = p_player_name AND dp.room_id = p_room_id;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- 取得房間排行榜（按餘額降序）
+CREATE OR REPLACE FUNCTION dice_get_leaderboard(p_room_id integer)
+RETURNS json AS $$
+  SELECT COALESCE(json_agg(
+    json_build_object('player_name', player_name, 'balance', balance)
+    ORDER BY balance DESC
+  ), '[]'::json)
+  FROM dice_players WHERE room_id = p_room_id;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- 取得本局押注統計（Admin 用，顯示各符號總押注額）
+CREATE OR REPLACE FUNCTION dice_get_bet_stats(p_room_id integer, p_round integer)
+RETURNS json AS $$
+  SELECT COALESCE(json_object_agg(key, val), '{}'::json)
+  FROM (
+    SELECT
+      bet_type || '_' || COALESCE(symbol::text, 'all') AS key,
+      json_build_object('count', COUNT(*), 'total_amount', SUM(amount)) AS val
+    FROM dice_bets
+    WHERE room_id = p_room_id AND round = p_round
+    GROUP BY bet_type, symbol
+  ) sub;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- 取消押注（玩家在 betting 狀態可撤回）
+CREATE OR REPLACE FUNCTION dice_cancel_bet(
+  p_player_name text,
+  p_room_id integer,
+  p_round integer,
+  p_bet_type text,
+  p_symbol integer
+)
+RETURNS json AS $$
+DECLARE
+  v_amount integer;
+  v_state text;
+  v_current_round integer;
+BEGIN
+  -- 檢查遊戲狀態
+  SELECT state, current_round INTO v_state, v_current_round
+  FROM dice_game_status WHERE room_id = p_room_id;
+  IF v_state != 'betting' OR v_current_round != p_round THEN
+    RAISE EXCEPTION '目前不可取消押注';
+  END IF;
+
+  -- 取得押注金額
+  SELECT amount INTO v_amount FROM dice_bets
+  WHERE player_name = p_player_name AND room_id = p_room_id
+    AND round = p_round AND bet_type = p_bet_type
+    AND (symbol = p_symbol OR (p_symbol IS NULL AND symbol IS NULL));
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '找不到此押注';
+  END IF;
+
+  -- 刪除押注
+  DELETE FROM dice_bets
+  WHERE player_name = p_player_name AND room_id = p_room_id
+    AND round = p_round AND bet_type = p_bet_type
+    AND (symbol = p_symbol OR (p_symbol IS NULL AND symbol IS NULL));
+
+  -- 退回餘額
+  UPDATE dice_players SET balance = balance + v_amount
+  WHERE player_name = p_player_name AND room_id = p_room_id;
+
+  RETURN json_build_object(
+    'success', true,
+    'refunded', v_amount,
+    'remaining_balance', (SELECT balance FROM dice_players WHERE player_name = p_player_name AND room_id = p_room_id)
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
