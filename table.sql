@@ -142,7 +142,8 @@ BEGIN
   END IF;
 
   INSERT INTO responses (player_name, question_id, choice, is_correct, response_time_ms)
-  VALUES (p_player_name, p_question_id, p_choice, null, p_response_time_ms);
+  VALUES (p_player_name, p_question_id, p_choice, null, p_response_time_ms)
+  ON CONFLICT (player_name, question_id) DO NOTHING;
 
   RETURN json_build_object('success', true);
 END;
@@ -375,10 +376,27 @@ ALTER TABLE public.players ADD COLUMN IF NOT EXISTS test_score integer DEFAULT 0
 -- ============================================================
 -- 效能索引（加速 score_question、fetchMyScore、leaderboard 查詢）
 -- ============================================================
-CREATE INDEX IF NOT EXISTS idx_responses_player_question ON public.responses(player_name, question_id);
+-- 舊的普通索引由下方 UNIQUE INDEX 取代（同欄位，unique 可兼任查詢加速）
+DROP INDEX IF EXISTS idx_responses_player_question;
+
 CREATE INDEX IF NOT EXISTS idx_responses_question_id ON public.responses(question_id);
 CREATE INDEX IF NOT EXISTS idx_players_score_desc ON public.players(score DESC);
 CREATE INDEX IF NOT EXISTS idx_players_test_score_desc ON public.players(test_score DESC);
+
+-- qr_tokens.token 索引：submit_response 每次都 SELECT 1 FROM qr_tokens WHERE token = ?
+-- 沒有索引 = full table scan × 100 人同時提交 = 前幾題延遲 10s+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_qr_tokens_token ON public.qr_tokens(token);
+
+-- 清除既有重複 responses（保留最早的一筆，刪除後來的重複）
+DELETE FROM public.responses
+WHERE id NOT IN (
+  SELECT MIN(id) FROM public.responses GROUP BY player_name, question_id
+);
+
+-- responses 唯一約束：防止高延遲時玩家重試造成重複 response
+-- 同時取代原 idx_responses_player_question，兼作 get_my_score / 重複偵測的查詢索引
+CREATE UNIQUE INDEX IF NOT EXISTS idx_responses_unique_player_question
+  ON public.responses(player_name, question_id);
 
 -- ============================================================
 -- 效能調優：Autovacuum + FILLFACTOR（減少 score_question 後的 vacuum 風暴）
