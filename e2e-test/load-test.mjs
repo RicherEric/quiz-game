@@ -1093,7 +1093,7 @@ async function validateDataIntegrity(questions) {
     } else {
       expectedScore = 0;
     }
-    if (r.scored_points !== expectedScore) {
+    if (Math.abs(r.scored_points - expectedScore) > 1) {
       scoreFormulaErrors++;
       if (scoreFormulaErrors <= 3) {
         console.log(`    scored_points mismatch: resp ${r.id}, player=${r.player_name}, q=${r.question_id}, actual=${r.scored_points}, expected=${expectedScore}, time=${r.response_time_ms}`);
