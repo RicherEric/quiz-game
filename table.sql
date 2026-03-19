@@ -106,6 +106,53 @@ CREATE TABLE IF NOT EXISTS public.qr_tokens (
 );
 
 -- ============================================================
+-- 題組系統（取代硬編碼 official/test 雙模式，須在 RPC 函數前建立）
+-- ============================================================
+
+-- 題組表
+CREATE TABLE IF NOT EXISTS public.question_groups (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name text NOT NULL UNIQUE,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT question_groups_pkey PRIMARY KEY (id)
+);
+
+-- 預設題組（對應舊 official/test）
+INSERT INTO public.question_groups (name) VALUES ('official') ON CONFLICT (name) DO NOTHING;
+INSERT INTO public.question_groups (name) VALUES ('test') ON CONFLICT (name) DO NOTHING;
+
+-- questions.group_id FK（須在 RPC 前建立，get_player_stats 會 JOIN questions.group_id）
+ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS group_id integer
+  REFERENCES public.question_groups(id) ON DELETE SET NULL;
+
+-- game_status.current_group_id
+ALTER TABLE public.game_status ADD COLUMN IF NOT EXISTS current_group_id integer
+  REFERENCES public.question_groups(id) ON DELETE SET NULL;
+
+-- 玩家題組分數表（取代 players.score / test_score）
+CREATE TABLE IF NOT EXISTS public.player_scores (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  player_name text NOT NULL,
+  group_id integer NOT NULL REFERENCES public.question_groups(id) ON DELETE CASCADE,
+  score integer DEFAULT 0,
+  CONSTRAINT player_scores_pkey PRIMARY KEY (id),
+  CONSTRAINT player_scores_unique UNIQUE (player_name, group_id)
+);
+
+-- player_scores 效能調優
+ALTER TABLE public.player_scores SET (
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_threshold = 20,
+  fillfactor = 90
+);
+
+-- 題組排行榜索引
+CREATE INDEX IF NOT EXISTS idx_player_scores_group_score_desc
+  ON public.player_scores(group_id, score DESC);
+-- 題目按題組查詢索引
+CREATE INDEX IF NOT EXISTS idx_questions_group_id ON public.questions(group_id);
+
+-- ============================================================
 -- RPC 函數
 -- ============================================================
 
@@ -151,10 +198,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 成績結算（SQL 批次計算取代前端逐筆更新）
 -- 回傳 correct_count + 所有玩家分數 map，admin 不需額外查詢
+-- p_group_id: 題組 ID，用於 player_scores UPSERT
 CREATE OR REPLACE FUNCTION score_question(
   p_question_id int,
   p_correct_answer int,
-  p_mode text DEFAULT 'official'
+  p_group_id int DEFAULT NULL
 )
 RETURNS json AS $$
 DECLARE
@@ -178,21 +226,14 @@ BEGIN
       END
   WHERE question_id = p_question_id;
 
-  -- 批次更新 players 分數
-  IF p_mode = 'test' THEN
-    UPDATE players p
-    SET test_score = test_score + r.scored_points
+  -- 批次 UPSERT player_scores（取代舊的 players.score / test_score 分支）
+  IF p_group_id IS NOT NULL THEN
+    INSERT INTO player_scores (player_name, group_id, score)
+    SELECT r.player_name, p_group_id, r.scored_points
     FROM responses r
-    WHERE r.question_id = p_question_id
-      AND r.player_name = p.name
-      AND r.scored_points > 0;
-  ELSE
-    UPDATE players p
-    SET score = score + r.scored_points
-    FROM responses r
-    WHERE r.question_id = p_question_id
-      AND r.player_name = p.name
-      AND r.scored_points > 0;
+    WHERE r.question_id = p_question_id AND r.scored_points > 0
+    ON CONFLICT (player_name, group_id)
+    DO UPDATE SET score = player_scores.score + EXCLUDED.score;
   END IF;
 
   -- 統計答對人數
@@ -205,16 +246,16 @@ BEGIN
     UPDATE questions SET answer = p_correct_answer WHERE id = p_question_id;
   END IF;
 
-  -- 建構所有作答玩家的分數 map（取代 admin 端 2 次額外查詢）
+  -- 建構所有作答玩家的分數 map（從 player_scores 取得累計分數）
   SELECT COALESCE(json_object_agg(
     r.player_name,
     json_build_object(
       'question_score', r.scored_points,
-      'total_score', CASE WHEN p_mode = 'test' THEN p.test_score ELSE p.score END
+      'total_score', COALESCE(ps.score, 0)
     )
   ), '{}'::json) INTO v_scores
   FROM responses r
-  JOIN players p ON p.name = r.player_name
+  LEFT JOIN player_scores ps ON ps.player_name = r.player_name AND ps.group_id = p_group_id
   WHERE r.question_id = p_question_id;
 
   RETURN json_build_object('correct_count', v_correct_count, 'scores', v_scores);
@@ -222,53 +263,52 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 玩家統計（答對數 + 平均答題時間）— 供排行榜 & PDF 匯出使用
-CREATE OR REPLACE FUNCTION get_player_stats()
+-- p_group_id: 可選，按題組篩選；NULL 時統計所有題目
+CREATE OR REPLACE FUNCTION get_player_stats(p_group_id int DEFAULT NULL)
 RETURNS TABLE(player_name text, correct_count bigint, avg_time_ms numeric) AS $$
   SELECT
-    player_name,
-    COUNT(*) FILTER (WHERE is_correct = true),
-    AVG(response_time_ms) FILTER (WHERE response_time_ms > 0)
-  FROM responses
-  GROUP BY player_name;
+    r.player_name,
+    COUNT(*) FILTER (WHERE r.is_correct = true),
+    AVG(r.response_time_ms) FILTER (WHERE r.response_time_ms > 0)
+  FROM responses r
+  JOIN questions q ON q.id = r.question_id
+  WHERE (p_group_id IS NULL OR q.group_id = p_group_id)
+  GROUP BY r.player_name;
 $$ LANGUAGE sql SECURITY DEFINER;
 
 -- 玩家取得自己的本題分數 + 累計分數（單次 JOIN 查詢，SQL 語言可被 planner inline）
+-- p_group_id: 題組 ID，從 player_scores 取得該題組累計分數
 CREATE OR REPLACE FUNCTION get_my_score(
   p_player_name text,
   p_question_id int,
-  p_mode text DEFAULT 'official'
+  p_group_id int DEFAULT NULL
 )
 RETURNS json AS $$
   SELECT json_build_object(
     'question_score', COALESCE(r.scored_points, 0),
-    'total_score',    CASE WHEN p_mode = 'test'
-                           THEN COALESCE(p.test_score, 0)
-                           ELSE COALESCE(p.score, 0)
-                      END
+    'total_score',    COALESCE(ps.score, 0)
   )
   FROM players p
   LEFT JOIN responses r
     ON r.player_name = p.name AND r.question_id = p_question_id
+  LEFT JOIN player_scores ps
+    ON ps.player_name = p.name AND ps.group_id = p_group_id
   WHERE p.name = p_player_name
   LIMIT 1;
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- 重置某題作答紀錄（回退分數 + 刪除 responses，取代 O(N) 個別查詢）
+-- p_group_id: 題組 ID，從 player_scores 回退分數
 CREATE OR REPLACE FUNCTION reset_question_responses(
-  p_question_id int, p_mode text DEFAULT 'official'
+  p_question_id int, p_group_id int DEFAULT NULL
 ) RETURNS json AS $$
 DECLARE v_deleted int;
 BEGIN
-  IF p_mode = 'test' THEN
-    UPDATE players p SET test_score = GREATEST(0, test_score - sub.pts)
+  IF p_group_id IS NOT NULL THEN
+    UPDATE player_scores ps SET score = GREATEST(0, ps.score - sub.pts)
     FROM (SELECT player_name, SUM(scored_points) AS pts FROM responses
           WHERE question_id = p_question_id AND scored_points > 0 GROUP BY player_name) sub
-    WHERE p.name = sub.player_name;
-  ELSE
-    UPDATE players p SET score = GREATEST(0, score - sub.pts)
-    FROM (SELECT player_name, SUM(scored_points) AS pts FROM responses
-          WHERE question_id = p_question_id AND scored_points > 0 GROUP BY player_name) sub
-    WHERE p.name = sub.player_name;
+    WHERE ps.player_name = sub.player_name AND ps.group_id = p_group_id;
   END IF;
   DELETE FROM responses WHERE question_id = p_question_id;
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
@@ -366,12 +406,41 @@ UPDATE public.questions SET video_urls = jsonb_build_array(video_url) WHERE vide
 UPDATE public.questions SET answer_image_urls = jsonb_build_array(answer_image_url) WHERE answer_image_url IS NOT NULL AND answer_image_url != '' AND (answer_image_urls = '[]'::jsonb);
 UPDATE public.questions SET answer_video_urls = jsonb_build_array(answer_video_url) WHERE answer_video_url IS NOT NULL AND answer_video_url != '' AND (answer_video_urls = '[]'::jsonb);
 
--- 題目類型（正式/測試）
+-- 題目類型（正式/測試）— 舊欄位保留向下相容
 ALTER TABLE public.questions ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'official';
--- 遊戲模式（正式/測試），讓玩家端知道目前模式
+-- 遊戲模式（正式/測試）— 舊欄位保留向下相容
 ALTER TABLE public.game_status ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT 'official';
--- 測試分數獨立累計
+-- 測試分數獨立累計 — 舊欄位保留向下相容
 ALTER TABLE public.players ADD COLUMN IF NOT EXISTS test_score integer DEFAULT 0;
+
+-- 從舊 type 欄位遷移到 group_id
+UPDATE public.questions q
+SET group_id = qg.id
+FROM public.question_groups qg
+WHERE q.group_id IS NULL
+  AND qg.name = COALESCE(q.type, 'official');
+
+-- 從舊 mode 欄位遷移
+UPDATE public.game_status gs
+SET current_group_id = qg.id
+FROM public.question_groups qg
+WHERE gs.current_group_id IS NULL
+  AND qg.name = COALESCE(gs.mode, 'official');
+
+-- 從舊 players.score/test_score 遷移到 player_scores
+INSERT INTO public.player_scores (player_name, group_id, score)
+SELECT p.name, qg.id, p.score
+FROM public.players p
+CROSS JOIN public.question_groups qg
+WHERE qg.name = 'official' AND p.score > 0
+ON CONFLICT (player_name, group_id) DO UPDATE SET score = EXCLUDED.score;
+
+INSERT INTO public.player_scores (player_name, group_id, score)
+SELECT p.name, qg.id, p.test_score
+FROM public.players p
+CROSS JOIN public.question_groups qg
+WHERE qg.name = 'test' AND COALESCE(p.test_score, 0) > 0
+ON CONFLICT (player_name, group_id) DO UPDATE SET score = EXCLUDED.score;
 
 -- ============================================================
 -- 效能索引（加速 score_question、fetchMyScore、leaderboard 查詢）

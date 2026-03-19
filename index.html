@@ -256,7 +256,7 @@
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
 
-        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [], qrToken = null, currentMode = 'official';
+        let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [], qrToken = null, currentGroupId = null;
         let questionsMap = new Map(); // 預載題目內容快取，避免 playing 時 100 人同時 fetch
         let countdownTimer = null;
         let pendingScore = null; // 暫存 admin broadcast 推送的分數
@@ -304,7 +304,7 @@
             if (savedName) {
                 myName = savedName;
                 const { data: qList } = await withRetry(() => sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
-                questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, type: q.type }));
+                questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, group_id: q.group_id }));
                 questionsMap = new Map((qList || []).map(q => [q.id, q]));
                 preloadQuestionMedia(qList || []);
                 document.getElementById('user-display').innerText = myName;
@@ -338,7 +338,7 @@
 
             // 預載所有題目內容（含選項），避免 playing 時再逐一 fetch
             const { data: qList } = await withRetry(() => sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
-            questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, type: q.type }));
+            questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, group_id: q.group_id }));
             questionsMap = new Map((qList || []).map(q => [q.id, q]));
             preloadQuestionMedia(qList || []);
 
@@ -468,7 +468,7 @@
 
         async function handleStateChange(status) {
             const myVersion = ++stateVersion;
-            currentMode = status.mode || 'official';
+            currentGroupId = status.current_group_id || null;
             if (status.state === 'waiting') {
                 hideAllUI();
                 document.getElementById('waiting-ui').classList.remove('hidden');
@@ -635,8 +635,8 @@
 
                 performance.mark('scoring-show');
 
-                // 顯示/隱藏測試模式 badge
-                document.getElementById('test-mode-badge').classList.toggle('hidden', currentMode !== 'test');
+                // 題組 badge（隱藏，不需在 player 端顯示）
+                document.getElementById('test-mode-badge').classList.add('hidden');
 
                 // 顯示正確答案
                 const scoringAnswer = document.getElementById('scoring-answer');
@@ -729,7 +729,7 @@
                         const { data: myScoreData } = await withRetry(() => sbClient.rpc('get_my_score', {
                             p_player_name: myName,
                             p_question_id: status.current_q_id,
-                            p_mode: currentMode
+                            p_group_id: currentGroupId
                         }), 2);
                         if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
                         questionScore = myScoreData?.question_score || 0;
@@ -748,13 +748,16 @@
                 hideAllUI();
                 document.getElementById('end-ui').classList.remove('hidden');
 
-                // 取得排行榜並顯示分數與名次
-                const scoreField = currentMode === 'test' ? 'test_score' : 'score';
-                const { data: allPlayers } = await withRetry(() => sbClient.from('players').select('*').order(scoreField, { ascending: false }), 2);
+                // 取得排行榜並顯示分數與名次（從 player_scores 查詢該題組）
+                const { data: allScores } = await withRetry(() => sbClient.from('player_scores')
+                    .select('player_name, score')
+                    .eq('group_id', currentGroupId)
+                    .order('score', { ascending: false }), 2);
+                const allPlayers = allScores; // alias for downstream code
                 if (allPlayers) {
-                    const myRank = allPlayers.findIndex(p => p.name === myName) + 1;
-                    const myData = allPlayers.find(p => p.name === myName);
-                    const myScore = myData ? myData[scoreField] : 0;
+                    const myRank = allPlayers.findIndex(p => p.player_name === myName) + 1;
+                    const myData = allPlayers.find(p => p.player_name === myName);
+                    const myScore = myData ? myData.score : 0;
                     const crownIcons = { 1: '👑', 2: '👑', 3: '👑' };
                     const crown = crownIcons[myRank] || '';
                     document.getElementById('end-rank').innerHTML = crown ? `${crown} 第 ${myRank} 名 ${crown}` : `第 ${myRank} 名`;
@@ -765,12 +768,12 @@
                     let top3Html = '';
                     const top3 = allPlayers.slice(0, 3);
                     top3.forEach((p, i) => {
-                        const isMe = p.name === myName;
+                        const isMe = p.player_name === myName;
                         const meBorder = isMe ? ' ring-2 ring-gold-400/70' : '';
                         const bg = 'bg-gradient-to-r from-gold-500/25 to-gold-700/20 border border-gold-500/40';
                         top3Html += `<div class="flex items-center justify-between px-6 py-3 rounded-xl ${bg}${meBorder}">
-                            <span class="text-2xl font-bold text-gold-100">${rankEmojis[i]} ${p.name}${isMe ? '（你）' : ''}</span>
-                            <span class="text-2xl font-black text-gold-300">${p[scoreField]} 分</span>
+                            <span class="text-2xl font-bold text-gold-100">${rankEmojis[i]} ${p.player_name}${isMe ? '（你）' : ''}</span>
+                            <span class="text-2xl font-black text-gold-300">${p.score} 分</span>
                         </div>`;
                     });
                     // 如果自己不在前三名，額外顯示自己的排名
@@ -828,7 +831,7 @@
         }
 
         function refreshUI(q) {
-            const filteredByMode = questionIdOrder.filter(x => (x.type || 'official') === currentMode);
+            const filteredByMode = questionIdOrder.filter(x => x.group_id === currentGroupId);
             const qNum = filteredByMode.findIndex(x => x.id === q.id) + 1 || q.id;
             document.getElementById('q-category').innerText = `Question ${qNum}`;
             document.getElementById('q-text').innerText = q.question;

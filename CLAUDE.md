@@ -147,7 +147,7 @@ waiting → playing → stopped → revealed → scoring → waiting (下一題)
   current_q_id: number,
   state: 'waiting' | 'playing' | 'stopped' | 'revealed' | 'scoring' | 'ended' | 'dismissed',
   start_time: number,  // Date.now()，用於 dedup
-  mode: 'official' | 'test'
+  current_group_id: number  // 題組 ID
 }
 ```
 
@@ -235,23 +235,26 @@ Admin 端「重新推播」按鈕：
 - **Polling 只做保底，間隔不應低於 5 秒**
 - **所有 channel 設定 `{ broadcast: { self: false } }`** — 避免自己收到自己的廣播
 
-## 雙模式系統（official / test）
+## 題組系統（Question Groups）
 
-- `game_status.mode` 決定目前模式
-- `questions.type` 篩選題目（`'official'` / `'test'`，null 等同 `'official'`）
-- `players.score` vs `players.test_score` 分開累計
-- **任何涉及分數的操作都必須根據 `mode` 使用正確欄位**
+- `question_groups` 表：每個題組有 `id` 和 `name`（預設有 `official`、`test`）
+- `game_status.current_group_id` 決定目前使用的題組
+- `questions.group_id` FK 指向 `question_groups.id`，篩選題目
+- `player_scores(player_name, group_id, score)` 獨立表追蹤每個題組的分數
+- **Admin 可以自訂任意數量的題組，不再限於 official/test 兩種**
+- **任何涉及分數的操作都必須傳入 `group_id`**
+- 舊欄位（`questions.type`、`game_status.mode`、`players.score`、`players.test_score`）保留向下相容但不再使用
 
 ## RPC 函數簽名（修改時必須維持相容）
 
 ```sql
 join_via_qr(qr_token text, player_name text) → json
 submit_response(p_player_name, p_question_id, p_choice, p_response_time_ms, p_qr_token) → json
-score_question(p_question_id, p_correct_answer, p_mode DEFAULT 'official') → json
-get_my_score(p_player_name, p_question_id, p_mode DEFAULT 'official') → json
+score_question(p_question_id, p_correct_answer, p_group_id int DEFAULT NULL) → json
+get_my_score(p_player_name, p_question_id, p_group_id int DEFAULT NULL) → json
 get_response_counts(p_question_id) → json
-get_player_stats() → TABLE(player_name, correct_count, avg_time_ms)
-reset_question_responses(p_question_id, p_mode DEFAULT 'official') → json
+get_player_stats(p_group_id int DEFAULT NULL) → TABLE(player_name, correct_count, avg_time_ms)
+reset_question_responses(p_question_id, p_group_id int DEFAULT NULL) → json
 ```
 
 ## 計分公式

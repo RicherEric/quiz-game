@@ -56,7 +56,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ADMIN_PASSWORD) {
 const NUM_PLAYERS = 100;
 const ANSWER_TIMEOUT_MS = 30000;  // Admin waits up to 30s for all players to answer
 
-let gameMode = 'official';  // will be set from game_status.mode at runtime
+let gameGroupId = null;  // will be set from game_status.current_group_id at runtime
 
 // ─── Browser Monitoring ───────────────────────────────────────────────────────
 
@@ -443,31 +443,27 @@ async function fetchQrToken() {
   return data.token;
 }
 
-async function fetchGameMode() {
-  const { data } = await admin.from('game_status').select('mode').eq('id', 1).single();
-  return data?.mode || 'official';
+async function fetchGameGroupId() {
+  const { data } = await admin.from('game_status').select('current_group_id').eq('id', 1).single();
+  return data?.current_group_id || null;
 }
 
 async function fetchQuestions() {
   const t0 = now();
-  // Read game mode to filter questions the same way admin.html does:
-  // admin.html uses (q.type || 'official') === currentMode
-  gameMode = await fetchGameMode();
+  // Read current group_id to filter questions the same way admin.html does
+  gameGroupId = await fetchGameGroupId();
   let query = admin.from('questions').select('*');
-  if (gameMode === 'official') {
-    // Match type='official' OR type IS NULL (admin.html defaults null to 'official')
-    query = query.or('type.eq.official,type.is.null');
-  } else {
-    query = query.eq('type', gameMode);
+  if (gameGroupId) {
+    query = query.eq('group_id', gameGroupId);
   }
   const { data, error } = await query
     .order('sort_order', { ascending: true })
     .order('id', { ascending: true });
   const dur = now() - t0;
-  recordStep('setup', 'fetch-questions', `${data?.length || 0} ${gameMode} questions`, dur, !error && !!data);
+  recordStep('setup', 'fetch-questions', `${data?.length || 0} questions (group_id=${gameGroupId})`, dur, !error && !!data);
   if (error) throw new Error(`Failed to fetch questions: ${error.message}`);
-  if (!data || data.length === 0) throw new Error(`No questions found for mode "${gameMode}".`);
-  console.log(`  ${data.length} questions loaded (mode=${gameMode}, ${fmtMs(dur)})`);
+  if (!data || data.length === 0) throw new Error(`No questions found for group_id=${gameGroupId}.`);
+  console.log(`  ${data.length} questions loaded (group_id=${gameGroupId}, ${fmtMs(dur)})`);
   return data;
 }
 
@@ -497,7 +493,7 @@ async function adminScoreViaRPC(questionId, correctAnswer) {
     () => admin.rpc('score_question', {
       p_question_id: questionId,
       p_correct_answer: correctAnswer,
-      p_mode: gameMode,
+      p_group_id: gameGroupId,
     }),
     { maxRetries: 2, baseDelayMs: 1000, label: `score-question-rpc(q${questionId})` }
   );
@@ -526,8 +522,10 @@ async function fetchResponseCounts(questionId) {
  */
 async function fetchLeaderboard() {
   const t0 = now();
-  const scoreField = gameMode === 'test' ? 'test_score' : 'score';
-  const { data, error } = await admin.from('players').select('*').order(scoreField, { ascending: false });
+  const { data, error } = await admin.from('player_scores')
+    .select('player_name, score')
+    .eq('group_id', gameGroupId)
+    .order('score', { ascending: false });
   const dur = now() - t0;
   recordStep('admin', 'fetch-leaderboard', `${data?.length || 0} players`, dur, !error);
   return { durationMs: dur, players: data || [] };
@@ -538,7 +536,7 @@ async function fetchLeaderboard() {
  */
 async function fetchPlayerStats() {
   const t0 = now();
-  const { data, error } = await admin.rpc('get_player_stats');
+  const { data, error } = await admin.rpc('get_player_stats', { p_group_id: gameGroupId });
   const dur = now() - t0;
   recordStep('admin', 'fetch-player-stats', `${data?.length || 0} rows`, dur, !error);
   return { durationMs: dur, data: data || [] };
@@ -694,7 +692,7 @@ function createPlayer(index, qrToken) {
     async fetchMyScore(questionId) {
       const t0 = now();
       const { data } = await client.rpc('get_my_score', {
-        p_player_name: name, p_question_id: questionId, p_mode: gameMode
+        p_player_name: name, p_question_id: questionId, p_group_id: gameGroupId
       });
       const dur = now() - t0;
       return { durationMs: dur, questionScore: data?.question_score || 0, totalScore: data?.total_score || 0 };
@@ -705,10 +703,12 @@ function createPlayer(index, qrToken) {
      */
     async fetchEndLeaderboard() {
       const t0 = now();
-      const scoreField = gameMode === 'test' ? 'test_score' : 'score';
-      const { data } = await client.from('players').select('*').order(scoreField, { ascending: false });
+      const { data } = await client.from('player_scores')
+        .select('player_name, score')
+        .eq('group_id', gameGroupId)
+        .order('score', { ascending: false });
       const dur = now() - t0;
-      const rank = data ? data.findIndex(p => p.name === name) + 1 : -1;
+      const rank = data ? data.findIndex(p => p.player_name === name) + 1 : -1;
       return { durationMs: dur, rank, total: data?.length || 0 };
     },
 
@@ -901,7 +901,7 @@ async function runEdgeCaseTests(qrToken, questions) {
     const { data, error } = await admin.rpc('score_question', {
       p_question_id: 999999,
       p_correct_answer: 1,
-      p_mode: gameMode,
+      p_group_id: gameGroupId,
     });
     const dur = now() - t0;
     stats.edgeCases.push({
@@ -967,7 +967,7 @@ async function runEdgeCaseTests(qrToken, questions) {
     await sleep(300);
 
     // Score the question
-    await admin.rpc('score_question', { p_question_id: q.id, p_correct_answer: q.answer || 1, p_mode: gameMode });
+    await admin.rpc('score_question', { p_question_id: q.id, p_correct_answer: q.answer || 1, p_group_id: gameGroupId });
     await admin.from('game_status').update({ state: 'scoring', start_time: Date.now() }).eq('id', 1);
     await sleep(300);
 
@@ -1108,14 +1108,17 @@ async function validateDataIntegrity(questions) {
   console.log(`  [DI2] scored_points formula: ${scoreFormulaErrors === 0 ? 'PASS' : 'FAIL'} (${scoreFormulaErrors} mismatches / ${scoreFormulaTotal})`);
 
   // ── Check 3: Player total scores == sum of scored_points ──
-  const scoreField = gameMode === 'test' ? 'test_score' : 'score';
-  const { data: allPlayers, error: pe } = await admin
-    .from('players')
-    .select(`name, ${scoreField}`)
-    .like('name', 'test_%')
-    .neq('name', 'test_viewer');
+  const { data: allPlayerScores, error: pe } = await admin
+    .from('player_scores')
+    .select('player_name, score')
+    .eq('group_id', gameGroupId);
 
-  if (pe || !allPlayers) {
+  // Map to unified format for comparison
+  const allPlayers = (allPlayerScores || [])
+    .filter(ps => ps.player_name.startsWith('test_') && ps.player_name !== 'test_viewer')
+    .map(ps => ({ name: ps.player_name, totalScore: ps.score }));
+
+  if (pe || !allPlayerScores) {
     stats.dataIntegrity.push({ check: 'player-total-scores', detail: pe?.message || 'no data', pass: false });
     phaseEnd('data-integrity');
     return;
@@ -1133,7 +1136,7 @@ async function validateDataIntegrity(questions) {
   for (const p of allPlayers) {
     playerScoreTotal++;
     const expected = expectedScores[p.name] || 0;
-    const actual = p[scoreField] || 0;
+    const actual = p.totalScore || 0;
     if (actual !== expected) {
       playerScoreErrors++;
       if (playerScoreErrors <= 3) {
