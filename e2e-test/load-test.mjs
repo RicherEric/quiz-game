@@ -368,7 +368,8 @@ const stats = {
   dataIntegrity: [],   // { check, detail, pass }
   passFail: [],        // { criterion, threshold, actual, pass }
   playerFetchTimes: [],    // individual player fetch durations (ms)
-
+  scoreBroadcastHits: 0,   // players who received score via broadcast
+  scoreBroadcastMisses: 0, // players who needed fallback RPC
 };
 
 function initQStats(qId) {
@@ -383,6 +384,8 @@ function initQStats(qId) {
       responseCountFetchMs: 0,
       realtimePropagation: [],  // per-player lag
       viewerScoringDelayMs: null,  // test_viewer scoring UI delay
+      scoreBroadcastHits: 0,   // players who got score via broadcast
+      scoreFallbackCount: 0,   // players who needed RPC fallback
     };
   }
 }
@@ -422,6 +425,9 @@ async function cleanTestData() {
 
   const { error: e1 } = await admin.from('responses').delete().like('player_name', 'test_%');
   if (e1) recordError('clean-responses', e1);
+
+  const { error: e1b } = await admin.from('player_scores').delete().like('player_name', 'test_%');
+  if (e1b) recordError('clean-player-scores', e1b);
 
   const { error: e2 } = await admin.from('players').delete().like('name', 'test_%');
   if (e2) recordError('clean-players', e2);
@@ -549,7 +555,9 @@ function createPlayer(index, qrToken) {
   const client = newClient();
   let channel = null;
   let broadcastChannel = null;
+  let scoreBroadcastChannel = null;
   let lastStateReceivedAt = 0;
+  const pendingScores = {};  // questionId -> { question_score, total_score, receivedAt }
 
   stats.playerLogs[name] = { joinTimeMs: 0, joinSuccess: false, answers: [] };
 
@@ -600,6 +608,20 @@ function createPlayer(index, qrToken) {
           })
           .subscribe();
 
+        // 分數 broadcast channel（與 index.html 一致）
+        scoreBroadcastChannel = client
+          .channel('score-broadcast', { config: { broadcast: { self: false } } })
+          .on('broadcast', { event: 'score-update' }, (msg) => {
+            const payload = msg.payload;
+            if (payload && payload.scores && payload.scores[name]) {
+              pendingScores[payload.question_id] = {
+                ...payload.scores[name],
+                receivedAt: Date.now(),
+              };
+            }
+          })
+          .subscribe();
+
         // Fallback：postgres_changes
         channel = client
           .channel(`player-${name}`)
@@ -629,6 +651,13 @@ function createPlayer(index, qrToken) {
 
     getLastStateReceivedAt() {
       return lastStateReceivedAt;
+    },
+
+    /**
+     * Check if score was received via broadcast (like pendingScore in index.html).
+     */
+    getPendingScore(questionId) {
+      return pendingScores[questionId] || null;
     },
 
     async answer(questionId) {
@@ -713,6 +742,7 @@ function createPlayer(index, qrToken) {
     },
 
     async cleanup() {
+      if (scoreBroadcastChannel) await client.removeChannel(scoreBroadcastChannel);
       if (broadcastChannel) await client.removeChannel(broadcastChannel);
       if (channel) await client.removeChannel(channel);
     },
@@ -997,7 +1027,7 @@ async function runEdgeCaseTests(qrToken, questions) {
     // Reset all responses for this question (edge case scoring may have set scored_points)
     await admin.from('responses').delete().eq('question_id', q.id);
     // Reset player scores affected by edge case scoring
-    await admin.from('players').update({ score: 0 }).like('name', 'test_%');
+    await admin.from('player_scores').update({ score: 0 }).like('player_name', 'test_%');
     await admin.from('game_status').update({ state: 'waiting', current_q_id: questions[0].id, start_time: 0 }).eq('id', 1);
     await sleep(300);
   }
@@ -1484,7 +1514,9 @@ function printReport(questions) {
     if (stTimes.length > 0) console.log(`    State transitions:  p50=${fmtMs(percentile(stTimes, 50))}, p95=${fmtMs(percentile(stTimes, 95))}, max=${fmtMs(Math.max(...stTimes))}`);
     if (scTimes.length > 0) console.log(`    Scoring RPC:        p50=${fmtMs(percentile(scTimes, 50))}, p95=${fmtMs(percentile(scTimes, 95))}, max=${fmtMs(Math.max(...scTimes))}`);
     if (afTimes.length > 0) console.log(`    Admin fetch:        p50=${fmtMs(percentile(afTimes, 50))}, p95=${fmtMs(percentile(afTimes, 95))}, max=${fmtMs(Math.max(...afTimes))}`);
-    if (pfTimes.length > 0) console.log(`    Player fetch:       p50=${fmtMs(percentile(pfTimes, 50))}, p95=${fmtMs(percentile(pfTimes, 95))}, max=${fmtMs(Math.max(...pfTimes))}`);
+    const bcTotal = stats.scoreBroadcastHits + stats.scoreBroadcastMisses;
+    if (bcTotal > 0) console.log(`    Score broadcast:    ${stats.scoreBroadcastHits}/${bcTotal} hit (${Math.round(stats.scoreBroadcastHits / bcTotal * 100)}%), ${stats.scoreBroadcastMisses} fallback RPC`);
+    if (pfTimes.length > 0) console.log(`    Player fetch (fb):  p50=${fmtMs(percentile(pfTimes, 50))}, p95=${fmtMs(percentile(pfTimes, 95))}, max=${fmtMs(Math.max(...pfTimes))}`);
   }
 
   // Realtime propagation
@@ -1690,6 +1722,7 @@ function generateHtmlReport(questions) {
         <td>${qs.apiTimes.length > 0 ? fmtMs(Math.max(...qs.apiTimes)) : '-'}</td>
         <td>${fmtMs(qs.scoringMs)}</td>
         <td>${qs.viewerScoringDelayMs !== null ? fmtMs(qs.viewerScoringDelayMs) : '-'}</td>
+        <td>${qs.scoreBroadcastHits}/${qs.scoreBroadcastHits + qs.scoreFallbackCount}</td>
         <td>${fmtMs(qs.responseCountFetchMs)}</td>
         <td>${rtP50}</td>
         <td>${rtP95}</td>
@@ -1938,6 +1971,10 @@ function generateHtmlReport(questions) {
     <div class="summary-card">
       <div class="label">Player Fetch p50/p95</div>
       <div class="value blue" style="font-size:18px">${pfTimes.length > 0 ? fmtMs(percentile(pfTimes, 50)) + ' / ' + fmtMs(percentile(pfTimes, 95)) : '-'}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Score Broadcast Hit</div>
+      <div class="value ${(stats.scoreBroadcastHits + stats.scoreBroadcastMisses) > 0 && stats.scoreBroadcastHits / (stats.scoreBroadcastHits + stats.scoreBroadcastMisses) >= 0.8 ? 'green' : 'orange'}" style="font-size:18px">${(stats.scoreBroadcastHits + stats.scoreBroadcastMisses) > 0 ? Math.round(stats.scoreBroadcastHits / (stats.scoreBroadcastHits + stats.scoreBroadcastMisses) * 100) + '%' : '-'} <span style="font-size:12px;color:#64748b">(${stats.scoreBroadcastHits}/${stats.scoreBroadcastHits + stats.scoreBroadcastMisses})</span></div>
     </div>`;
     })()}
   </div>
@@ -1999,7 +2036,7 @@ function generateHtmlReport(questions) {
           <tr>
             <th>#</th><th>Question</th><th>Submit</th><th>OK</th><th>Fail</th><th>Skip</th>
             <th>API Avg</th><th>API p50</th><th>API p95</th><th>API Max</th>
-            <th>Scoring RPC</th><th>Viewer Delay</th><th>Resp Fetch</th><th>RT Lag p50</th><th>RT Lag p95</th><th>State Transitions</th>
+            <th>Scoring RPC</th><th>Viewer Delay</th><th>Score BC/FB</th><th>Resp Fetch</th><th>RT Lag p50</th><th>RT Lag p95</th><th>State Transitions</th>
           </tr>
         </thead>
         <tbody>${questionRows}</tbody>
@@ -2076,7 +2113,8 @@ function generateHtmlReport(questions) {
       <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Admin Fetch Operations (leaderboard, response counts, player stats)</h3>
       ${renderGrid('admin-fetch', afTimes)}
 
-      <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Player Fetch Operations (score fetch, leaderboard)</h3>
+      <h3 style="margin-top:20px;margin-bottom:8px;color:#94a3b8;font-size:14px">Player Fetch Operations (fallback RPC + end leaderboard)</h3>
+      <p style="color:#64748b;font-size:12px;margin-bottom:8px">Score broadcast hit: ${stats.scoreBroadcastHits}/${stats.scoreBroadcastHits + stats.scoreBroadcastMisses} (${(stats.scoreBroadcastHits + stats.scoreBroadcastMisses) > 0 ? Math.round(stats.scoreBroadcastHits / (stats.scoreBroadcastHits + stats.scoreBroadcastMisses) * 100) : 0}%). Only broadcast-miss players call get_my_score RPC (like real index.html behavior).</p>
       ${renderGrid('player-fetch', pfTimes)}
     </div>`;
     })()}
@@ -2339,7 +2377,7 @@ async function main() {
   // Blanket cleanup: remove ALL edge-case residual data before Phase 2
   console.log('  Cleaning up edge case residual data...');
   await admin.from('responses').delete().like('player_name', 'test_%');
-  await admin.from('players').update({ score: 0, test_score: 0 }).like('name', 'test_%');
+  await admin.from('player_scores').update({ score: 0 }).like('player_name', 'test_%');
   console.log('  Edge case residual data cleaned.');
 
   // Reload admin browser after edge case tests to sync state
@@ -2492,18 +2530,38 @@ async function main() {
       }
     }
 
-    // ── Step 8: All players fetch their own score (record all responses) ──
-    console.log('  [8] Players fetching scores...');
-    await sleep(1000);  // let DB settle after score_question batch UPDATE
+    // ── Step 8: Players get scores — broadcast first, RPC fallback ──
+    // Real flow (index.html): score-broadcast delivers scores to most players.
+    // Only players who miss the broadcast call get_my_score RPC after 1s timeout.
+    console.log('  [8] Players checking scores (broadcast + fallback)...');
+    await sleep(1000);  // simulate the 1s fallback timeout in index.html
+
+    const broadcastHitPlayers = [];
+    const fallbackPlayers = [];
+    for (const p of activePlayers) {
+      if (p.getPendingScore(q.id)) {
+        broadcastHitPlayers.push(p);
+      } else {
+        fallbackPlayers.push(p);
+      }
+    }
+    stats.scoreBroadcastHits += broadcastHitPlayers.length;
+    stats.scoreBroadcastMisses += fallbackPlayers.length;
+    qs.scoreBroadcastHits = broadcastHitPlayers.length;
+    qs.scoreFallbackCount = fallbackPlayers.length;
+
     const scoreFetchT0 = now();
-    const scoreFetches = await staggeredAll(
-      activePlayers.map(p => () => p.fetchMyScore(q.id)), 10, 50
-    );
+    let scoreFetchTimes = [];
+    if (fallbackPlayers.length > 0) {
+      const scoreFetches = await staggeredAll(
+        fallbackPlayers.map(p => () => p.fetchMyScore(q.id)), 10, 50
+      );
+      scoreFetchTimes = scoreFetches.map(r => r.durationMs);
+      stats.playerFetchTimes.push(...scoreFetchTimes);
+    }
     const scoreFetchDur = now() - scoreFetchT0;
-    const scoreFetchTimes = scoreFetches.map(r => r.durationMs);
-    recordStep('player', 'fetch-score', `q=${q.id}, count=${activePlayers.length}`, scoreFetchDur);
-    stats.playerFetchTimes.push(...scoreFetchTimes);
-    console.log(`  [8] Score fetch (${activePlayers.length} players): p50=${fmtMs(percentile(scoreFetchTimes, 50))}, p95=${fmtMs(percentile(scoreFetchTimes, 95))}, max=${fmtMs(Math.max(...scoreFetchTimes))}`);
+    recordStep('player', 'fetch-score', `q=${q.id}, broadcast=${broadcastHitPlayers.length}, fallback=${fallbackPlayers.length}`, scoreFetchDur);
+    console.log(`  [8] Score: ${broadcastHitPlayers.length} via broadcast, ${fallbackPlayers.length} fallback RPC${scoreFetchTimes.length > 0 ? `, RPC p50=${fmtMs(percentile(scoreFetchTimes, 50))}, p95=${fmtMs(percentile(scoreFetchTimes, 95))}` : ''}`);
 
     // ── Step 9: Admin fetches leaderboard ──
     // Admin browser already shows leaderboard (tab auto-switched), also measure via API
