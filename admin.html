@@ -1058,6 +1058,7 @@
             // 載入題庫到下拉選單
             const { data: qData } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
             questions = qData || [];
+            preloadQuestionMedia(questions);
 
             // 讀取 game_status.mode 還原持久化模式
             const { data: gsMode } = await sbClient.from('game_status').select('mode').eq('id', 1).single();

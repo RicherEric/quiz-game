@@ -306,6 +306,7 @@
                 const { data: qList } = await withRetry(() => sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
                 questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, type: q.type }));
                 questionsMap = new Map((qList || []).map(q => [q.id, q]));
+                preloadQuestionMedia(qList || []);
                 document.getElementById('user-display').innerText = myName;
                 document.getElementById('login-ui').classList.add('hidden');
                 document.getElementById('waiting-ui').classList.remove('hidden');
@@ -339,6 +340,7 @@
             const { data: qList } = await withRetry(() => sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
             questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, type: q.type }));
             questionsMap = new Map((qList || []).map(q => [q.id, q]));
+            preloadQuestionMedia(qList || []);
 
             sessionStorage.setItem('quiz_player_name', myName);
             document.getElementById('user-display').innerText = myName;

@@ -91,6 +91,150 @@ waiting → playing → stopped → revealed → scoring → waiting (下一題)
 - [ ] 前端是否避免了不必要的重新渲染？
 - [ ] e2e test 的 pass/fail 指標是否仍能通過？
 
+## 即時通訊架構（Realtime Communication）
+
+### 三層 Fallback 架構
+
+所有即時通訊遵循 **Broadcast → postgres_changes → Polling** 的優先順序：
+
+| 層級 | 機制 | 延遲 | 用途 |
+|------|------|------|------|
+| 1 (主) | Broadcast（WebSocket 直推） | ~ms | 遊戲狀態、分數派發、抽獎結果 |
+| 2 (備) | postgres_changes（WAL → Realtime） | ~100ms | DB 異動監聽，Broadcast 漏接時接住 |
+| 3 (保底) | Polling（HTTP 定時查詢） | 5-15s | 網路異常時最後防線 |
+
+### Channel 總覽
+
+#### 遊戲核心 Channel
+
+| Channel 名稱 | 類型 | 發送端 | 接收端 | 事件 | 用途 |
+|--------------|------|--------|--------|------|------|
+| `game-state-broadcast` | broadcast | Admin | Player | `state-change` | 遊戲狀態變更推播 |
+| `quiz-control` | postgres_changes | DB (UPDATE) | Player | `game_status` 表異動 | 狀態變更 fallback |
+| `score-broadcast` | broadcast | Admin | Player | `score-update` | 結算分數一次推送 |
+
+#### Admin 專用 Channel
+
+| Channel 名稱 | 類型 | 監聽表 | 用途 |
+|--------------|------|--------|------|
+| `admin-realtime` | postgres_changes | `responses` (INSERT) + `players` (*) | 即時更新作答統計、玩家列表、排行榜 |
+| `admin-lottery-winners-sync` | postgres_changes | `lottery_winners` | 中獎記錄同步 |
+| `admin-lottery-groups-sync` | postgres_changes | `lottery_groups` | 抽獎群組同步 |
+| `admin-lottery-members-sync` | postgres_changes | `lottery_members` | 群組成員同步 |
+| `admin-lottery-prizes-sync` | postgres_changes | `lottery_prizes` | 獎品同步 |
+
+#### 抽獎 Channel（Player / lottery.html）
+
+| Channel 名稱 | 類型 | 用途 |
+|--------------|------|------|
+| `lottery-prizes-sync` | postgres_changes | 獎品變更 |
+| `lottery-winners-sync` | postgres_changes | 中獎記錄變更 |
+| `lottery-groups-sync` | postgres_changes | 群組變更 |
+| `lottery-members-sync` | postgres_changes | 成員變更 |
+| `lottery-broadcast-sync` | broadcast (`winners-changed`) | 抽獎結果即時推送 |
+
+#### Channel 命名規則
+
+- Broadcast channel：含 `-broadcast` 字樣
+- postgres_changes channel：含 `-sync` 字尾
+- Admin 專用：加 `admin-` 前綴
+
+### Broadcast Payload 結構
+
+**遊戲狀態推播** (`game-state-broadcast` → `state-change`)：
+```javascript
+{
+  current_q_id: number,
+  state: 'waiting' | 'playing' | 'stopped' | 'revealed' | 'scoring' | 'ended' | 'dismissed',
+  start_time: number,  // Date.now()，用於 dedup
+  mode: 'official' | 'test'
+}
+```
+
+**分數推播** (`score-broadcast` → `score-update`)：
+```javascript
+{
+  question_id: number,
+  scores: {
+    [player_name]: { question_score: number, total_score: number }
+    // 所有玩家的分數，一次推送
+  }
+}
+```
+
+**抽獎推播** (`lottery-broadcast-sync` → `winners-changed`)：
+```javascript
+{} // 空 payload，接收端自行 reload
+```
+
+### 去重機制（Deduplication）
+
+| 機制 | 位置 | 實作方式 |
+|------|------|---------|
+| 狀態複合鍵 | `index.html` Player 端 | `lastProcessedKey = "{state}_{current_q_id}_{start_time}"` |
+| 抽獎 Hash | `lottery.html` | `getWinnerHash()` 比對前後快照 |
+| State Version | `index.html` Player 端 | `stateVersion++` 遞增，async 操作中途若版本不符則中止 |
+
+### Polling 機制
+
+| 位置 | 間隔 | 觸發對象 | 用途 |
+|------|------|---------|------|
+| Player 端 `checkCurrentStatus()` | 15 秒 | `game_status` 表 | 遊戲狀態保底同步 |
+| Admin 端 `fetchCurrentQuestionStats()` | 5 秒 | 作答統計 | 統計數字保底更新 |
+| Lottery 端 polling | 5 秒 | winners / prizes / groups | 抽獎資料保底同步 |
+| Admin 計時器 | 200ms | 本地時鐘 | 作答經過秒數顯示 |
+| Player 倒數計時 | 100ms | 本地時鐘 | 倒數環動畫 + 自動提交 |
+
+### 快取策略
+
+| 快取 | 位置 | TTL / 失效條件 | 用途 |
+|------|------|---------------|------|
+| `_playersCache` | Admin 端 | 2 秒 TTL；`players` 表異動時清除 | 避免重複 fetch 玩家列表 |
+| `questionsMap` | Player 端 | 加入時載入，整場遊戲不變 | 避免 100+ 人同時 fetch 題目 |
+| `pendingScore` | Player 端 | broadcast 收到時寫入，scoring 狀態處理後清除 | 暫存分數，等進入 scoring 狀態再用 |
+| `sessionStorage` | Player 端 | 瀏覽器關閉前 | 暱稱快取，重新整理自動 rejoin |
+| `questionIdOrder` | Player 端 | 加入時預取 | 題目順序快取，避免重複查詢 |
+
+### 重試邏輯（Retry with Exponential Backoff）
+
+`withRetry(fn, maxRetries = 3)` — Player 端所有 DB 操作包裹此函式：
+
+- **偵測暫時性錯誤**：502 / 503 / 504 / Bad Gateway / fetch failed / network error
+- **退避策略**：`1000 * 2^attempt + random(0~500)ms`（約 1s → 2s → 4s）
+- **非暫時性錯誤**：立即回傳，不重試
+
+### 分數派發流程（Scoring Flow）
+
+```
+Admin 按「結算」
+  → score_question RPC（Server 端批次計算所有玩家分數）
+  → Admin 收到 { scores: { name: { question_score, total_score } } }
+  → score-broadcast 一次推送給所有 Player
+  → Player 收到 broadcast → 存入 pendingScore
+  → 狀態切到 scoring → 從 pendingScore 讀取顯示
+  → 若 broadcast 漏接 → 等 1 秒 → RPC get_my_score() fallback
+```
+
+### 手動同步按鈕
+
+Player 端提供 `#sync-btn`，點擊後立即呼叫 `checkCurrentStatus()` 強制同步，防止 Realtime 斷線但玩家未感知的情況。
+
+### 重推機制（Re-broadcast）
+
+Admin 端「重新推播」按鈕：
+1. 更新 `game_status.start_time`（觸發 postgres_changes fallback）
+2. 同時送出 broadcast（觸發主通道）
+3. 確保兩條路徑都能讓漏接的玩家收到狀態
+
+### 修改即時通訊時的注意事項
+
+- **不可移除任何現有 channel** — 移除會破壞 fallback 鏈
+- **新增 channel 需同時考慮 broadcast + postgres_changes 兩層**
+- **broadcast payload 應儘量小** — 100+ 人同時接收，大 payload 浪費頻寬
+- **postgres_changes 是 DB 層事件，避免高頻寫入觸發過多事件**
+- **Polling 只做保底，間隔不應低於 5 秒**
+- **所有 channel 設定 `{ broadcast: { self: false } }`** — 避免自己收到自己的廣播
+
 ## 雙模式系統（official / test）
 
 - `game_status.mode` 決定目前模式

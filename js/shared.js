@@ -4,6 +4,26 @@ function extractYouTubeId(url) {
     return m ? m[1] : null;
 }
 
+function preloadQuestionMedia(questions) {
+    const seen = new Set();
+    const preloadUrl = (url, type) => {
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        if (type === 'image') {
+            new Image().src = url;
+        } else {
+            if (extractYouTubeId(url)) return;
+            fetch(url).catch(() => {});
+        }
+    };
+    for (const q of questions) {
+        for (const url of ((q.image_urls?.length) ? q.image_urls : (q.image_url ? [q.image_url] : []))) preloadUrl(url, 'image');
+        for (const url of ((q.answer_image_urls?.length) ? q.answer_image_urls : (q.answer_image_url ? [q.answer_image_url] : []))) preloadUrl(url, 'image');
+        for (const url of ((q.video_urls?.length) ? q.video_urls : (q.video_url ? [q.video_url] : []))) preloadUrl(url, 'video');
+        for (const url of ((q.answer_video_urls?.length) ? q.answer_video_urls : (q.answer_video_url ? [q.answer_video_url] : []))) preloadUrl(url, 'video');
+    }
+}
+
 function openLightbox(src) {
     const lb = document.getElementById('img-lightbox');
     document.getElementById('img-lightbox-img').src = src;
