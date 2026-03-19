@@ -159,6 +159,22 @@ const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + mi
 const randomSleep = (min, max) => sleep(randomInt(min, max));
 const now = () => performance.now();
 
+/**
+ * Retry wrapper for Supabase RPC/query calls.
+ * Retries on 502/503/504 errors (Cloudflare gateway errors) with exponential backoff.
+ */
+async function withRetry(fn, { maxRetries = 3, baseDelayMs = 1000, label = '' } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const result = await fn();
+    const errMsg = result.error?.message || '';
+    const is5xx = /50[234]|bad gateway|service unavailable|gateway timeout/i.test(errMsg);
+    if (!result.error || !is5xx || attempt === maxRetries) return result;
+    const delay = baseDelayMs * Math.pow(2, attempt) + randomInt(0, 500);
+    if (label) console.log(`  RETRY [${label}] attempt ${attempt + 1}/${maxRetries} after ${delay}ms`);
+    await sleep(delay);
+  }
+}
+
 function weightedChoice() {
   const weights = [0.35, 0.30, 0.20, 0.15];
   const r = Math.random();
@@ -461,7 +477,10 @@ async function updateGameStatus(state, currentQId) {
 
   const sentAt = Date.now();  // capture BEFORE update for accurate realtime lag
   const t0 = now();
-  const { error } = await admin.from('game_status').update(payload).eq('id', 1);
+  const { error } = await withRetry(
+    () => admin.from('game_status').update(payload).eq('id', 1),
+    { maxRetries: 2, baseDelayMs: 1000, label: `update-game-status(${state})` }
+  );
   const dur = now() - t0;
   const detail = currentQId !== undefined ? `q=${currentQId}` : '';
   recordStep('admin', `state->${state}`, detail, dur, !error);
@@ -474,11 +493,14 @@ async function updateGameStatus(state, currentQId) {
  */
 async function adminScoreViaRPC(questionId, correctAnswer) {
   const t0 = now();
-  const { data, error } = await admin.rpc('score_question', {
-    p_question_id: questionId,
-    p_correct_answer: correctAnswer,
-    p_mode: gameMode,
-  });
+  const { data, error } = await withRetry(
+    () => admin.rpc('score_question', {
+      p_question_id: questionId,
+      p_correct_answer: correctAnswer,
+      p_mode: gameMode,
+    }),
+    { maxRetries: 2, baseDelayMs: 1000, label: `score-question-rpc(q${questionId})` }
+  );
   const dur = now() - t0;
   recordStep('admin', 'score-question-rpc', `q=${questionId}, correct=${correctAnswer}`, dur, !error);
   if (error) recordError(`score-question-rpc(q${questionId})`, error);
@@ -540,10 +562,10 @@ function createPlayer(index, qrToken) {
       await randomSleep(0, 2000);
 
       const t0 = now();
-      const { data, error } = await client.rpc('join_via_qr', {
-        qr_token: qrToken,
-        player_name: name,
-      });
+      const { data, error } = await withRetry(
+        () => client.rpc('join_via_qr', { qr_token: qrToken, player_name: name }),
+        { maxRetries: 3, baseDelayMs: 1000, label: `player-join(${name})` }
+      );
       const dur = now() - t0;
 
       stats.playerLogs[name].joinTimeMs = dur;
@@ -627,13 +649,16 @@ function createPlayer(index, qrToken) {
       const responseTimeMs = thinkTime + randomInt(200, 800);
 
       const t0 = now();
-      const { error } = await client.rpc('submit_response', {
-        p_player_name: name,
-        p_question_id: questionId,
-        p_choice: choice,
-        p_response_time_ms: responseTimeMs,
-        p_qr_token: qrToken,
-      });
+      const { error } = await withRetry(
+        () => client.rpc('submit_response', {
+          p_player_name: name,
+          p_question_id: questionId,
+          p_choice: choice,
+          p_response_time_ms: responseTimeMs,
+          p_qr_token: qrToken,
+        }),
+        { maxRetries: 2, baseDelayMs: 500, label: `player-answer(${name})` }
+      );
       const apiTime = now() - t0;
 
       qs.submitted++;
@@ -2257,10 +2282,19 @@ async function main() {
   console.log(`\n[Phase 1] ${NUM_PLAYERS} players joining...`);
   const players = Array.from({ length: NUM_PLAYERS }, (_, i) => createPlayer(i + 1, qrToken));
 
+  // Join in batches to avoid overwhelming Supabase (502 errors)
+  const BATCH_SIZE = 20;
+  const BATCH_DELAY_MS = 500;
+  const joinResults = new Array(players.length).fill(false);
   const joinT0 = now();
-  const joinResults = await Promise.all(players.map(p => p.join()));
+  for (let i = 0; i < players.length; i += BATCH_SIZE) {
+    const batch = players.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(batch.map(p => p.join()));
+    batchResults.forEach((r, j) => { joinResults[i + j] = r; });
+    if (i + BATCH_SIZE < players.length) await sleep(BATCH_DELAY_MS);
+  }
   const joinDur = now() - joinT0;
-  recordStep('join', 'all-players-join', `${NUM_PLAYERS} concurrent`, joinDur);
+  recordStep('join', 'all-players-join', `${NUM_PLAYERS} batched(${BATCH_SIZE})`, joinDur);
 
   const activePlayers = players.filter((_, i) => joinResults[i]);
   console.log(`  ${activePlayers.length} players joined (total: ${fmtMs(joinDur)})`);

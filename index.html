@@ -260,6 +260,22 @@
         let questionsMap = new Map(); // 預載題目內容快取，避免 playing 時 100 人同時 fetch
         let countdownTimer = null;
         let pendingScore = null; // 暫存 admin broadcast 推送的分數
+
+        /**
+         * 暫時性錯誤重試（502/503/504 Bad Gateway）
+         * 使用 exponential backoff，避免 thundering herd
+         */
+        async function withRetry(fn, maxRetries = 3) {
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                const result = await fn();
+                const msg = result.error?.message || '';
+                const isTransient = /50[234]|bad gateway|service unavailable|gateway timeout|fetch failed|network/i.test(msg);
+                if (!result.error || !isTransient || attempt === maxRetries) return result;
+                const delay = 1000 * Math.pow(2, attempt) + Math.random() * 500;
+                console.warn(`[retry ${attempt + 1}/${maxRetries}] ${msg.slice(0, 80)}... ${Math.round(delay)}ms 後重試`);
+                await new Promise(r => setTimeout(r, delay));
+            }
+        }
         const COUNTDOWN_TOTAL = 15000; // 15 seconds in ms
         const COUNTDOWN_CIRCUMFERENCE = 2 * Math.PI * 28; // ~175.93
 
@@ -287,7 +303,7 @@
             const savedName = sessionStorage.getItem('quiz_player_name');
             if (savedName) {
                 myName = savedName;
-                const { data: qList } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
+                const { data: qList } = await withRetry(() => sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
                 questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, type: q.type }));
                 questionsMap = new Map((qList || []).map(q => [q.id, q]));
                 document.getElementById('user-display').innerText = myName;
@@ -303,11 +319,11 @@
             myName = document.getElementById('p-name').value.trim();
             if (!myName) return alert("請輸入名字");
 
-            // 透過 RPC 驗證 QR token 並加入遊戲
-            const { data, error } = await sbClient.rpc('join_via_qr', {
+            // 透過 RPC 驗證 QR token 並加入遊戲（含 502 自動重試）
+            const { data, error } = await withRetry(() => sbClient.rpc('join_via_qr', {
                 qr_token: qrToken,
                 player_name: myName
-            });
+            }));
             if (error) {
                 console.error("join_via_qr error:", error);
                 if (error.message && error.message.includes('Invalid QR token')) {
@@ -320,7 +336,7 @@
             }
 
             // 預載所有題目內容（含選項），避免 playing 時再逐一 fetch
-            const { data: qList } = await sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true });
+            const { data: qList } = await withRetry(() => sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
             questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, type: q.type }));
             questionsMap = new Map((qList || []).map(q => [q.id, q]));
 
@@ -386,7 +402,7 @@
         }
 
         async function checkCurrentStatus() {
-            const { data } = await sbClient.from('game_status').select('*').eq('id', 1).single();
+            const { data } = await withRetry(() => sbClient.from('game_status').select('*').eq('id', 1).single(), 1);
             if (data) {
                 const key = `${data.state}_${data.current_q_id}_${data.start_time}`;
                 if (key !== lastProcessedKey) {
@@ -462,7 +478,7 @@
                 // 優先用預載快取，cache miss 時才 fetch
                 let q = questionsMap.get(status.current_q_id);
                 if (!q) {
-                    const { data } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
+                    const { data } = await withRetry(() => sbClient.from('questions').select('*').eq('id', status.current_q_id).single(), 1);
                     if (myVersion !== stateVersion) return;
                     q = data;
                     if (q) questionsMap.set(q.id, q);
@@ -493,7 +509,7 @@
                 // 優先用預載快取取得題目資料（含正確答案）
                 let revQ = questionsMap.get(status.current_q_id);
                 if (!revQ) {
-                    const { data } = await sbClient.from('questions').select('*').eq('id', status.current_q_id).single();
+                    const { data } = await withRetry(() => sbClient.from('questions').select('*').eq('id', status.current_q_id).single(), 1);
                     if (myVersion !== stateVersion) return;
                     revQ = data;
                     if (revQ) questionsMap.set(revQ.id, revQ);
@@ -508,7 +524,7 @@
 
                 // 取得各選項作答人數
                 let optCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
-                const { data: revResponses } = await sbClient.from('responses').select('choice').eq('question_id', status.current_q_id);
+                const { data: revResponses } = await withRetry(() => sbClient.from('responses').select('choice').eq('question_id', status.current_q_id), 1);
                 if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
                 if (revResponses) {
                     revResponses.forEach(r => {
@@ -708,11 +724,11 @@
                         totalScore = pendingScore.total_score || 0;
                         pendingScore = null;
                     } else {
-                        const { data: myScoreData } = await sbClient.rpc('get_my_score', {
+                        const { data: myScoreData } = await withRetry(() => sbClient.rpc('get_my_score', {
                             p_player_name: myName,
                             p_question_id: status.current_q_id,
                             p_mode: currentMode
-                        });
+                        }), 2);
                         if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
                         questionScore = myScoreData?.question_score || 0;
                         totalScore = myScoreData?.total_score || 0;
@@ -732,7 +748,7 @@
 
                 // 取得排行榜並顯示分數與名次
                 const scoreField = currentMode === 'test' ? 'test_score' : 'score';
-                const { data: allPlayers } = await sbClient.from('players').select('*').order(scoreField, { ascending: false });
+                const { data: allPlayers } = await withRetry(() => sbClient.from('players').select('*').order(scoreField, { ascending: false }), 2);
                 if (allPlayers) {
                     const myRank = allPlayers.findIndex(p => p.name === myName) + 1;
                     const myData = allPlayers.find(p => p.name === myName);
@@ -879,20 +895,22 @@
 
             const elapsedMs = startTime ? Date.now() - startTime : 0;
 
-            // 透過 RPC 提交答案（RLS 保護）
-            sbClient.rpc('submit_response', {
-                p_player_name: myName,
-                p_question_id: currentQ.id,
-                p_choice: choice,
-                p_response_time_ms: elapsedMs,
-                p_qr_token: qrToken
-            }).then();
-
+            // 透過 RPC 提交答案（含 502 自動重試，ON CONFLICT 保證冪等）
             if (choice === 0) {
                 showFeedback('未作答，已自動提交');
             } else {
                 showFeedback('已成功提交！');
             }
+            const questionId = currentQ.id;
+            withRetry(() => sbClient.rpc('submit_response', {
+                p_player_name: myName,
+                p_question_id: questionId,
+                p_choice: choice,
+                p_response_time_ms: elapsedMs,
+                p_qr_token: qrToken
+            }), 2).then(result => {
+                if (result?.error) console.error('submit_response 失敗:', result.error.message);
+            });
         }
 
         function showFeedback(msg) {
@@ -927,7 +945,7 @@
             btn.classList.add('syncing');
 
             try {
-                const { data } = await sbClient.from('game_status').select('*').eq('id', 1).single();
+                const { data } = await withRetry(() => sbClient.from('game_status').select('*').eq('id', 1).single(), 2);
                 if (data) {
                     // 強制重新處理（清除 lastProcessedKey 讓 handleStateChange 執行）
                     lastProcessedKey = '';
