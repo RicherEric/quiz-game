@@ -1566,23 +1566,11 @@
 
             console.log(`結算完成: ${data.correct_count} 人答對`);
 
-            // 廣播分數給所有 player（取代 player 端 RPC 查詢）
-            const { data: respScores } = await sbClient.from('responses')
-                .select('player_name, scored_points')
-                .eq('question_id', qId);
-
-            const scoreField = currentMode === 'test' ? 'test_score' : 'score';
-            const { data: allPlayers } = await sbClient.from('players')
-                .select(`name, ${scoreField}`);
-
-            const scoreMap = {};
-            if (allPlayers) allPlayers.forEach(p => { scoreMap[p.name] = { total_score: p[scoreField] || 0 }; });
-            if (respScores) respScores.forEach(r => { if (scoreMap[r.player_name]) scoreMap[r.player_name].question_score = r.scored_points || 0; });
-
+            // 直接用 RPC 回傳的 scores 廣播（省去 2 次額外 DB 查詢）
             scoreBroadcastChannel.send({
                 type: 'broadcast',
                 event: 'score-update',
-                payload: { question_id: qId, scores: scoreMap }
+                payload: { question_id: qId, scores: data.scores || {} }
             });
 
             // 切換到 scoring 狀態

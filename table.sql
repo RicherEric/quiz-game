@@ -149,6 +149,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 成績結算（SQL 批次計算取代前端逐筆更新）
+-- 回傳 correct_count + 所有玩家分數 map，admin 不需額外查詢
 CREATE OR REPLACE FUNCTION score_question(
   p_question_id int,
   p_correct_answer int,
@@ -159,6 +160,7 @@ DECLARE
   v_points int;
   v_correct_count int;
   v_orig_answer int;
+  v_scores json;
 BEGIN
   -- 取得該題分數
   SELECT COALESCE(points, 1000), answer
@@ -202,7 +204,19 @@ BEGIN
     UPDATE questions SET answer = p_correct_answer WHERE id = p_question_id;
   END IF;
 
-  RETURN json_build_object('correct_count', v_correct_count);
+  -- 建構所有作答玩家的分數 map（取代 admin 端 2 次額外查詢）
+  SELECT COALESCE(json_object_agg(
+    r.player_name,
+    json_build_object(
+      'question_score', r.scored_points,
+      'total_score', CASE WHEN p_mode = 'test' THEN p.test_score ELSE p.score END
+    )
+  ), '{}'::json) INTO v_scores
+  FROM responses r
+  JOIN players p ON p.name = r.player_name
+  WHERE r.question_id = p_question_id;
+
+  RETURN json_build_object('correct_count', v_correct_count, 'scores', v_scores);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -365,6 +379,30 @@ CREATE INDEX IF NOT EXISTS idx_responses_player_question ON public.responses(pla
 CREATE INDEX IF NOT EXISTS idx_responses_question_id ON public.responses(question_id);
 CREATE INDEX IF NOT EXISTS idx_players_score_desc ON public.players(score DESC);
 CREATE INDEX IF NOT EXISTS idx_players_test_score_desc ON public.players(test_score DESC);
+
+-- ============================================================
+-- 效能調優：Autovacuum + FILLFACTOR（減少 score_question 後的 vacuum 風暴）
+-- ============================================================
+
+-- responses 表在每題結算時做大量 UPDATE，需要更頻繁的小批量 vacuum
+-- 預設 scale_factor=0.2 表示 20% 的行變動才觸發，對高頻 UPDATE 太慢
+ALTER TABLE public.responses SET (
+  autovacuum_vacuum_scale_factor = 0.01,
+  autovacuum_vacuum_threshold = 50,
+  autovacuum_analyze_scale_factor = 0.01,
+  autovacuum_analyze_threshold = 50
+);
+
+-- FILLFACTOR 80%：每頁保留 20% 空間給 HOT (Heap-Only Tuple) 更新
+-- HOT 更新不需要修改索引，大幅減少 score_question UPDATE 的 I/O
+ALTER TABLE public.responses SET (fillfactor = 80);
+
+-- players 表在結算時也會被批次 UPDATE
+ALTER TABLE public.players SET (
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_threshold = 20,
+  fillfactor = 90
+);
 
 -- 插入 QR token（若不存在）
 INSERT INTO public.qr_tokens (id, token)
