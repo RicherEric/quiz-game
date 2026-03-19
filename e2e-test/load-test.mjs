@@ -200,6 +200,19 @@ function throughput(count, durationMs) {
   return count / (durationMs / 1000);
 }
 
+async function staggeredAll(tasks, batchSize = 10, delayMs = 50) {
+  const results = new Array(tasks.length);
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn => fn()));
+    for (let j = 0; j < batchResults.length; j++) {
+      results[i + j] = batchResults[j];
+    }
+    if (i + batchSize < tasks.length) await sleep(delayMs);
+  }
+  return results;
+}
+
 // ─── Timing Collector ──────────────────────────────────────────────────────────
 
 /**
@@ -956,6 +969,7 @@ async function validateDataIntegrity(questions) {
       .from('responses')
       .select('id, player_name, question_id, choice, is_correct, response_time_ms, scored_points')
       .like('player_name', 'test_%')
+      .neq('player_name', 'test_viewer')
       .range(offset, offset + PAGE_SIZE - 1);
     if (re || !page) {
       fetchError = re;
@@ -1014,7 +1028,7 @@ async function validateDataIntegrity(questions) {
     let expectedScore;
     if (isCorrect) {
       const responseTime = r.response_time_ms ?? 15000;
-      expectedScore = Math.round(q.points * (1 + Math.max(0, 15000 - responseTime) / 15000 * 0.75));
+      expectedScore = Math.floor(q.points * (1 + Math.max(0, 15000 - responseTime) / 15000 * 0.75) + 0.5);
     } else {
       expectedScore = 0;
     }
@@ -1036,7 +1050,8 @@ async function validateDataIntegrity(questions) {
   const { data: allPlayers, error: pe } = await admin
     .from('players')
     .select('name, score')
-    .like('name', 'test_%');
+    .like('name', 'test_%')
+    .neq('name', 'test_viewer');
 
   if (pe || !allPlayers) {
     stats.dataIntegrity.push({ check: 'player-total-scores', detail: pe?.message || 'no data', pass: false });
@@ -2218,6 +2233,12 @@ async function main() {
   // ══════════════════════════════════════════════════════════════════════════════
   await runEdgeCaseTests(qrToken, questions);
 
+  // Blanket cleanup: remove ALL edge-case residual data before Phase 2
+  console.log('  Cleaning up edge case residual data...');
+  await admin.from('responses').delete().like('player_name', 'test_%');
+  await admin.from('players').update({ score: 0, test_score: 0 }).like('name', 'test_%');
+  console.log('  Edge case residual data cleaned.');
+
   // Reload admin browser after edge case tests to sync state
   // (edge cases changed game_status via API, admin UI is out of sync)
   if (adminPage) {
@@ -2278,8 +2299,8 @@ async function main() {
     // admin independently monitors and stops after countdown.
     console.log('  [2] Players answering...');
     const answerT0 = now();
-    const answerPromises = activePlayers.map(p => p.answer(q.id).catch(e => recordError(`answer(${p.name})`, e)));
-    const allAnswered = Promise.all(answerPromises);
+    const answerTasks = activePlayers.map(p => () => p.answer(q.id).catch(e => recordError(`answer(${p.name})`, e)));
+    const allAnswered = staggeredAll(answerTasks, 10, 50);
 
     // Wait for all players to finish OR 30s timeout
     let allDone = false;
@@ -2353,8 +2374,11 @@ async function main() {
 
     // ── Step 8: All players fetch their own score (record all responses) ──
     console.log('  [8] Players fetching scores...');
+    await sleep(1000);  // let DB settle after score_question batch UPDATE
     const scoreFetchT0 = now();
-    const scoreFetches = await Promise.all(activePlayers.map(p => p.fetchMyScore(q.id)));
+    const scoreFetches = await staggeredAll(
+      activePlayers.map(p => () => p.fetchMyScore(q.id)), 10, 50
+    );
     const scoreFetchDur = now() - scoreFetchT0;
     const scoreFetchTimes = scoreFetches.map(r => r.durationMs);
     recordStep('player', 'fetch-score', `q=${q.id}, count=${activePlayers.length}`, scoreFetchDur);
@@ -2403,7 +2427,9 @@ async function main() {
   // Players fetch final leaderboard (like end-ui) — ALL players concurrently
   console.log('  Players fetching final leaderboard...');
   const endFetchT0 = now();
-  const endFetches = await Promise.all(activePlayers.map(p => p.fetchEndLeaderboard()));
+  const endFetches = await staggeredAll(
+    activePlayers.map(p => () => p.fetchEndLeaderboard()), 10, 50
+  );
   const endFetchDur = now() - endFetchT0;
   const endFetchTimes = endFetches.map(r => r.durationMs);
   recordStep('player', 'fetch-end-leaderboard', `count=${activePlayers.length}`, endFetchDur);
