@@ -216,7 +216,21 @@ BEGIN
     INTO v_points, v_orig_answer
     FROM questions WHERE id = p_question_id;
 
-  -- 批次更新 responses: is_correct + scored_points
+  -- 冪等結算：先扣除該題舊分數，再更新 responses，最後加回新分數
+  -- 這樣重複結算同一題不會導致分數累加
+  IF p_group_id IS NOT NULL THEN
+    -- Step 1: 扣除此題之前已結算的舊分數（首次結算時 scored_points 為 NULL/0，不影響）
+    UPDATE player_scores ps
+    SET score = ps.score - old.old_points
+    FROM (
+      SELECT r.player_name, COALESCE(r.scored_points, 0) AS old_points
+      FROM responses r
+      WHERE r.question_id = p_question_id AND COALESCE(r.scored_points, 0) > 0
+    ) old
+    WHERE ps.player_name = old.player_name AND ps.group_id = p_group_id;
+  END IF;
+
+  -- Step 2: 批次更新 responses: is_correct + scored_points（冪等覆寫）
   UPDATE responses
   SET is_correct    = (choice = p_correct_answer AND choice != 0),
       scored_points = CASE
@@ -226,7 +240,7 @@ BEGIN
       END
   WHERE question_id = p_question_id;
 
-  -- 批次 UPSERT player_scores（取代舊的 players.score / test_score 分支）
+  -- Step 3: 加上新分數
   IF p_group_id IS NOT NULL THEN
     INSERT INTO player_scores (player_name, group_id, score)
     SELECT r.player_name, p_group_id, r.scored_points
