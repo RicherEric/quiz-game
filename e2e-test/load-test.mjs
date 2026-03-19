@@ -45,6 +45,8 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
+const SITE_URL = (process.env.SITE_URL || '').replace(/\/+$/, '');
+
 if (!SUPABASE_URL || !SUPABASE_KEY || !ADMIN_PASSWORD) {
   console.error('Missing required env vars: SUPABASE_URL, SUPABASE_KEY, ADMIN_PASSWORD');
   console.error('Create a .env file in the e2e-test/ directory. See .env.example');
@@ -107,8 +109,14 @@ function startHttpServer() {
 }
 
 async function launchBrowsers(qrToken) {
-  const port = await startHttpServer();
-  const baseUrl = `http://localhost:${port}`;
+  let baseUrl;
+  if (SITE_URL) {
+    baseUrl = SITE_URL;
+    console.log(`  Using remote site: ${baseUrl}`);
+  } else {
+    const port = await startHttpServer();
+    baseUrl = `http://localhost:${port}`;
+  }
 
   // ── User browser: mobile viewport, stays open throughout ──
   userBrowser = await chromium.launch({ headless: false });
