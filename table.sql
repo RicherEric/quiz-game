@@ -217,31 +217,26 @@ RETURNS TABLE(player_name text, correct_count bigint, avg_time_ms numeric) AS $$
   GROUP BY player_name;
 $$ LANGUAGE sql SECURITY DEFINER;
 
--- 玩家取得自己的本題分數 + 累計分數（合併 2 次查詢為 1 次 RPC）
+-- 玩家取得自己的本題分數 + 累計分數（單次 JOIN 查詢，SQL 語言可被 planner inline）
 CREATE OR REPLACE FUNCTION get_my_score(
   p_player_name text,
   p_question_id int,
   p_mode text DEFAULT 'official'
 )
 RETURNS json AS $$
-DECLARE
-  v_question_score int;
-  v_total_score int;
-BEGIN
-  SELECT COALESCE(scored_points, 0) INTO v_question_score
-    FROM responses
-   WHERE player_name = p_player_name AND question_id = p_question_id
-   LIMIT 1;
-
-  IF p_mode = 'test' THEN
-    SELECT COALESCE(test_score, 0) INTO v_total_score FROM players WHERE name = p_player_name;
-  ELSE
-    SELECT COALESCE(score, 0) INTO v_total_score FROM players WHERE name = p_player_name;
-  END IF;
-
-  RETURN json_build_object('question_score', COALESCE(v_question_score, 0), 'total_score', COALESCE(v_total_score, 0));
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+  SELECT json_build_object(
+    'question_score', COALESCE(r.scored_points, 0),
+    'total_score',    CASE WHEN p_mode = 'test'
+                           THEN COALESCE(p.test_score, 0)
+                           ELSE COALESCE(p.score, 0)
+                      END
+  )
+  FROM players p
+  LEFT JOIN responses r
+    ON r.player_name = p.name AND r.question_id = p_question_id
+  WHERE p.name = p_player_name
+  LIMIT 1;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- 重置某題作答紀錄（回退分數 + 刪除 responses，取代 O(N) 個別查詢）
 CREATE OR REPLACE FUNCTION reset_question_responses(

@@ -560,14 +560,8 @@ function createPlayer(index, qrToken) {
       initQStats(questionId);
       const qs = stats.perQuestion[questionId];
 
-      // 10% chance of not answering
-      if (Math.random() < 0.1) {
-        qs.skipped++;
-        stats.playerLogs[name].answers.push({
-          questionId, choice: null, responseTimeMs: 0, apiTimeMs: 0, skipped: true, success: false,
-        });
-        return;
-      }
+      // All players answer (no random skip)
+
 
       // Random thinking time 1-12s
       const thinkTime = randomInt(1000, 12000);
@@ -2366,14 +2360,14 @@ async function main() {
     qs.leaderboardFetchMs = lb.durationMs;
     console.log(`  [9] Leaderboard: ${lb.players.length} players, ${fmtMs(lb.durationMs)}`);
 
-    await sleep(2000);
+    await sleep(5000);
 
     // ── Step 10: Admin clicks "下一題" or we're on the last question ──
     if (qi < questions.length - 1) {
       console.log(`  [10] Admin -> next question (browser click)`);
       const waitResult = await adminClickNext();
       qs.stateTransitions['waiting'] = waitResult.durationMs;
-      await sleep(1000);
+      await sleep(3000);
     }
 
     console.log(`  Done: ${qs.submitted} submitted, ${qs.succeeded} ok, ${qs.failed} fail, ${qs.skipped} skip`);
