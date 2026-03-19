@@ -528,6 +528,7 @@ function createPlayer(index, qrToken) {
   const name = `test_user_${padNum(index)}`;
   const client = newClient();
   let channel = null;
+  let broadcastChannel = null;
   let lastStateReceivedAt = 0;
 
   stats.playerLogs[name] = { joinTimeMs: 0, joinSuccess: false, answers: [] };
@@ -570,6 +571,16 @@ function createPlayer(index, qrToken) {
           reject(new Error(`Realtime subscribe timeout for player-${name}`));
         }, timeoutMs);
 
+        // 主通道：broadcast channel（延遲最低）
+        broadcastChannel = client
+          .channel('game-state-broadcast', { config: { broadcast: { self: false } } })
+          .on('broadcast', { event: 'state-change' }, (msg) => {
+            lastStateReceivedAt = Date.now();
+            if (onStateChange) onStateChange(name, msg.payload, lastStateReceivedAt);
+          })
+          .subscribe();
+
+        // Fallback：postgres_changes
         channel = client
           .channel(`player-${name}`)
           .on(
@@ -677,6 +688,7 @@ function createPlayer(index, qrToken) {
     },
 
     async cleanup() {
+      if (broadcastChannel) await client.removeChannel(broadcastChannel);
       if (channel) await client.removeChannel(channel);
     },
   };

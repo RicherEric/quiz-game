@@ -338,6 +338,20 @@
 
             if (channel) sbClient.removeChannel(channel);
 
+            // 主通道：broadcast channel（直接 WebSocket，不經 DB，延遲最低）
+            sbClient.channel('game-state-broadcast')
+                .on('broadcast', { event: 'state-change' }, (msg) => {
+                    const d = msg.payload;
+                    console.log("broadcast 收到狀態:", d.state);
+                    const key = `${d.state}_${d.current_q_id}_${d.start_time}`;
+                    if (key !== lastProcessedKey) {
+                        lastProcessedKey = key;
+                        handleStateChange(d);
+                    }
+                })
+                .subscribe();
+
+            // 第一 fallback：postgres_changes（DB WAL → Realtime）
             channel = sbClient.channel('quiz-control')
                 .on('postgres_changes', {
                     event: 'UPDATE',
@@ -345,10 +359,12 @@
                     table: 'game_status',
                     filter: 'id=eq.1'
                 }, (payload) => {
-                    console.log("偵測到主持人指令:", payload.new.state);
                     const key = `${payload.new.state}_${payload.new.current_q_id}_${payload.new.start_time}`;
-                    lastProcessedKey = key;
-                    handleStateChange(payload.new);
+                    if (key !== lastProcessedKey) {
+                        console.log("postgres_changes fallback 收到:", payload.new.state);
+                        lastProcessedKey = key;
+                        handleStateChange(payload.new);
+                    }
                 })
                 .subscribe((status) => {
                     console.log("廣播連線狀態:", status);

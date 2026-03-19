@@ -761,6 +761,7 @@
         let statsInterval = null;
         let adminChannel = null;
         let scoreBroadcastChannel = null;
+        let gameStateBroadcastChannel = null;
         let currentMode = 'official';
 
         // ---- Mode switching ----
@@ -1172,6 +1173,10 @@
             scoreBroadcastChannel = sbClient.channel('score-broadcast', { config: { broadcast: { self: false } } });
             scoreBroadcastChannel.subscribe();
 
+            // Game state broadcast channel — 狀態切換時直接推播給所有 player（比 postgres_changes 快）
+            gameStateBroadcastChannel = sbClient.channel('game-state-broadcast', { config: { broadcast: { self: false } } });
+            gameStateBroadcastChannel.subscribe();
+
             // 即時訂閱：玩家提交答案、新玩家加入、分數更新時立刻刷新
             adminChannel = sbClient.channel('admin-realtime')
                 .on('postgres_changes', {
@@ -1384,6 +1389,15 @@
             } else if (!data || data.length === 0) {
                 alert("切換失敗！找不到初始化資料 (id=1)，請重新整理網頁讓系統自動建立。");
             } else {
+                // 透過 broadcast 即時推送狀態（比 postgres_changes 快）
+                if (gameStateBroadcastChannel) {
+                    gameStateBroadcastChannel.send({
+                        type: 'broadcast',
+                        event: 'state-change',
+                        payload: data[0]
+                    });
+                }
+
                 updateControlButtons(newState);
 
                 // stopped 時自動刷新統計
@@ -1399,19 +1413,28 @@
             }
         }
 
-        // 重新推播：只更新 start_time 觸發廣播，不影響已在作答的玩家
+        // 重新推播：更新 start_time 觸發 postgres_changes fallback，同時透過 broadcast 直接推送
         async function reBroadcast() {
             const selectEl = document.getElementById('q-selector');
             const qId = selectEl.value;
             if (!qId) return;
 
-            const { error } = await sbClient.from('game_status')
+            const { data, error } = await sbClient.from('game_status')
                 .update({ start_time: Date.now() })
-                .eq('id', 1);
+                .eq('id', 1)
+                .select();
 
             if (error) {
                 alert(`重新推播失敗：${error.message}`);
             } else {
+                // 透過 broadcast 即時推送當前狀態
+                if (gameStateBroadcastChannel && data && data[0]) {
+                    gameStateBroadcastChannel.send({
+                        type: 'broadcast',
+                        event: 'state-change',
+                        payload: data[0]
+                    });
+                }
                 console.log('已重新推播，讓漏接的玩家收到開放作答指令');
             }
         }
