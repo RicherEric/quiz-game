@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>滙智 10 週年 - 主持人控場台</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
@@ -554,7 +555,7 @@
             class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 text-center space-y-6 shadow-2xl max-w-md">
             <h2 class="text-3xl font-black text-gold-gradient">掃描加入遊戲</h2>
             <div class="bg-white p-4 rounded-2xl inline-block">
-                <img id="qr-img" src="" alt="QR Code" class="w-64 h-64">
+                <canvas id="qr-img" class="w-64 h-64"></canvas>
             </div>
             <p id="qr-url" class="text-gold-300 text-lg font-mono break-all"></p>
             <button onclick="closeQRCode()"
@@ -768,8 +769,10 @@
     <script>
         function showQRCode() {
             const playerUrl = window.location.origin + '/?token=' + 'qz-w10-8f3a2b1c4d5e6f7a';
-            const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=' + encodeURIComponent(playerUrl);
-            document.getElementById('qr-img').src = qrApiUrl;
+            const canvas = document.getElementById('qr-img');
+            QRCode.toCanvas(canvas, playerUrl, { width: 256, margin: 1 }, function(err) {
+                if (err) console.error('QR Code 產生失敗:', err);
+            });
             document.getElementById('qr-url').innerText = playerUrl;
             document.getElementById('qr-modal').classList.remove('hidden');
         }

@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>魚蝦蟹 - 莊家控台</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="js/tailwind-config.js"></script>
@@ -485,7 +486,7 @@
         <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-md space-y-4 text-center">
             <h3 class="text-2xl font-bold text-gold-200">QR Code</h3>
             <p id="qr-room-name" class="text-gold-400 font-bold"></p>
-            <img id="qr-code-img" src="" alt="QR Code" class="mx-auto rounded-xl bg-white p-4" style="max-width:300px">
+            <canvas id="qr-code-canvas" class="mx-auto rounded-xl bg-white p-4" style="max-width:300px"></canvas>
             <p id="qr-url-text" class="text-gold-400/70 text-sm break-all"></p>
             <button onclick="closeQRModal()"
                 class="bg-midnight-800 hover:bg-midnight-950 text-gold-300 px-6 py-3 rounded-xl font-bold transition border border-gold-700/50 w-full">
@@ -1401,11 +1402,13 @@
             const room = rooms.find(r => r.id === roomId);
             if (!room) return;
             const url = `${location.origin}/dice.html?token=${room.qr_token}`;
-            const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
 
             document.getElementById('qr-room-name').textContent = room.name;
-            document.getElementById('qr-code-img').src = qrImg;
             document.getElementById('qr-url-text').textContent = url;
+            const canvas = document.getElementById('qr-code-canvas');
+            QRCode.toCanvas(canvas, url, { width: 260, margin: 1 }, function(err) {
+                if (err) console.error('QR Code 產生失敗:', err);
+            });
             document.getElementById('qr-modal').classList.remove('hidden');
         }
 
