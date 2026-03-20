@@ -59,33 +59,19 @@
 
 <body class="bg-midnight-950 text-gold-100 font-sans min-h-screen p-4 md:p-8">
 
-    <!-- 登入畫面 -->
+    <!-- 未登入時的提示（正常流程會被導向 admin-home.html） -->
     <div id="login-screen" class="flex items-center justify-center min-h-[80vh]">
         <div class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
             <div class="text-center bg-amber-50 p-6 rounded-2xl">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-20 mx-auto drop-shadow-md mb-4">
-                <h1 class="text-3xl font-black text-teal-900">管理員登入</h1>
-                <p class="text-teal-800/70 mt-1">請輸入帳號密碼以進入控場台</p>
+                <h1 class="text-3xl font-black text-teal-900">問答遊戲控場台</h1>
+                <p class="text-teal-800/70 mt-1">請先從管理員入口登入</p>
             </div>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-gold-300 font-bold mb-1">帳號</label>
-                    <input id="login-username" type="text" placeholder="請輸入帳號"
-                        class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
-                </div>
-                <div>
-                    <label class="block text-gold-300 font-bold mb-1">密碼</label>
-                    <input id="login-password" type="password" placeholder="請輸入密碼"
-                        class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition"
-                        onkeydown="if(event.key==='Enter')doLogin()">
-                </div>
-                <p id="login-error" class="text-red-400 font-bold text-center hidden">帳號或密碼錯誤</p>
-                <button onclick="doLogin()"
-                    class="w-full bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-8 py-4 rounded-xl font-black text-xl transition shadow-lg">
-                    登入
-                </button>
-            </div>
+            <button onclick="location.href='admin-home.html'"
+                class="w-full bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-8 py-4 rounded-xl font-black text-xl transition shadow-lg">
+                前往管理員入口
+            </button>
         </div>
     </div>
 
@@ -4050,37 +4036,7 @@
         }
 
         // 登入驗證
-        async function doLogin() {
-            const username = document.getElementById('login-username').value.trim();
-            const password = document.getElementById('login-password').value;
-            const errorEl = document.getElementById('login-error');
-            errorEl.classList.add('hidden');
-
-            if (!username || !password) {
-                errorEl.textContent = '請輸入帳號和密碼';
-                errorEl.classList.remove('hidden');
-                return;
-            }
-
-            const { data, error } = await sbClient.rpc('admin_login', {
-                p_username: username,
-                p_password: password
-            });
-
-            if (error || !data || !data.success) {
-                errorEl.textContent = '帳號或密碼錯誤';
-                errorEl.classList.remove('hidden');
-                return;
-            }
-
-            // 登入成功：記住登入狀態，隱藏登入畫面，顯示管理介面
-            localStorage.setItem('admin_logged_in', '1');
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('admin-panel').classList.remove('hidden');
-            initAdmin();
-        }
-
-        // 頁面載入時檢查是否已登入
+        // 頁面載入時檢查是否已登入，未登入則導向管理員入口
         window.addEventListener('DOMContentLoaded', () => {
             if (localStorage.getItem('admin_logged_in') === '1') {
                 document.getElementById('login-screen').classList.add('hidden');

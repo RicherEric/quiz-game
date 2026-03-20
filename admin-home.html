@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滙智 10 週年 - 管理員入口</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="js/tailwind-config.js"></script>
+    <link rel="stylesheet" href="css/shared.css">
+    <style>
+        .game-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .game-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(255, 168, 48, 0.15);
+        }
+    </style>
+</head>
+
+<body class="bg-midnight-950 text-gold-100 font-sans min-h-screen p-4 md:p-8">
+
+    <!-- 登入畫面 -->
+    <div id="login-screen" class="flex items-center justify-center min-h-[80vh]">
+        <div class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
+            <div class="text-center bg-amber-50 p-6 rounded-2xl">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                    class="h-20 mx-auto drop-shadow-md mb-4">
+                <h1 class="text-3xl font-black text-teal-900">管理員登入</h1>
+                <p class="text-teal-800/70 mt-1">請輸入帳號密碼以進入管理系統</p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">帳號</label>
+                    <input id="login-username" type="text" placeholder="請輸入帳號"
+                        class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
+                </div>
+                <div>
+                    <label class="block text-gold-300 font-bold mb-1">密碼</label>
+                    <input id="login-password" type="password" placeholder="請輸入密碼"
+                        class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition"
+                        onkeydown="if(event.key==='Enter')doLogin()">
+                </div>
+                <p id="login-error" class="text-red-400 font-bold text-center hidden">帳號或密碼錯誤</p>
+                <button onclick="doLogin()"
+                    class="w-full bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-8 py-4 rounded-xl font-black text-xl transition shadow-lg">
+                    登入
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遊戲選擇畫面（登入後顯示） -->
+    <div id="home-panel" class="hidden flex items-center justify-center min-h-[80vh]">
+        <div class="w-full max-w-2xl space-y-8">
+            <!-- Header -->
+            <div class="text-center space-y-2">
+                <div class="bg-amber-50 inline-block px-8 py-4 rounded-2xl">
+                    <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                        class="h-16 mx-auto drop-shadow-md">
+                </div>
+                <h1 class="text-3xl md:text-4xl font-black text-gold-300 mt-4">管理員控台</h1>
+                <p class="text-gold-500/70">請選擇要管理的遊戲</p>
+            </div>
+
+            <!-- Game Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 問答遊戲 -->
+                <a href="admin.html"
+                    class="game-card block bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-8 text-center space-y-4 cursor-pointer">
+                    <div class="text-6xl">🎯</div>
+                    <h2 class="text-2xl font-black text-gold-300">問答遊戲</h2>
+                    <p class="text-gold-500/70 text-sm">題目管理、遊戲控場、排行榜、抽獎</p>
+                    <div class="bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 px-6 py-3 rounded-xl font-black text-lg inline-block">
+                        進入控場台
+                    </div>
+                </a>
+
+                <!-- 魚蝦蟹 -->
+                <a href="dice-admin.html"
+                    class="game-card block bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-8 text-center space-y-4 cursor-pointer">
+                    <div class="text-6xl">🎲</div>
+                    <h2 class="text-2xl font-black text-gold-300">魚蝦蟹</h2>
+                    <p class="text-gold-500/70 text-sm">房間管理、擲骰開獎、押注結算</p>
+                    <div class="bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 px-6 py-3 rounded-xl font-black text-lg inline-block">
+                        進入莊家台
+                    </div>
+                </a>
+            </div>
+
+            <!-- Logout -->
+            <div class="text-center">
+                <button onclick="doLogout()"
+                    class="text-gold-500/50 hover:text-red-400 text-sm font-bold transition">
+                    登出
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
+        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+        async function doLogin() {
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+            errorEl.classList.add('hidden');
+
+            if (!username || !password) {
+                errorEl.textContent = '請輸入帳號和密碼';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            const { data, error } = await sbClient.rpc('admin_login', {
+                p_username: username,
+                p_password: password
+            });
+
+            if (error || !data || !data.success) {
+                errorEl.textContent = '帳號或密碼錯誤';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            localStorage.setItem('admin_logged_in', '1');
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('home-panel').classList.remove('hidden');
+        }
+
+        function doLogout() {
+            localStorage.removeItem('admin_logged_in');
+            location.reload();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('admin_logged_in') === '1') {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('home-panel').classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+
+</html>
