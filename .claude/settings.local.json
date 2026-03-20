@@ -5,7 +5,11 @@
       "Bash(ls:*)",
       "Bash(wc:*)",
       "Bash(cd D:/User/Developer/quiz-game/e2e-test && node --check load-test.mjs 2>&1)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(curl -sI https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js)",
+      "Bash(curl -sI https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js)",
+      "Bash(curl -sI https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js)",
+      "Bash(curl -sI https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js)"
     ]
   }
 }
