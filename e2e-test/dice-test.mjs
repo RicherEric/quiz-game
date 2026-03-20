@@ -145,13 +145,21 @@ async function main() {
 
     await sleep(500);
 
+    // Verify DB state before betting
+    const { data: dbState } = await diceAdmin.from('dice_game_status')
+      .select('state, current_round').eq('room_id', roomId).single();
+    console.log(`  [1.5] DB state: state=${dbState?.state}, current_round=${dbState?.current_round}, test round=${round}`);
+    if (dbState?.current_round !== round) {
+      console.error(`  *** ROUND MISMATCH: DB current_round=${dbState?.current_round} vs test round=${round} — bets will fail!`);
+    }
+
     // ── Step 2: 100 players place bets ──
     console.log('  [2] Players placing bets...');
     const betT0 = now();
     const betPromises = [];
     for (let i = 0; i < activePlayers.length; i += 10) {
       const batch = activePlayers.slice(i, i + 10);
-      const batchDelay = (i / 10) * 50;
+      const batchDelay = (i / 10) * 150;
       for (const p of batch) {
         betPromises.push(
           sleep(batchDelay).then(() => p.placeBets(roomId, round).catch(e => recordError(`bet(${p.name})`, e)))
@@ -167,6 +175,13 @@ async function main() {
     ]);
     const betDur = now() - betT0;
     console.log(`  [2] Betting phase: ${qs.submitted} bets from ${activePlayers.length} players (${fmtMs(betDur)})${allDone ? '' : ' (TIMEOUT)'}`);
+    console.log(`  [2] Results: submitted=${qs.submitted}, succeeded=${qs.succeeded}, failed=${qs.failed}`);
+    if (qs.submitted === 0) {
+      console.error('  *** NO BETS SUBMITTED — check DB state and player balance');
+    } else if (qs.failed > 0 && qs.succeeded === 0) {
+      const recentErrors = stats.errors.slice(-3);
+      console.error(`  *** ALL BETS FAILED — recent errors: ${recentErrors.join('; ')}`);
+    }
     recordStep('round', 'betting-phase', `round=${round}, bets=${qs.submitted}, allDone=${allDone}`, betDur);
 
     // ── Step 3: Admin "停止押注" → stopped ──

@@ -34,9 +34,16 @@ export async function cleanDiceTestData() {
   // Reset game status if we have a room
   if (roomId) {
     const { error: e3 } = await diceAdmin.from('dice_game_status').update({
-      state: 'waiting', current_round: 0, dice_result: '{}', start_time: 0,
+      state: 'waiting', current_round: 0, dice_result: [], start_time: 0,
     }).eq('room_id', roomId);
     if (e3) recordError('reset-dice-game-status', e3);
+
+    // Verify reset
+    const { data: verify } = await diceAdmin.from('dice_game_status')
+      .select('state, current_round').eq('room_id', roomId).single();
+    if (verify) {
+      console.log(`  [verify] game_status after reset: state=${verify.state}, current_round=${verify.current_round}`);
+    }
   }
 
   const dur = now() - t0;

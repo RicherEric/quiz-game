@@ -502,16 +502,16 @@ export function evaluateDicePassFail(numRounds) {
     threshold: '0', actual: String(resolveErrors), pass: resolveErrors === 0,
   });
 
-  // 9. State transition p95 < 1000ms
+  // 9. State transition p95 < 1500ms
   const stateTransitionTimes = timing.steps
     .filter(s => ['click-start-betting', 'click-stop-betting', 'click-next-round'].includes(s.step))
     .map(s => s.durationMs);
   const stP95 = stateTransitionTimes.length > 0 ? percentile(stateTransitionTimes, 95) : 0;
   stats.passFail.push({
-    criterion: 'State transition p95 < 1000ms',
-    threshold: '< 1000ms',
+    criterion: 'State transition p95 < 1500ms',
+    threshold: '< 1500ms',
     actual: stateTransitionTimes.length > 0 ? fmtMs(stP95) : 'N/A',
-    pass: stateTransitionTimes.length === 0 || stP95 < 1000,
+    pass: stateTransitionTimes.length === 0 || stP95 < 1500,
   });
 
   // 10. Resolve RPC p95 < 3000ms

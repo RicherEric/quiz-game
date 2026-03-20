@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Dice E2E Load Test Report</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; padding: 24px; }
+  h1 { text-align: center; margin-bottom: 8px; color: #f59e0b; }
+  .subtitle { text-align: center; color: #94a3b8; margin-bottom: 24px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; justify-content: center; }
+  .card { background: #1e293b; border-radius: 12px; padding: 16px 24px; min-width: 160px; text-align: center; }
+  .card .value { font-size: 28px; font-weight: bold; }
+  .card .label { color: #94a3b8; font-size: 13px; margin-top: 4px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; justify-content: center; }
+  .tab-btn { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 8px 16px; color: #e2e8f0; cursor: pointer; }
+  .tab-btn.active { background: #f59e0b; color: #0f172a; border-color: #f59e0b; font-weight: bold; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .section { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; overflow-x: auto; }
+  .section h2 { color: #f59e0b; margin-bottom: 12px; font-size: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #334155; }
+  th { color: #f59e0b; font-weight: 600; }
+  .fail-row { background: rgba(239, 68, 68, 0.15); }
+  .pass { color: #10b981; font-weight: bold; }
+  .fail { color: #ef4444; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Dice E2E Load Test Report</h1>
+<p class="subtitle">2026/3/20 下午2:29:09 | Duration: 80.5s | 100 players | 3 rounds</p>
+
+<div class="cards">
+  <div class="card"><div class="value">100</div><div class="label">Players Joined</div></div>
+  <div class="card"><div class="value">0</div><div class="label">Join Failures</div></div>
+  <div class="card"><div class="value">193ms / 1.14s</div><div class="label">API p50 / p95</div></div>
+  <div class="card"><div class="value">292ms / 1.54s</div><div class="label">RT Lag p50 / p95</div></div>
+  <div class="card"><div class="value" style="color:#ef4444">11/12</div><div class="label">Pass/Fail</div></div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('timeline')">Timeline</button>
+  <button class="tab-btn" onclick="showTab('per-round')">Per-Round</button>
+  <button class="tab-btn" onclick="showTab('api')">API Timing</button>
+  <button class="tab-btn" onclick="showTab('edge-cases')">Edge Cases</button>
+  <button class="tab-btn" onclick="showTab('data-integrity')">Data Integrity</button>
+  <button class="tab-btn" onclick="showTab('pass-fail')">Pass/Fail</button>
+  <button class="tab-btn" onclick="showTab('errors')">Errors (0)</button>
+</div>
+
+<div id="tab-timeline" class="tab-content active">
+  <div class="section">
+    <h2>Phase Timeline</h2>
+    <svg width="900" height="400" xmlns="http://www.w3.org/2000/svg" style="font-family:monospace;font-size:12px"><text x="4" y="28" fill="#ccc">0-setup</text><rect x="200" y="10" width="79.13257373192303" height="28" rx="4" fill="#3b82f6" opacity="0.85"/><text x="285.132573731923" y="28" fill="#aaa">9.37s</text><text x="4" y="64" fill="#ccc">1-player-join</text><rect x="279.13281610236277" y="46" width="126.67791757633097" height="28" rx="4" fill="#10b981" opacity="0.85"/><text x="411.81073367869374" y="64" fill="#aaa">15.00s</text><text x="4" y="100" fill="#ccc">1.5-dice-edge-cases</text><rect x="405.8173747976416" y="82" width="28.00384205084556" height="28" rx="4" fill="#f59e0b" opacity="0.85"/><text x="439.82121684848715" y="100" fill="#aaa">3.32s</text><text x="4" y="136" fill="#ccc">2-round-loop</text><rect x="433.821324099518" y="118" width="382.68533009794544" height="28" rx="4" fill="#ef4444" opacity="0.85"/><text x="822.5066541974634" y="136" fill="#aaa">45.32s</text><text x="4" y="172" fill="#ccc">2-R1</text><rect x="433.8225747985467" y="154" width="124.84137710393118" height="28" rx="4" fill="#8b5cf6" opacity="0.85"/><text x="564.663951902478" y="172" fill="#aaa">14.78s</text><text x="4" y="208" fill="#ccc">2-R2</text><rect x="558.6644087749793" y="190" width="139.8952669094284" height="28" rx="4" fill="#ec4899" opacity="0.85"/><text x="704.5596756844077" y="208" fill="#aaa">16.57s</text><text x="4" y="244" fill="#ccc">2-R3</text><rect x="698.5601317124128" y="226" width="117.94649123868733" height="28" rx="4" fill="#06b6d4" opacity="0.85"/><text x="822.5066229511002" y="244" fill="#aaa">13.97s</text><text x="4" y="280" fill="#ccc">3-end-game</text><rect x="816.5067293576346" y="262" width="59.748915053862824" height="28" rx="4" fill="#84cc16" opacity="0.85"/><text x="882.2556444114974" y="280" fill="#aaa">7.08s</text><text x="4" y="316" fill="#ccc">dice-data-integrity</text><rect x="864.4235443255111" y="298" width="11.832058705667412" height="28" rx="4" fill="#3b82f6" opacity="0.85"/><text x="882.2556030311786" y="316" fill="#aaa">1.40s</text><text x="4" y="352" fill="#ccc">4-cleanup</text><rect x="876.2557195716686" y="334" width="3.7442804283314124" height="28" rx="4" fill="#10b981" opacity="0.85"/><text x="886" y="352" fill="#aaa">0.44s</text></svg>
+  </div>
+</div>
+
+<div id="tab-per-round" class="tab-content">
+  <div class="section">
+    <h2>Per-Round Summary</h2>
+    <table>
+      <tr><th>Round</th><th>Bets</th><th>OK</th><th>Fail</th><th>API Avg</th><th>API p95</th><th>Resolve</th><th>RT p50</th></tr>
+      <tr>
+      <td>R1</td>
+      <td>197</td>
+      <td>197</td>
+      <td>0</td>
+      <td>298ms</td>
+      <td>586ms</td>
+      <td>-</td>
+      <td>291ms</td>
+    </tr><tr>
+      <td>R2</td>
+      <td>187</td>
+      <td>187</td>
+      <td>0</td>
+      <td>189ms</td>
+      <td>247ms</td>
+      <td>-</td>
+      <td>486ms</td>
+    </tr><tr>
+      <td>R3</td>
+      <td>184</td>
+      <td>184</td>
+      <td>0</td>
+      <td>695ms</td>
+      <td>1.18s</td>
+      <td>-</td>
+      <td>290ms</td>
+    </tr>
+    </table>
+  </div>
+</div>
+
+<div id="tab-api" class="tab-content">
+  <div class="section">
+    <h2>API Latency (dice_place_bet) — p50 (blue) / p95 (red)</h2>
+    <svg width="900" height="148" xmlns="http://www.w3.org/2000/svg" style="font-family:monospace;font-size:12px"><text x="4" y="30" fill="#ccc">R1</text><rect x="40" y="12" width="326.49267629184465" height="28" rx="3" fill="#ef4444" opacity="0.4"/><rect x="40" y="12" width="111.65902094390611" height="28" rx="3" fill="#3b82f6" opacity="0.8"/><text x="372.49267629184465" y="30" fill="#aaa">p50=200ms p95=586ms</text><text x="4" y="66" fill="#ccc">R2</text><rect x="40" y="48" width="137.56638365066658" height="28" rx="3" fill="#ef4444" opacity="0.4"/><rect x="40" y="48" width="101.07490694818522" height="28" rx="3" fill="#3b82f6" opacity="0.8"/><text x="183.56638365066658" y="66" fill="#aaa">p50=181ms p95=247ms</text><text x="4" y="102" fill="#ccc">R3</text><rect x="40" y="84" width="658.6655675475538" height="28" rx="3" fill="#ef4444" opacity="0.4"/><rect x="40" y="84" width="467.14938057856784" height="28" rx="3" fill="#3b82f6" opacity="0.8"/><text x="704.6655675475538" y="102" fill="#aaa">p50=838ms p95=1.18s</text></svg>
+  </div>
+</div>
+
+<div id="tab-edge-cases" class="tab-content">
+  <div class="section">
+    <h2>Edge Case Tests</h2>
+    <table>
+      <tr><th>Result</th><th>Name</th><th>Description</th><th>Expected</th><th>Actual</th></tr>
+      <tr class="">
+      <td>PASS</td>
+      <td>dice-duplicate-player-name</td>
+      <td>重複暱稱 UPSERT 應成功</td>
+      <td>success (UPSERT)</td>
+      <td>success</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice-invalid-qr-token</td>
+      <td>無效 QR token 應被拒絕</td>
+      <td>error</td>
+      <td>rejected: Invalid QR token</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice-bet-when-not-betting</td>
+      <td>waiting 狀態下押注應被拒絕</td>
+      <td>error (not in betting state)</td>
+      <td>rejected: 目前不開放押注</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice-bet-insufficient-balance</td>
+      <td>餘額不足押注應被拒絕</td>
+      <td>error (insufficient balance)</td>
+      <td>rejected: 目前不開放押注</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice-bet-wrong-round</td>
+      <td>round 不符應被拒絕</td>
+      <td>error (wrong round)</td>
+      <td>rejected: 目前不開放押注</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice-cancel-when-not-betting</td>
+      <td>非 betting 狀態取消押注應被拒絕</td>
+      <td>error (not in betting state)</td>
+      <td>rejected: 目前不可取消押注</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice-cancel-nonexistent-bet</td>
+      <td>取消不存在的注應被拒絕</td>
+      <td>error (bet not found)</td>
+      <td>rejected: 找不到此押注</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice-resolve-invalid-dice</td>
+      <td>骰子值超出 1-6 應被拒絕</td>
+      <td>error (invalid dice values)</td>
+      <td>rejected: 骰子值必須為 1~6</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice-bet-exceed-max-per-symbol</td>
+      <td>超過單符號上限 (500) 應被拒絕</td>
+      <td>error (exceeds max bet)</td>
+      <td>rejected: 目前不開放押注</td>
+    </tr>
+    </table>
+  </div>
+</div>
+
+<div id="tab-data-integrity" class="tab-content">
+  <div class="section">
+    <h2>Data Integrity</h2>
+    <table>
+      <tr><th>Result</th><th>Check</th><th>Detail</th></tr>
+      <tr class="">
+      <td>PASS</td>
+      <td>payout formula (single bets)</td>
+      <td>568/568 correct</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>player balance consistency</td>
+      <td>101/101 correct</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>no orphan bets</td>
+      <td>0 orphan bets</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>bet uniqueness (player+room+round+type+symbol)</td>
+      <td>0 duplicates</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>bets per round in reasonable range</td>
+      <td>3/3 rounds OK</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>triple house wins consistency</td>
+      <td>house_wins_on_triple=true, consistent</td>
+    </tr>
+    </table>
+  </div>
+</div>
+
+<div id="tab-pass-fail" class="tab-content">
+  <div class="section">
+    <h2>Pass/Fail Criteria</h2>
+    <table>
+      <tr><th>Result</th><th>Criterion</th><th>Threshold</th><th>Actual</th></tr>
+      <tr class="">
+      <td>PASS</td>
+      <td>Bet API p95 (dice_place_bet) &lt; 2000ms</td>
+      <td>&lt; 2000ms</td>
+      <td>1.14s</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Bet API p99 (dice_place_bet) &lt; 5000ms</td>
+      <td>&lt; 5000ms</td>
+      <td>1.22s</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Realtime propagation p95 &lt; 3000ms</td>
+      <td>&lt; 3000ms</td>
+      <td>1.54s</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Dice player join success rate &gt;= 95%</td>
+      <td>&gt;= 95%</td>
+      <td>100.0%</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Bet submission success rate &gt;= 95%</td>
+      <td>&gt;= 95%</td>
+      <td>100.0% (568/568)</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Data integrity checks all pass</td>
+      <td>100%</td>
+      <td>6/6</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Critical dice edge case tests pass</td>
+      <td>100%</td>
+      <td>3/3</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>dice_resolve_round zero errors</td>
+      <td>0</td>
+      <td>0</td>
+    </tr><tr class="fail-row">
+      <td>FAIL</td>
+      <td>State transition p95 &lt; 1000ms</td>
+      <td>&lt; 1000ms</td>
+      <td>1.13s</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Resolve RPC p95 &lt; 3000ms</td>
+      <td>&lt; 3000ms</td>
+      <td>N/A</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Admin fetch operations p95 &lt; 2000ms</td>
+      <td>&lt; 2000ms</td>
+      <td>452ms</td>
+    </tr><tr class="">
+      <td>PASS</td>
+      <td>Player fetch operations p95 &lt; 2000ms</td>
+      <td>&lt; 2000ms</td>
+      <td>783ms</td>
+    </tr>
+    </table>
+  </div>
+</div>
+
+<div id="tab-errors" class="tab-content">
+  <div class="section">
+    <h2>Errors (0)</h2>
+    <p style="color:#94a3b8">No errors recorded.</p>
+    
+  </div>
+</div>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

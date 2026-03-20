@@ -5,7 +5,8 @@
       "Bash(npm install:*)",
       "Bash(npx playwright:*)",
       "Bash(node:*)",
-      "Bash(find \"D:\\\\User\\\\Developer\\\\quiz-game\" -maxdepth 1 -type f -name \"*.html\" | xargs grep -l \"問答遊戲\" 2>/dev/null)"
+      "Bash(find \"D:\\\\User\\\\Developer\\\\quiz-game\" -maxdepth 1 -type f -name \"*.html\" | xargs grep -l \"問答遊戲\" 2>/dev/null)",
+      "Bash(grep:*)"
     ]
   }
 }

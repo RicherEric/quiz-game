@@ -87,9 +87,9 @@ export function createDicePlayer(index, qrToken) {
           })
           .subscribe();
 
-        // Layer 2: Fallback — postgres_changes
+        // Layer 2: Fallback — postgres_changes (shared channel name matches production dice.html)
         fallbackChannel = client
-          .channel(`dice-player-${name}`)
+          .channel('dice-control')
           .on(
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'dice_game_status' },
