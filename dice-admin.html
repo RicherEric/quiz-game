@@ -272,6 +272,21 @@
                     </div>
                 </div>
 
+                <!-- Betting Status (who has submitted bets) -->
+                <div id="bet-status-area" class="hidden bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-2xl font-bold text-gold-200">投注狀態</h3>
+                        <span class="text-gold-400 font-bold">
+                            <span id="bet-submitted-count" class="text-emerald-400 text-xl">0</span>
+                            <span class="text-gold-500">/</span>
+                            <span id="bet-total-players" class="text-gold-100 text-xl">0</span>
+                            <span class="text-sm ml-1">已投注</span>
+                        </span>
+                    </div>
+                    <div id="bet-status-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                    </div>
+                </div>
+
                 <!-- Round Results (shown in resolved state) -->
                 <div id="round-results-area" class="hidden bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30">
                     <h3 class="text-2xl font-bold text-gold-200 mb-2">本局結算</h3>
@@ -569,6 +584,8 @@
         let betStatsPollingInterval = null;
         let leaderboardPollingInterval = null;
         let currentRoomSettings = null;
+        let bettingPlayersSet = new Set();  // tracks player_names who have bet this round
+        let allRoomPlayers = [];  // cached player list for bet status display
 
         // ===== Channels =====
         let diceStateBroadcast = null;
@@ -684,16 +701,21 @@
                 case 'waiting':
                     document.getElementById('btn-start-betting').classList.remove('hidden');
                     document.getElementById('round-results-area').classList.add('hidden');
+                    document.getElementById('bet-status-area').classList.add('hidden');
+                    resetBetStatus();
                     break;
                 case 'betting':
                     document.getElementById('btn-rebroadcast').classList.remove('hidden');
                     document.getElementById('btn-stop-betting').classList.remove('hidden');
                     document.getElementById('round-results-area').classList.add('hidden');
+                    document.getElementById('bet-status-area').classList.remove('hidden');
+                    fetchBetStatus();
                     startBettingTimer();
                     break;
                 case 'stopped':
                     document.getElementById('btn-roll-random').classList.remove('hidden');
                     document.getElementById('btn-roll-manual').classList.remove('hidden');
+                    document.getElementById('bet-status-area').classList.remove('hidden');
                     stopBettingTimer();
                     break;
                 case 'rolling':
@@ -1119,6 +1141,53 @@
             document.getElementById('total-bet-pool').textContent = '0';
         }
 
+        // ===== Bet Status (who has submitted) =====
+        async function fetchBetStatus() {
+            if (!currentRoomId || !currentRound) return;
+
+            // Fetch players and distinct bettors in parallel
+            const [playersRes, betsRes] = await Promise.all([
+                sbClient.from('dice_players').select('player_name').eq('room_id', currentRoomId),
+                sbClient.from('dice_bets').select('player_name').eq('room_id', currentRoomId).eq('round', currentRound)
+            ]);
+
+            if (playersRes.error || betsRes.error) return;
+
+            allRoomPlayers = (playersRes.data || []).map(p => p.player_name);
+            bettingPlayersSet = new Set((betsRes.data || []).map(b => b.player_name));
+            renderBetStatus();
+        }
+
+        function renderBetStatus() {
+            const grid = document.getElementById('bet-status-grid');
+            const submitted = allRoomPlayers.filter(n => bettingPlayersSet.has(n));
+            const notSubmitted = allRoomPlayers.filter(n => !bettingPlayersSet.has(n));
+
+            document.getElementById('bet-submitted-count').textContent = submitted.length;
+            document.getElementById('bet-total-players').textContent = allRoomPlayers.length;
+
+            // Show submitted first, then not submitted
+            grid.innerHTML = submitted.map(name => `
+                <div class="flex items-center gap-1.5 bg-emerald-900/40 border border-emerald-500/30 rounded-lg px-3 py-2">
+                    <span class="text-emerald-400 text-sm">&#10003;</span>
+                    <span class="text-emerald-200 text-sm font-bold truncate">${escapeHtml(name)}</span>
+                </div>
+            `).join('') + notSubmitted.map(name => `
+                <div class="flex items-center gap-1.5 bg-midnight-800/60 border border-gold-700/20 rounded-lg px-3 py-2">
+                    <span class="text-gold-600 text-sm">&#x2014;</span>
+                    <span class="text-gold-500/60 text-sm font-bold truncate">${escapeHtml(name)}</span>
+                </div>
+            `).join('');
+        }
+
+        function resetBetStatus() {
+            bettingPlayersSet.clear();
+            allRoomPlayers = [];
+            document.getElementById('bet-status-grid').innerHTML = '';
+            document.getElementById('bet-submitted-count').textContent = '0';
+            document.getElementById('bet-total-players').textContent = '0';
+        }
+
         // ===== Player Count =====
         async function fetchPlayerCount() {
             if (!currentRoomId) return;
@@ -1456,6 +1525,11 @@
                 }, (payload) => {
                     // Refresh bet stats on new bet
                     fetchBetStats();
+                    // Update bet status from payload (no extra DB query)
+                    if (payload.new && payload.new.player_name) {
+                        bettingPlayersSet.add(payload.new.player_name);
+                        renderBetStatus();
+                    }
                 })
                 .subscribe();
 
@@ -1468,6 +1542,10 @@
                     filter: `room_id=eq.${currentRoomId}`
                 }, (payload) => {
                     fetchPlayerCount();
+                    // Update bet status player list if in betting state
+                    if (currentState === 'betting' || currentState === 'stopped') {
+                        fetchBetStatus();
+                    }
                 })
                 .subscribe();
         }
@@ -1484,8 +1562,9 @@
             stopPolling();
 
             betStatsPollingInterval = setInterval(() => {
-                if (currentState === 'betting') {
+                if (currentState === 'betting' || currentState === 'stopped') {
                     fetchBetStats();
+                    fetchBetStatus();
                 }
             }, 5000);
 
