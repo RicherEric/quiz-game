@@ -41,6 +41,13 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ADMIN_PASSWORD) {
 export const NUM_PLAYERS = 100;
 export const ANSWER_TIMEOUT_MS = 30000;  // Admin waits up to 30s for all players to answer
 
+// ─── Dice Constants ─────────────────────────────────────────────────────────
+
+export const NUM_DICE_PLAYERS = 100;
+export const NUM_ROUNDS = 3;
+export const DICE_CHIP_VALUES = [100, 200, 500];
+export const BETTING_TIMEOUT_MS = 35000;
+
 // ─── Mutable game group ID (set at runtime from game_status.current_group_id) ──
 
 let _gameGroupId = null;
@@ -52,6 +59,16 @@ export function getGameGroupId() {
 export function setGameGroupId(id) {
   _gameGroupId = id;
 }
+
+// ─── Mutable dice room state ────────────────────────────────────────────────
+
+let _diceRoomId = null;
+let _diceQrToken = null;
+
+export function getDiceRoomId() { return _diceRoomId; }
+export function setDiceRoomId(id) { _diceRoomId = id; }
+export function getDiceQrToken() { return _diceQrToken; }
+export function setDiceQrToken(token) { _diceQrToken = token; }
 
 /** Base directory for the e2e-test folder */
 export const E2E_DIR = join(__dirname, '..');

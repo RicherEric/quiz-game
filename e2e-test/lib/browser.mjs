@@ -14,9 +14,15 @@ let userBrowser = null;
 let adminBrowser = null;
 let _adminPage = null;
 let _userPage = null;
+let diceUserBrowser = null;
+let diceAdminBrowser = null;
+let _diceAdminPage = null;
+let _diceUserPage = null;
 
 export function getAdminPage() { return _adminPage; }
 export function getUserPage() { return _userPage; }
+export function getDiceAdminPage() { return _diceAdminPage; }
+export function getDiceUserPage() { return _diceUserPage; }
 
 export function startHttpServer() {
   return new Promise((resolve) => {
@@ -89,16 +95,67 @@ export async function launchBrowsers(qrToken) {
     viewport: { width: 1440, height: 900 },
   });
   _adminPage = await adminCtx.newPage();
-  await _adminPage.goto(`${baseUrl}/admin.html`);
+  await _adminPage.goto(`${baseUrl}/admin-home.html`);
   await _adminPage.fill('#login-username', ADMIN_USERNAME);
   await _adminPage.fill('#login-password', ADMIN_PASSWORD);
   await _adminPage.click('button[onclick="doLogin()"]');
+  await _adminPage.waitForSelector('#home-panel:not(.hidden)', { timeout: 10000 });
+  // Click "問答遊戲" card to navigate to quiz admin
+  await _adminPage.click('a[href="admin.html"]');
   await _adminPage.waitForSelector('#admin-panel:not(.hidden)', { timeout: 10000 });
-  console.log('  Admin browser opened (logged in)');
+  // Click "作答監控" tab
+  await _adminPage.click('#btn-tab-stats');
+  await _adminPage.waitForSelector('#tab-stats:not(.hidden)', { timeout: 5000 });
+  console.log('  Admin browser opened (logged in, 作答監控)');
+}
+
+export async function launchDiceBrowsers(qrToken) {
+  let baseUrl;
+  if (SITE_URL) {
+    baseUrl = SITE_URL;
+    console.log(`  Using remote site: ${baseUrl}`);
+  } else {
+    if (!httpServer) {
+      const port = await startHttpServer();
+      baseUrl = `http://localhost:${port}`;
+    } else {
+      baseUrl = `http://localhost:${serverPort}`;
+    }
+  }
+
+  // ── User browser: mobile viewport, dice player page ──
+  diceUserBrowser = await chromium.launch({ headless: false });
+  const userCtx = await diceUserBrowser.newContext({
+    viewport: { width: 390, height: 844 },
+  });
+  _diceUserPage = await userCtx.newPage();
+  await _diceUserPage.goto(`${baseUrl}/dice.html?token=${qrToken}`);
+  await _diceUserPage.fill('#p-name', 'test_viewer');
+  await _diceUserPage.click('button[onclick="join()"]');
+  await _diceUserPage.waitForSelector('#waiting-ui:not(.hidden)', { timeout: 10000 });
+  console.log('  Dice user browser opened (test_viewer joined)');
+
+  // ── Admin browser: desktop viewport, login via admin-home then navigate ──
+  diceAdminBrowser = await chromium.launch({ headless: false });
+  const adminCtx = await diceAdminBrowser.newContext({
+    viewport: { width: 1440, height: 900 },
+  });
+  _diceAdminPage = await adminCtx.newPage();
+  await _diceAdminPage.goto(`${baseUrl}/admin-home.html`);
+  await _diceAdminPage.fill('#login-username', ADMIN_USERNAME);
+  await _diceAdminPage.fill('#login-password', ADMIN_PASSWORD);
+  await _diceAdminPage.click('button[onclick="doLogin()"]');
+  await _diceAdminPage.waitForSelector('#home-panel:not(.hidden)', { timeout: 10000 });
+  // Navigate to dice-admin
+  await _diceAdminPage.goto(`${baseUrl}/dice-admin.html`);
+  await _diceAdminPage.waitForSelector('#tab-control', { timeout: 10000 });
+  console.log('  Dice admin browser opened (logged in)');
 }
 
 export async function closeBrowsers() {
   if (userBrowser) { try { await userBrowser.close(); } catch {} }
   if (adminBrowser) { try { await adminBrowser.close(); } catch {} }
+  if (diceUserBrowser) { try { await diceUserBrowser.close(); } catch {} }
+  if (diceAdminBrowser) { try { await diceAdminBrowser.close(); } catch {} }
   if (httpServer) { httpServer.close(); }
 }

@@ -240,12 +240,12 @@ BEGIN
       END
   WHERE question_id = p_question_id;
 
-  -- Step 3: 加上新分數
+  -- Step 3: 加上新分數（所有作答玩家都 UPSERT，確保 0 分玩家也出現在排行榜）
   IF p_group_id IS NOT NULL THEN
     INSERT INTO player_scores (player_name, group_id, score)
-    SELECT r.player_name, p_group_id, r.scored_points
+    SELECT r.player_name, p_group_id, COALESCE(r.scored_points, 0)
     FROM responses r
-    WHERE r.question_id = p_question_id AND r.scored_points > 0
+    WHERE r.question_id = p_question_id
     ON CONFLICT (player_name, group_id)
     DO UPDATE SET score = player_scores.score + EXCLUDED.score;
   END IF;

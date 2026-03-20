@@ -15,7 +15,8 @@
 | `table.sql` | DB schema + RPC 函數 + 索引 + 效能調優（冪等，可重複執行） |
 | `js/shared.js` | 共用工具（YouTube 提取、lightbox） |
 | `css/shared.css` | 共用樣式（金色漸層、動畫） |
-| `e2e-test/load-test.mjs` | E2E 負載測試（100 玩家 + 1 Admin Playwright 自動化） |
+| `e2e-test/quiz-test.mjs` | Quiz E2E 負載測試（100 玩家 + 1 Admin Playwright 自動化） |
+| `e2e-test/dice-test.mjs` | 魚蝦蟹 E2E 負載測試（100 玩家 + 1 Admin，3 回合押注流程） |
 | `lottery.html` | 抽獎功能 |
 | `dice.html` | 魚蝦蟹玩家端（加入房間、押注、開獎、排行榜） |
 | `dice-admin.html` | 魚蝦蟹莊家控台（房間管理、擲骰、結算） |
@@ -270,14 +271,23 @@ scored_points = floor(base_points * (1 + max(0, 15000 - response_time_ms) / 1500
 
 ## E2E 測試
 
+### Quiz 測試
 ```bash
-cd e2e-test && node load-test.mjs
+cd e2e-test && node quiz-test.mjs
 ```
-
-- 需要 `.env`（`SUPABASE_URL`, `SUPABASE_KEY`, `ADMIN_PASSWORD`）
 - 12 項 pass/fail 指標（API p95 < 2s、Realtime p95 < 3s、成功率 ≥ 95% 等）
-- 6 項資料完整性檢查
-- 9 項邊界條件測試
+- 6 項資料完整性檢查、9 項邊界條件測試
+
+### 魚蝦蟹 Dice 測試
+```bash
+cd e2e-test && node dice-test.mjs
+```
+- 100 玩家同時押注，3 回合完整流程
+- 12 項 pass/fail 指標（Bet API p95 < 2s、Resolve RPC p95 < 3s 等）
+- 6 項資料完整性檢查、9 項邊界條件測試
+
+### 共通
+- 需要 `.env`（`SUPABASE_URL`, `SUPABASE_KEY`, `ADMIN_PASSWORD`）
 - 修改後務必確認測試通過
 
 ## table.sql 設計原則

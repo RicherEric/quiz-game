@@ -128,7 +128,10 @@ async function main() {
       await adminPage.click('button[onclick="doLogin()"]');
     }
     await adminPage.waitForSelector('#admin-panel:not(.hidden)', { timeout: 10000 });
-    console.log('  Admin browser reloaded and logged in.');
+    // Ensure 作答監控 tab is active
+    await adminPage.click('#btn-tab-stats');
+    await adminPage.waitForSelector('#tab-stats:not(.hidden)', { timeout: 5000 });
+    console.log('  Admin browser reloaded and logged in (作答監控).');
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -175,7 +178,7 @@ async function main() {
     const answerPromises = [];
     for (let i = 0; i < activePlayers.length; i += 10) {
       const batch = activePlayers.slice(i, i + 10);
-      const batchDelay = (i / 10) * 50;
+      const batchDelay = (i / 10) * 200;
       for (const p of batch) {
         answerPromises.push(
           sleep(batchDelay).then(() => p.answer(q.id).catch(e => recordError(`answer(${p.name})`, e)))
