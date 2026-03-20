@@ -111,12 +111,20 @@
                     <p class="text-teal-800/70 text-sm md:text-base">已加入玩家：<span id="header-player-count"
                             class="text-emerald-400 font-bold text-lg">0</span> 人</p>
                 </div>
-                <button onclick="refreshAll()" id="btn-refresh-all"
-                    class="ml-auto lg:ml-4 bg-midnight-800 hover:bg-midnight-950 text-gold-300 hover:text-gold-100 px-3 md:px-4 py-2 md:py-3 rounded-xl font-bold text-sm transition border border-gold-700/50 hover:border-gold-400 flex items-center space-x-2 shrink-0"
-                    title="手動刷新所有狀態">
-                    <span id="refresh-icon" class="text-lg">🔄</span>
-                    <span class="hidden md:inline">更新狀態</span>
-                </button>
+                <div class="ml-auto lg:ml-4 flex items-center gap-2">
+                    <a href="dice-admin.html"
+                        class="bg-purple-800 hover:bg-purple-700 text-gold-300 hover:text-gold-100 px-3 md:px-4 py-2 md:py-3 rounded-xl font-bold text-sm transition border border-purple-500/50 hover:border-purple-400 flex items-center space-x-2 shrink-0"
+                        title="切換到魚蝦蟹莊家控台">
+                        <span class="text-lg">🎲</span>
+                        <span class="hidden md:inline">魚蝦蟹</span>
+                    </a>
+                    <button onclick="refreshAll()" id="btn-refresh-all"
+                        class="bg-midnight-800 hover:bg-midnight-950 text-gold-300 hover:text-gold-100 px-3 md:px-4 py-2 md:py-3 rounded-xl font-bold text-sm transition border border-gold-700/50 hover:border-gold-400 flex items-center space-x-2 shrink-0"
+                        title="手動刷新所有狀態">
+                        <span id="refresh-icon" class="text-lg">🔄</span>
+                        <span class="hidden md:inline">更新狀態</span>
+                    </button>
+                </div>
             </div>
 
             <div id="control-panel"
