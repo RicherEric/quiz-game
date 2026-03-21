@@ -624,7 +624,7 @@
 
                 if (result) {
                     renderResolvedUI(result, status);
-                    myBalance = result.balance || myBalance;
+                    myBalance = result.balance !== undefined ? result.balance : myBalance;
                     pendingResult = null;
                 } else {
                     // Minimal display if no result available
@@ -1062,9 +1062,13 @@
             const isTriple = result.is_triple || (diceResult.length === 3 && diceResult[0] === diceResult[1] && diceResult[1] === diceResult[2]);
             document.getElementById('resolved-triple').classList.toggle('hidden', !isTriple);
 
-            // Count symbols in dice
-            const symbolCounts = result.symbol_counts || {};
-            if (diceResult.length === 3 && Object.keys(symbolCounts).length === 0) {
+            // Count symbols in dice (keys 1~6)
+            // PostgreSQL array is 1-indexed but JSON serializes as 0-indexed JS array,
+            // so convert to object with 1-based keys to match symbol IDs
+            const symbolCounts = {};
+            if (Array.isArray(result.symbol_counts) && result.symbol_counts.length === 6) {
+                for (let i = 0; i < 6; i++) { symbolCounts[i + 1] = result.symbol_counts[i]; }
+            } else if (diceResult.length === 3) {
                 diceResult.forEach(d => { symbolCounts[d] = (symbolCounts[d] || 0) + 1; });
             }
 
@@ -1143,7 +1147,7 @@
             }
 
             // Balance
-            myBalance = result.balance || myBalance;
+            myBalance = result.balance !== undefined ? result.balance : myBalance;
             document.getElementById('resolved-balance').innerText = myBalance;
         }
 
