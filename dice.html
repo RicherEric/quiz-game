@@ -166,23 +166,39 @@
                 </div>
             </div>
 
-            <!-- Symbol Grid (3x2) -->
-            <div id="symbol-grid" class="grid grid-cols-3 gap-3">
-                <!-- Symbols rendered by JS -->
+            <!-- Single Bets (3x2) -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between px-1">
+                    <p class="text-sm text-gold-300/60 font-bold">單押</p>
+                    <p class="text-xs text-gold-300/40" id="single-odds-label">出1面 1:1 ｜ 出2面 1:2 ｜ 出3面 1:3</p>
+                </div>
+                <div id="symbol-grid" class="grid grid-cols-3 gap-3">
+                    <!-- Symbols rendered by JS -->
+                </div>
+                <p id="triple-kill-hint" class="text-xs text-red-400/70 text-center hidden">⚠ 圍骰通殺：三顆相同時所有單押歸莊</p>
             </div>
 
-            <!-- Special Bets -->
-            <div id="special-bets" class="hidden space-y-3">
-                <p class="text-sm text-gold-300/60 text-center font-bold">特殊押注</p>
-                <div id="triple-bets" class="hidden">
-                    <p class="text-xs text-gold-300/50 mb-2 text-center">圍骰 (指定三同) - 賠率 1:150</p>
-                    <div class="grid grid-cols-3 gap-2" id="triple-grid">
-                        <!-- Rendered by JS -->
-                    </div>
+            <!-- Triple Bets (指定圍骰) -->
+            <div id="triple-bets-section" class="hidden space-y-2">
+                <div class="flex items-center justify-between px-1">
+                    <p class="text-sm text-purple-300/80 font-bold">指定圍骰</p>
+                    <p class="text-xs text-purple-300/50" id="triple-odds-label">賠率 1:150</p>
                 </div>
-                <div id="any-triple-bet" class="hidden flex justify-center">
-                    <button onclick="betSpecial('any_triple', 0)" class="chip-btn bg-red-800/60 border-red-500/40 text-red-200 hover:bg-red-700/60">
-                        全圍 (任意三同) 1:30
+                <div id="triple-grid" class="grid grid-cols-3 gap-3">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Any Triple (全圍) -->
+            <div id="any-triple-section" class="hidden">
+                <div id="any-triple-bet" class="flex justify-center">
+                    <button onclick="betSpecial('any_triple', 0)"
+                        class="w-full symbol-card selectable bg-red-900/40 border-red-500/30 hover:border-red-400 relative">
+                        <span class="text-2xl">🎲🎲🎲</span>
+                        <span class="text-sm font-bold text-red-200 mt-1">全圍（任意三同）</span>
+                        <span class="text-xs text-red-300/60" id="any-triple-odds-label">賠率 1:24</span>
+                        <span class="text-xs text-gold-300/50 mt-1" id="any-triple-bet-text"></span>
+                        <div class="bet-badge hidden" id="any-triple-badge">0</div>
                     </button>
                 </div>
             </div>
@@ -408,6 +424,8 @@
                 houseWinsOnTriple: data.house_wins_on_triple !== false,
                 allowTripleBet: data.allow_triple_bet || false,
                 allowAnyTripleBet: data.allow_any_triple_bet || false,
+                triplePayout: data.triple_payout || 150,
+                anyTriplePayout: data.any_triple_payout || 24,
                 initialBalance: data.initial_balance || 0,
                 roomName: data.room_name || ''
             };
@@ -765,41 +783,43 @@
                 `;
                 grid.appendChild(card);
             }
+            // Show/hide triple-kill hint
+            document.getElementById('triple-kill-hint').classList.toggle('hidden', !roomConfig.houseWinsOnTriple);
         }
 
         function renderSpecialBets() {
-            const specialContainer = document.getElementById('special-bets');
-            const tripleContainer = document.getElementById('triple-bets');
-            const anyTripleContainer = document.getElementById('any-triple-bet');
-
-            let hasSpecial = false;
+            const tripleSection = document.getElementById('triple-bets-section');
+            const anyTripleSection = document.getElementById('any-triple-section');
 
             if (roomConfig.allowTripleBet) {
-                tripleContainer.classList.remove('hidden');
+                tripleSection.classList.remove('hidden');
+                document.getElementById('triple-odds-label').innerText = `賠率 1:${roomConfig.triplePayout}`;
                 const tripleGrid = document.getElementById('triple-grid');
                 tripleGrid.innerHTML = '';
                 for (let i = 1; i <= 6; i++) {
                     const s = SYMBOLS[i];
-                    const btn = document.createElement('button');
-                    btn.className = 'chip-btn bg-purple-800/60 border-purple-500/40 text-purple-200 hover:bg-purple-700/60 text-sm';
-                    btn.onclick = () => betSpecial('triple', i);
-                    btn.innerHTML = `${s.emoji}x3`;
-                    btn.id = `triple-btn-${i}`;
-                    tripleGrid.appendChild(btn);
+                    const card = document.createElement('div');
+                    card.id = `triple-card-${i}`;
+                    card.className = 'symbol-card selectable bg-purple-900/40 border-purple-500/30 hover:border-purple-400 relative';
+                    card.onclick = () => betSpecial('triple', i);
+                    card.innerHTML = `
+                        <span class="text-2xl">${s.emoji}${s.emoji}${s.emoji}</span>
+                        <span class="text-xs font-bold text-purple-200 mt-1">${s.name}圍骰</span>
+                        <span class="text-xs text-gold-300/50 mt-1" id="triple-bet-${i}"></span>
+                        <div class="bet-badge hidden" id="triple-badge-${i}">0</div>
+                    `;
+                    tripleGrid.appendChild(card);
                 }
-                hasSpecial = true;
             } else {
-                tripleContainer.classList.add('hidden');
+                tripleSection.classList.add('hidden');
             }
 
             if (roomConfig.allowAnyTripleBet) {
-                anyTripleContainer.classList.remove('hidden');
-                hasSpecial = true;
+                anyTripleSection.classList.remove('hidden');
+                document.getElementById('any-triple-odds-label').innerText = `賠率 1:${roomConfig.anyTriplePayout}`;
             } else {
-                anyTripleContainer.classList.add('hidden');
+                anyTripleSection.classList.add('hidden');
             }
-
-            specialContainer.classList.toggle('hidden', !hasSpecial);
         }
 
         // ========== CHIP SELECTION ==========
@@ -927,7 +947,7 @@
         function updateBettingUI() {
             document.getElementById('betting-balance').innerText = myBalance;
 
-            // Update symbol badges
+            // Update single bet badges
             for (let i = 1; i <= 6; i++) {
                 const betKey = `single_${i}`;
                 const amount = myBets[betKey] || 0;
@@ -943,6 +963,43 @@
                 }
             }
 
+            // Update triple bet badges
+            if (roomConfig.allowTripleBet) {
+                for (let i = 1; i <= 6; i++) {
+                    const betKey = `triple_${i}`;
+                    const amount = myBets[betKey] || 0;
+                    const badge = document.getElementById(`triple-badge-${i}`);
+                    const betText = document.getElementById(`triple-bet-${i}`);
+                    if (badge) {
+                        if (amount > 0) {
+                            badge.classList.remove('hidden');
+                            badge.innerText = amount;
+                            if (betText) betText.innerText = `$${amount}`;
+                        } else {
+                            badge.classList.add('hidden');
+                            if (betText) betText.innerText = '';
+                        }
+                    }
+                }
+            }
+
+            // Update any_triple badge
+            if (roomConfig.allowAnyTripleBet) {
+                const anyAmount = myBets['any_triple_0'] || 0;
+                const anyBadge = document.getElementById('any-triple-badge');
+                const anyText = document.getElementById('any-triple-bet-text');
+                if (anyBadge) {
+                    if (anyAmount > 0) {
+                        anyBadge.classList.remove('hidden');
+                        anyBadge.innerText = anyAmount;
+                        if (anyText) anyText.innerText = `$${anyAmount}`;
+                    } else {
+                        anyBadge.classList.add('hidden');
+                        if (anyText) anyText.innerText = '';
+                    }
+                }
+            }
+
             // Update bets summary
             const summaryEl = document.getElementById('my-bets-summary');
             const listEl = document.getElementById('my-bets-list');
@@ -951,22 +1008,27 @@
             if (entries.length > 0) {
                 summaryEl.classList.remove('hidden');
                 listEl.innerHTML = entries.map(([key, amount]) => {
-                    const [type, sym] = key.split('_');
-                    let label = '';
-                    if (type === 'single') {
-                        const s = SYMBOLS[parseInt(sym)];
+                    let label = '', betType = '', symNum = 0;
+                    if (key.startsWith('single_')) {
+                        betType = 'single';
+                        symNum = parseInt(key.substring(7));
+                        const s = SYMBOLS[symNum];
                         label = `${s.emoji} ${s.name}`;
-                    } else if (type === 'triple') {
-                        const s = SYMBOLS[parseInt(sym)];
-                        label = `圍骰 ${s.emoji}`;
-                    } else if (type === 'any') {
-                        label = '全圍';
+                    } else if (key.startsWith('triple_')) {
+                        betType = 'triple';
+                        symNum = parseInt(key.substring(7));
+                        const s = SYMBOLS[symNum];
+                        label = `圍骰 ${s.emoji}${s.emoji}${s.emoji}`;
+                    } else if (key.startsWith('any_triple_')) {
+                        betType = 'any_triple';
+                        symNum = 0;
+                        label = '全圍 🎲🎲🎲';
                     }
                     return `<div class="flex items-center justify-between text-sm">
                         <span class="text-gold-200">${label}</span>
                         <span class="flex items-center gap-2">
                             <span class="text-gold-300 font-bold">$${amount}</span>
-                            <button onclick="cancelBet('${type}', ${parseInt(sym) || 0})" class="text-red-400/70 hover:text-red-300 text-lg leading-none" title="取消押注">&times;</button>
+                            <button onclick="cancelBet('${betType}', ${symNum})" class="text-red-400/70 hover:text-red-300 text-lg leading-none" title="取消押注">&times;</button>
                         </span>
                     </div>`;
                 }).join('');
@@ -986,16 +1048,15 @@
 
             if (entries.length > 0) {
                 summaryEl.innerHTML = entries.map(([key, amount]) => {
-                    const [type, sym] = key.split('_');
                     let label = '';
-                    if (type === 'single') {
-                        const s = SYMBOLS[parseInt(sym)];
+                    if (key.startsWith('single_')) {
+                        const s = SYMBOLS[parseInt(key.substring(7))];
                         label = `${s.emoji} ${s.name}`;
-                    } else if (type === 'triple') {
-                        const s = SYMBOLS[parseInt(sym)];
-                        label = `圍骰 ${s.emoji}`;
-                    } else if (type === 'any') {
-                        label = '全圍';
+                    } else if (key.startsWith('triple_')) {
+                        const s = SYMBOLS[parseInt(key.substring(7))];
+                        label = `圍骰 ${s.emoji}${s.emoji}${s.emoji}`;
+                    } else if (key.startsWith('any_triple_')) {
+                        label = '全圍 🎲🎲🎲';
                     }
                     return `<div class="flex items-center justify-between text-sm px-4">
                         <span class="text-gold-200">${label}</span>
@@ -1096,9 +1157,9 @@
                             label = s ? `${s.emoji} ${s.name}` : `#${b.symbol}`;
                         } else if (b.bet_type === 'triple') {
                             const s = SYMBOLS[b.symbol];
-                            label = `圍骰 ${s ? s.emoji : ''}`;
+                            label = s ? `圍骰 ${s.emoji}${s.emoji}${s.emoji}` : '圍骰';
                         } else {
-                            label = '全圍';
+                            label = '全圍 🎲🎲🎲';
                         }
                         const payout = b.payout || 0;
                         const isWin = payout > 0;
@@ -1115,20 +1176,21 @@
                 if (entries.length > 0) {
                     betsContainer.innerHTML = '<p class="text-sm text-gold-300/60 font-bold mb-1">押注結果</p>' +
                         entries.map(([key, amount]) => {
-                            const [type, sym] = key.split('_');
                             let label = '';
                             let isWin = false;
-                            if (type === 'single') {
-                                const s = SYMBOLS[parseInt(sym)];
-                                label = s ? `${s.emoji} ${s.name}` : `#${sym}`;
-                                const count = symbolCounts[parseInt(sym)] || 0;
+                            if (key.startsWith('single_')) {
+                                const symId = parseInt(key.substring(7));
+                                const s = SYMBOLS[symId];
+                                label = s ? `${s.emoji} ${s.name}` : `#${symId}`;
+                                const count = symbolCounts[symId] || 0;
                                 isWin = count > 0 && !(isTriple && roomConfig.houseWinsOnTriple);
-                            } else if (type === 'triple') {
-                                const s = SYMBOLS[parseInt(sym)];
-                                label = `圍骰 ${s ? s.emoji : ''}`;
-                                isWin = isTriple && diceResult[0] === parseInt(sym);
-                            } else {
-                                label = '全圍';
+                            } else if (key.startsWith('triple_')) {
+                                const symId = parseInt(key.substring(7));
+                                const s = SYMBOLS[symId];
+                                label = `圍骰 ${s ? s.emoji + s.emoji + s.emoji : ''}`;
+                                isWin = isTriple && diceResult[0] === symId;
+                            } else if (key.startsWith('any_triple_')) {
+                                label = '全圍 🎲🎲🎲';
                                 isWin = isTriple;
                             }
                             const winClass = isWin ? 'text-green-400' : 'text-red-400/70';

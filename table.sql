@@ -650,7 +650,9 @@ BEGIN
     'betting_seconds', v_room.betting_seconds,
     'house_wins_on_triple', v_room.house_wins_on_triple,
     'allow_triple_bet', v_room.allow_triple_bet,
-    'allow_any_triple_bet', v_room.allow_any_triple_bet
+    'allow_any_triple_bet', v_room.allow_any_triple_bet,
+    'triple_payout', v_room.triple_payout,
+    'any_triple_payout', v_room.any_triple_payout
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
