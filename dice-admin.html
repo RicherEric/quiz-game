@@ -1051,6 +1051,11 @@
             resetBetStatsUI();
             resetDiceDisplay();
 
+            // 清空該房間所有押注記錄
+            await sbClient.from('dice_bets')
+                .delete()
+                .eq('room_id', currentRoomId);
+
             // 重置所有玩家餘額為初始值
             const initialBalance = currentRoomSettings ? currentRoomSettings.initial_balance : 1000;
             await sbClient.from('dice_players')
