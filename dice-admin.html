@@ -679,7 +679,9 @@
             if (data) {
                 currentState = data.state || 'waiting';
                 currentRound = data.current_round || 0;
-                if (data.dice_result && data.dice_result.length === 3) {
+                if (currentRound === 0) {
+                    resetDiceDisplay();
+                } else if (data.dice_result && data.dice_result.length === 3) {
                     displayDiceResult(data.dice_result);
                 }
                 updateStateUI();

@@ -1114,7 +1114,7 @@
                                 const s = SYMBOLS[parseInt(sym)];
                                 label = s ? `${s.emoji} ${s.name}` : `#${sym}`;
                                 const count = symbolCounts[parseInt(sym)] || 0;
-                                isWin = count > 0 && !isTriple;
+                                isWin = count > 0 && !(isTriple && roomConfig.houseWinsOnTriple);
                             } else if (type === 'triple') {
                                 const s = SYMBOLS[parseInt(sym)];
                                 label = `圍骰 ${s ? s.emoji : ''}`;
