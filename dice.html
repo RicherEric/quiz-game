@@ -553,6 +553,14 @@
                 hideAllUI();
                 stopCountdown();
                 stopDiceAnimation();
+                // 若 broadcast 帶有 balances（重置此局退還押注），更新餘額
+                if (status.balances && status.balances[myName] !== undefined) {
+                    myBalance = status.balances[myName];
+                } else if (Object.keys(myBets).length > 0) {
+                    // 有未結算押注卻回到 waiting，可能是重置此局（postgres_changes fallback 無 balances）
+                    sbClient.from('dice_players').select('balance').eq('player_name', myName).eq('room_id', roomId).single()
+                        .then(({ data }) => { if (data) { myBalance = data.balance; document.getElementById('waiting-balance').innerText = myBalance; } });
+                }
                 document.getElementById('waiting-ui').classList.remove('hidden');
                 document.getElementById('waiting-balance').innerText = myBalance;
                 if (currentRound > 0) {

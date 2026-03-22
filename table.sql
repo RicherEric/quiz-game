@@ -964,3 +964,37 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- 重置當前回合：退還所有押注並刪除，回傳每位玩家退還後的餘額
+CREATE OR REPLACE FUNCTION dice_reset_round(
+  p_room_id integer,
+  p_round integer
+)
+RETURNS json AS $$
+DECLARE
+  v_balances json;
+BEGIN
+  -- 批次退還所有押注金額到玩家餘額
+  UPDATE dice_players dp SET balance = dp.balance + sub.total_bet
+  FROM (
+    SELECT player_name, SUM(amount) AS total_bet
+    FROM dice_bets
+    WHERE room_id = p_room_id AND round = p_round
+    GROUP BY player_name
+  ) sub
+  WHERE dp.player_name = sub.player_name AND dp.room_id = p_room_id;
+
+  -- 刪除該回合所有押注
+  DELETE FROM dice_bets WHERE room_id = p_room_id AND round = p_round;
+
+  -- 回傳所有玩家餘額
+  SELECT COALESCE(json_object_agg(dp.player_name, dp.balance), '{}'::json)
+  INTO v_balances
+  FROM dice_players dp WHERE dp.room_id = p_room_id;
+
+  RETURN json_build_object(
+    'success', true,
+    'balances', v_balances
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+

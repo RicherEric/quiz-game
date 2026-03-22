@@ -158,6 +158,12 @@
                     &#x23F8;&#xFE0F; 停止押注
                 </button>
 
+                <!-- betting/stopped/rolling: reset round -->
+                <button id="btn-reset-round" onclick="resetCurrentRound()"
+                    class="hidden flex-1 md:flex-none bg-red-800/80 hover:bg-red-700 text-white px-4 md:px-6 py-3 md:py-4 rounded-xl font-bold text-base md:text-lg transition border border-red-400/50">
+                    &#x21A9;&#xFE0F; 重置此局
+                </button>
+
                 <!-- stopped: roll dice (random) -->
                 <button id="btn-roll-random" onclick="rollDice(false)"
                     class="hidden flex-1 md:flex-none bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 text-white px-4 md:px-8 py-3 md:py-4 rounded-xl font-bold text-base md:text-xl transition shadow-lg border border-purple-400/50">
@@ -695,7 +701,7 @@
 
             // Hide all control buttons
             const btns = ['btn-start-betting', 'btn-rebroadcast', 'btn-stop-betting',
-                'btn-roll-random', 'btn-roll-manual', 'btn-show-result',
+                'btn-reset-round', 'btn-roll-random', 'btn-roll-manual', 'btn-show-result',
                 'btn-next-round', 'btn-end-game', 'btn-restart'];
             btns.forEach(id => document.getElementById(id).classList.add('hidden'));
 
@@ -710,6 +716,7 @@
                 case 'betting':
                     document.getElementById('btn-rebroadcast').classList.remove('hidden');
                     document.getElementById('btn-stop-betting').classList.remove('hidden');
+                    document.getElementById('btn-reset-round').classList.remove('hidden');
                     document.getElementById('round-results-area').classList.add('hidden');
                     document.getElementById('bet-status-area').classList.remove('hidden');
                     fetchBetStatus();
@@ -718,11 +725,13 @@
                 case 'stopped':
                     document.getElementById('btn-roll-random').classList.remove('hidden');
                     document.getElementById('btn-roll-manual').classList.remove('hidden');
+                    document.getElementById('btn-reset-round').classList.remove('hidden');
                     document.getElementById('bet-status-area').classList.remove('hidden');
                     stopBettingTimer();
                     break;
                 case 'rolling':
                     document.getElementById('btn-show-result').classList.remove('hidden');
+                    document.getElementById('btn-reset-round').classList.remove('hidden');
                     stopBettingTimer();
                     break;
                 case 'resolved':
@@ -1060,6 +1069,48 @@
 
             currentState = 'waiting';
             updateStateUI();
+        }
+
+        async function resetCurrentRound() {
+            if (!confirm('確定要重置此局嗎？所有押注將退還給玩家。')) return;
+
+            // 呼叫 RPC 退還押注
+            const { data, error } = await sbClient.rpc('dice_reset_round', {
+                p_room_id: currentRoomId,
+                p_round: currentRound
+            });
+            if (error) { alert('重置失敗：' + error.message); return; }
+
+            // 回退局數，讓下次開放押注時恢復同一局號
+            currentRound--;
+            roundResults = null;
+            resetBetStatsUI();
+            resetDiceDisplay();
+
+            const startTime = Date.now();
+            await sbClient.from('dice_game_status')
+                .update({ state: 'waiting', current_round: currentRound, dice_result: [], start_time: startTime })
+                .eq('room_id', currentRoomId);
+
+            if (diceStateBroadcast) {
+                await diceStateBroadcast.send({
+                    type: 'broadcast',
+                    event: 'state-change',
+                    payload: {
+                        room_id: currentRoomId,
+                        state: 'waiting',
+                        current_round: currentRound,
+                        dice_result: [],
+                        start_time: startTime,
+                        balances: data?.balances || {}
+                    }
+                });
+            }
+
+            currentState = 'waiting';
+            updateStateUI();
+            fetchPlayers();
+            fetchLeaderboard();
         }
 
         function resetDiceDisplay() {
