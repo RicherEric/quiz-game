@@ -479,15 +479,17 @@
             <div class="space-y-3 bg-midnight-800/50 p-4 rounded-xl border border-gold-700/30">
                 <h4 class="text-gold-300 font-bold">進階設定</h4>
                 <label class="flex items-center gap-3 cursor-pointer">
-                    <input id="room-house-wins-triple" type="checkbox" checked class="w-5 h-5 accent-gold-500">
+                    <input id="room-house-wins-triple" type="checkbox" checked class="w-5 h-5 accent-gold-500"
+                        onchange="if(this.checked){document.getElementById('room-allow-triple').checked=true;document.getElementById('room-allow-any-triple').checked=true;}">
                     <span class="text-gold-200 font-bold">圍骰通殺</span>
+                    <span class="text-xs text-gold-400/50">（勾選時自動開放圍骰押注）</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                    <input id="room-allow-triple" type="checkbox" class="w-5 h-5 accent-gold-500">
+                    <input id="room-allow-triple" type="checkbox" checked class="w-5 h-5 accent-gold-500">
                     <span class="text-gold-200 font-bold">允許圍骰押注</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                    <input id="room-allow-any-triple" type="checkbox" class="w-5 h-5 accent-gold-500">
+                    <input id="room-allow-any-triple" type="checkbox" checked class="w-5 h-5 accent-gold-500">
                     <span class="text-gold-200 font-bold">允許全圍押注</span>
                 </label>
                 <div class="grid grid-cols-2 gap-4">
@@ -1043,14 +1045,28 @@
         }
 
         async function restartGame() {
-            if (!confirm('確定要重新開始嗎？這將重置局數。')) return;
+            if (!confirm('確定要重新開始嗎？這將重置局數並重置所有玩家籌碼。')) return;
             currentRound = 0;
             roundResults = null;
             resetBetStatsUI();
             resetDiceDisplay();
 
+            // 重置所有玩家餘額為初始值
+            const initialBalance = currentRoomSettings ? currentRoomSettings.initial_balance : 1000;
+            await sbClient.from('dice_players')
+                .update({ balance: initialBalance })
+                .eq('room_id', currentRoomId);
+
+            // 取得重置後的餘額 map 用於廣播
+            const { data: players } = await sbClient.from('dice_players')
+                .select('player_name, balance')
+                .eq('room_id', currentRoomId);
+            const balances = {};
+            if (players) players.forEach(p => { balances[p.player_name] = p.balance; });
+
+            const startTime = Date.now();
             await sbClient.from('dice_game_status')
-                .update({ state: 'waiting', current_round: 0, dice_result: [], start_time: Date.now() })
+                .update({ state: 'waiting', current_round: 0, dice_result: [], start_time: startTime })
                 .eq('room_id', currentRoomId);
 
             if (diceStateBroadcast) {
@@ -1062,13 +1078,16 @@
                         state: 'waiting',
                         current_round: 0,
                         dice_result: [],
-                        start_time: Date.now()
+                        start_time: startTime,
+                        balances: balances
                     }
                 });
             }
 
             currentState = 'waiting';
             updateStateUI();
+            fetchPlayers();
+            fetchLeaderboard();
         }
 
         async function resetCurrentRound() {
@@ -1378,6 +1397,29 @@
                 .eq('room_id', currentRoomId);
 
             if (error) { alert('重置失敗：' + error.message); return; }
+
+            // 廣播餘額重置給所有玩家
+            const { data: players } = await sbClient.from('dice_players')
+                .select('player_name, balance')
+                .eq('room_id', currentRoomId);
+            const balances = {};
+            if (players) players.forEach(p => { balances[p.player_name] = p.balance; });
+
+            if (diceStateBroadcast) {
+                await diceStateBroadcast.send({
+                    type: 'broadcast',
+                    event: 'state-change',
+                    payload: {
+                        room_id: currentRoomId,
+                        state: currentState,
+                        current_round: currentRound,
+                        dice_result: [],
+                        start_time: Date.now(),
+                        balances: balances
+                    }
+                });
+            }
+
             fetchPlayers();
             fetchLeaderboard();
         }

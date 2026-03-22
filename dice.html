@@ -567,14 +567,17 @@
             currentRound = status.current_round || 0;
             currentState = state;
 
+            // 任何狀態下都處理 balances 廣播（重置餘額、退還押注等）
+            if (status.balances && status.balances[myName] !== undefined) {
+                myBalance = status.balances[myName];
+            }
+
             if (state === 'waiting') {
                 hideAllUI();
                 stopCountdown();
                 stopDiceAnimation();
-                // 若 broadcast 帶有 balances（重置此局退還押注），更新餘額
-                if (status.balances && status.balances[myName] !== undefined) {
-                    myBalance = status.balances[myName];
-                } else if (Object.keys(myBets).length > 0) {
+                // 若有未結算押注卻回到 waiting（可能是重置此局），且 broadcast 未帶餘額則查詢
+                if (!status.balances && Object.keys(myBets).length > 0) {
                     // 有未結算押注卻回到 waiting，可能是重置此局（postgres_changes fallback 無 balances）
                     sbClient.from('dice_players').select('balance').eq('player_name', myName).eq('room_id', roomId).single()
                         .then(({ data }) => { if (data) { myBalance = data.balance; document.getElementById('waiting-balance').innerText = myBalance; } });
@@ -1171,34 +1174,57 @@
                         </div>`;
                     }).join('');
             } else {
-                // Reconstruct from myBets
+                // No bets from server — fetch via RPC to get accurate payout data
                 const entries = Object.entries(myBets).filter(([, v]) => v > 0);
                 if (entries.length > 0) {
-                    betsContainer.innerHTML = '<p class="text-sm text-gold-300/60 font-bold mb-1">押注結果</p>' +
-                        entries.map(([key, amount]) => {
-                            let label = '';
-                            let isWin = false;
-                            if (key.startsWith('single_')) {
-                                const symId = parseInt(key.substring(7));
-                                const s = SYMBOLS[symId];
-                                label = s ? `${s.emoji} ${s.name}` : `#${symId}`;
-                                const count = symbolCounts[symId] || 0;
-                                isWin = count > 0 && !(isTriple && roomConfig.houseWinsOnTriple);
-                            } else if (key.startsWith('triple_')) {
-                                const symId = parseInt(key.substring(7));
-                                const s = SYMBOLS[symId];
-                                label = `圍骰 ${s ? s.emoji + s.emoji + s.emoji : ''}`;
-                                isWin = isTriple && diceResult[0] === symId;
-                            } else if (key.startsWith('any_triple_')) {
-                                label = '全圍 🎲🎲🎲';
-                                isWin = isTriple;
+                    betsContainer.innerHTML = '<p class="text-sm text-gold-300/60 font-bold mb-1">押注結果</p><p class="text-gold-300/40 text-xs text-center">載入中...</p>';
+                    // Async fetch actual bets with payout
+                    withRetry(() => sbClient.rpc('dice_get_my_result', {
+                        p_player_name: myName,
+                        p_room_id: roomId,
+                        p_round: currentRound
+                    }), 2).then(({ data: myResultData }) => {
+                        if (myResultData && myResultData.bets && myResultData.bets.length > 0) {
+                            betsContainer.innerHTML = '<p class="text-sm text-gold-300/60 font-bold mb-1">押注結果</p>' +
+                                myResultData.bets.map(b => {
+                                    let label = '';
+                                    if (b.bet_type === 'single') {
+                                        const s = SYMBOLS[b.symbol];
+                                        label = s ? `${s.emoji} ${s.name}` : `#${b.symbol}`;
+                                    } else if (b.bet_type === 'triple') {
+                                        const s = SYMBOLS[b.symbol];
+                                        label = s ? `圍骰 ${s.emoji}${s.emoji}${s.emoji}` : '圍骰';
+                                    } else {
+                                        label = '全圍 🎲🎲🎲';
+                                    }
+                                    const payout = b.payout || 0;
+                                    const isWin = payout > 0;
+                                    const winClass = isWin ? 'text-green-400' : 'text-red-400/70';
+                                    const winText = isWin ? `+${payout}` : `-${b.amount}`;
+                                    return `<div class="flex items-center justify-between px-4 py-2 rounded-xl bg-midnight-800/40 border border-gold-700/20">
+                                        <span class="text-gold-200 text-sm">${label} ($${b.amount})</span>
+                                        <span class="font-bold ${winClass}">${winText}</span>
+                                    </div>`;
+                                }).join('');
+                            // Update net and balance from accurate data
+                            const netVal = (myResultData.total_payout || 0) - (myResultData.total_bet || 0);
+                            const netEl = document.getElementById('resolved-net');
+                            if (netVal > 0) {
+                                netEl.className = 'text-3xl font-black text-green-400';
+                                netEl.innerText = `+${netVal}`;
+                            } else if (netVal < 0) {
+                                netEl.className = 'text-3xl font-black text-red-400';
+                                netEl.innerText = `${netVal}`;
+                            } else {
+                                netEl.className = 'text-3xl font-black text-gold-300';
+                                netEl.innerText = '0';
                             }
-                            const winClass = isWin ? 'text-green-400' : 'text-red-400/70';
-                            return `<div class="flex items-center justify-between px-4 py-2 rounded-xl bg-midnight-800/40 border border-gold-700/20">
-                                <span class="text-gold-200 text-sm">${label} ($${amount})</span>
-                                <span class="font-bold ${winClass}">${isWin ? 'WIN' : 'LOSE'}</span>
-                            </div>`;
-                        }).join('');
+                            if (myResultData.balance !== undefined) {
+                                myBalance = myResultData.balance;
+                                document.getElementById('resolved-balance').innerText = myBalance;
+                            }
+                        }
+                    });
                 } else {
                     betsContainer.innerHTML = '<p class="text-gold-300/50 text-center text-sm">本局未押注</p>';
                 }
