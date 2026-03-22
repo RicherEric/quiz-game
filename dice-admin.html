@@ -276,6 +276,60 @@
                             <div class="text-sm text-gold-400">$<span id="stat-amount-6">0</span></div>
                         </div>
                     </div>
+
+                    <!-- Triple bets stats -->
+                    <div id="triple-stats-section" class="hidden mt-4">
+                        <h4 class="text-lg font-bold text-purple-300 mb-2">指定圍骰</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" id="triple-stats-grid">
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="1">
+                                <div class="text-2xl">🐟🐟🐟</div>
+                                <div class="text-xs font-bold text-purple-200">魚圍骰</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-1">0</span> 注</div>
+                                <div class="text-sm text-gold-400">$<span id="stat-triple-amount-1">0</span></div>
+                            </div>
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="2">
+                                <div class="text-2xl">🦐🦐🦐</div>
+                                <div class="text-xs font-bold text-purple-200">蝦圍骰</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-2">0</span> 注</div>
+                                <div class="text-sm text-gold-400">$<span id="stat-triple-amount-2">0</span></div>
+                            </div>
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="3">
+                                <div class="text-2xl">🦀🦀🦀</div>
+                                <div class="text-xs font-bold text-purple-200">蟹圍骰</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-3">0</span> 注</div>
+                                <div class="text-sm text-gold-400">$<span id="stat-triple-amount-3">0</span></div>
+                            </div>
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="4">
+                                <div class="text-2xl">🐓🐓🐓</div>
+                                <div class="text-xs font-bold text-purple-200">雞圍骰</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-4">0</span> 注</div>
+                                <div class="text-sm text-gold-400">$<span id="stat-triple-amount-4">0</span></div>
+                            </div>
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="5">
+                                <div class="text-2xl">🍐🍐🍐</div>
+                                <div class="text-xs font-bold text-purple-200">葫蘆圍骰</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-5">0</span> 注</div>
+                                <div class="text-sm text-gold-400">$<span id="stat-triple-amount-5">0</span></div>
+                            </div>
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="6">
+                                <div class="text-2xl"><img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle"><img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle"><img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle"></div>
+                                <div class="text-xs font-bold text-purple-200">錢幣圍骰</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-6">0</span> 注</div>
+                                <div class="text-sm text-gold-400">$<span id="stat-triple-amount-6">0</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Any triple stats -->
+                    <div id="any-triple-stats-section" class="hidden mt-4">
+                        <h4 class="text-lg font-bold text-amber-300 mb-2">全圍</h4>
+                        <div class="bg-amber-900/40 rounded-xl p-4 border border-amber-500/30 text-center inline-block min-w-[140px]">
+                            <div class="text-2xl">🎲🎲🎲</div>
+                            <div class="text-xs font-bold text-amber-200">任意圍骰</div>
+                            <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-any-triple-count">0</span> 注</div>
+                            <div class="text-sm text-gold-400">$<span id="stat-any-triple-amount">0</span></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Betting Status (who has submitted bets) -->
@@ -1195,6 +1249,7 @@
 
         function renderBetStats(stats) {
             let totalPool = 0;
+            // Single bets
             for (let i = 1; i <= 6; i++) {
                 const key = 'single_' + i;
                 const info = stats[key] || { count: 0, total_amount: 0 };
@@ -1202,12 +1257,27 @@
                 document.getElementById('stat-amount-' + i).textContent = info.total_amount || 0;
                 totalPool += (info.total_amount || 0);
             }
-            // Also handle triple and any_triple bet types if present
-            for (const [key, info] of Object.entries(stats)) {
-                if (!key.startsWith('single_')) {
-                    totalPool += (info.total_amount || 0);
-                }
+            // Triple bets
+            const hasTriple = currentRoomSettings && currentRoomSettings.allow_triple_bet;
+            const tripleSection = document.getElementById('triple-stats-section');
+            tripleSection.classList.toggle('hidden', !hasTriple);
+            for (let i = 1; i <= 6; i++) {
+                const key = 'triple_' + i;
+                const info = stats[key] || { count: 0, total_amount: 0 };
+                document.getElementById('stat-triple-count-' + i).textContent = info.count || 0;
+                document.getElementById('stat-triple-amount-' + i).textContent = info.total_amount || 0;
+                totalPool += (info.total_amount || 0);
             }
+            // Any triple bets
+            const hasAnyTriple = currentRoomSettings && currentRoomSettings.allow_any_triple_bet;
+            const anyTripleSection = document.getElementById('any-triple-stats-section');
+            anyTripleSection.classList.toggle('hidden', !hasAnyTriple);
+            // any_triple uses symbol NULL → key is "any_triple_all" from RPC
+            const anyInfo = stats['any_triple_all'] || stats['any_triple_0'] || { count: 0, total_amount: 0 };
+            document.getElementById('stat-any-triple-count').textContent = anyInfo.count || 0;
+            document.getElementById('stat-any-triple-amount').textContent = anyInfo.total_amount || 0;
+            totalPool += (anyInfo.total_amount || 0);
+
             document.getElementById('total-bet-pool').textContent = totalPool;
         }
 
@@ -1215,7 +1285,11 @@
             for (let i = 1; i <= 6; i++) {
                 document.getElementById('stat-count-' + i).textContent = '0';
                 document.getElementById('stat-amount-' + i).textContent = '0';
+                document.getElementById('stat-triple-count-' + i).textContent = '0';
+                document.getElementById('stat-triple-amount-' + i).textContent = '0';
             }
+            document.getElementById('stat-any-triple-count').textContent = '0';
+            document.getElementById('stat-any-triple-amount').textContent = '0';
             document.getElementById('total-bet-pool').textContent = '0';
         }
 
