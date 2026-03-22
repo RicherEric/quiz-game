@@ -264,7 +264,7 @@
                             <div class="text-sm text-gold-400">$<span id="stat-amount-5">0</span></div>
                         </div>
                         <div class="bg-midnight-800/80 rounded-xl p-4 border border-amber-500/30 text-center" data-symbol="6">
-                            <div class="text-4xl mb-1">&#x1FA99;</div>
+                            <div class="text-4xl mb-1"><img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle"></div>
                             <div class="text-sm font-bold text-amber-300">錢幣</div>
                             <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-6">0</span> 注</div>
                             <div class="text-sm text-gold-400">$<span id="stat-amount-6">0</span></div>
@@ -386,7 +386,7 @@
                         <option value="3">&#x1F980; 蟹</option>
                         <option value="4">&#x1F413; 雞</option>
                         <option value="5">&#x1F350; 葫蘆</option>
-                        <option value="6">&#x1FA99; 錢幣</option>
+                        <option value="6">$ 錢幣</option>
                     </select>
                 </div>
                 <div>
@@ -397,7 +397,7 @@
                         <option value="3">&#x1F980; 蟹</option>
                         <option value="4">&#x1F413; 雞</option>
                         <option value="5">&#x1F350; 葫蘆</option>
-                        <option value="6">&#x1FA99; 錢幣</option>
+                        <option value="6">$ 錢幣</option>
                     </select>
                 </div>
                 <div>
@@ -408,7 +408,7 @@
                         <option value="3">&#x1F980; 蟹</option>
                         <option value="4">&#x1F413; 雞</option>
                         <option value="5">&#x1F350; 葫蘆</option>
-                        <option value="6">&#x1FA99; 錢幣</option>
+                        <option value="6">$ 錢幣</option>
                     </select>
                 </div>
             </div>
@@ -554,13 +554,14 @@
         const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
         // ===== Symbol Map =====
+        const COIN_IMG = '<img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle">';
         const SYMBOLS = {
             1: { name: '魚', emoji: '\u{1F41F}' },
             2: { name: '蝦', emoji: '\u{1F990}' },
             3: { name: '蟹', emoji: '\u{1F980}' },
             4: { name: '雞', emoji: '\u{1F413}' },
             5: { name: '葫蘆', emoji: '\u{1F350}' },
-            6: { name: '錢幣', emoji: '\u{1FA99}' }
+            6: { name: '錢幣', emoji: COIN_IMG }
         };
 
         const STATE_LABELS = {
@@ -1088,7 +1089,7 @@
         function updateManualDicePreview() {
             for (let i = 1; i <= 3; i++) {
                 const val = parseInt(document.getElementById('manual-dice-' + i).value);
-                document.getElementById('preview-dice-' + i).textContent = SYMBOLS[val].emoji;
+                document.getElementById('preview-dice-' + i).innerHTML = SYMBOLS[val].emoji;
             }
         }
 

@@ -191,7 +191,7 @@
             <div class="bg-midnight-900/60 p-4 rounded-2xl border border-gold-600/30 space-y-3">
                 <p class="text-sm text-gold-300/60 text-center font-bold">選擇籌碼</p>
                 <div id="chip-selector" class="flex justify-center gap-3 flex-wrap">
-                    <button onclick="selectChip(100)" class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200" data-chip="100">100</button>
+                    <button onclick="selectChip(100)" class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200 selected" data-chip="100">100</button>
                     <button onclick="selectChip(200)" class="chip-btn bg-teal-700/60 border-teal-500/40 text-teal-200" data-chip="200">200</button>
                     <button onclick="selectChip(500)" class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200" data-chip="500">500</button>
                 </div>
@@ -300,19 +300,20 @@
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
 
         // Symbol definitions
+        const COIN_IMG = '<img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle">';
         const SYMBOLS = {
             1: { name: '魚', emoji: '🐟' },
             2: { name: '蝦', emoji: '🦐' },
             3: { name: '蟹', emoji: '🦀' },
             4: { name: '雞', emoji: '🐓' },
             5: { name: '葫蘆', emoji: '🍐' },
-            6: { name: '錢幣', emoji: '🪙' }
+            6: { name: '錢幣', emoji: COIN_IMG }
         };
 
         // State
         let sbClient, myName = "", roomId = null, myBalance = 0;
         let currentRound = 0, currentState = 'waiting';
-        let selectedChip = 0;
+        let selectedChip = 100;
         let myBets = {}; // { "single_1": 200, "single_3": 500, "triple_4": 100, "any_triple_0": 100 }
         let pendingResult = null;
         let lastProcessedKey = '', pollInterval = null, qrToken = null;
@@ -562,7 +563,6 @@
                 }
                 // Reset bets for next round
                 myBets = {};
-                selectedChip = 0;
                 pendingResult = null;
             }
             else if (state === 'betting') {
@@ -570,7 +570,6 @@
                 stopDiceAnimation();
                 // Reset bets for new round
                 myBets = {};
-                selectedChip = 0;
                 pendingResult = null;
                 document.getElementById('betting-ui').classList.remove('hidden');
                 document.getElementById('betting-balance').innerText = myBalance;
@@ -578,6 +577,7 @@
                 renderSymbolGrid();
                 renderSpecialBets();
                 updateBettingUI();
+                syncChipUI();
                 startCountdown(roomConfig.bettingSeconds || 30);
             }
             else if (state === 'stopped') {
@@ -797,7 +797,11 @@
         // ========== CHIP SELECTION ==========
 
         function selectChip(amount) {
-            selectedChip = (selectedChip === amount) ? 0 : amount;
+            selectedChip = amount;
+            syncChipUI();
+        }
+
+        function syncChipUI() {
             document.querySelectorAll('#chip-selector .chip-btn').forEach(btn => {
                 const chipVal = parseInt(btn.dataset.chip);
                 btn.classList.toggle('selected', chipVal === selectedChip);
@@ -1009,7 +1013,7 @@
             diceAnimTimer = setInterval(() => {
                 for (let d = 1; d <= 3; d++) {
                     const el = document.getElementById(`dice-${d}`);
-                    el.textContent = symbolEmojis[Math.floor(Math.random() * 6)];
+                    el.innerHTML = symbolEmojis[Math.floor(Math.random() * 6)];
                     el.classList.remove('settled');
                 }
                 cycleCount++;
@@ -1034,7 +1038,7 @@
                 const el = document.getElementById(`dice-${d + 1}`);
                 setTimeout(() => {
                     const sym = SYMBOLS[result[d]];
-                    el.textContent = sym ? sym.emoji : '🎲';
+                    el.innerHTML = sym ? sym.emoji : '🎲';
                     el.classList.add('settled');
                 }, d * 300);
             }

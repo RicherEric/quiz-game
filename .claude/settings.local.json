@@ -10,7 +10,9 @@
       "Bash(curl -sI https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js)",
       "Bash(curl -sI https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js)",
       "Bash(curl -sI https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(xxd dice.html)",
+      "Bash(xxd dice-admin.html)"
     ]
   }
 }
