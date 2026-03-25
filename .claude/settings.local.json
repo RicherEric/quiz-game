@@ -16,7 +16,8 @@
       "Bash(node --check quiz-test.mjs)",
       "Bash(node --check lib/quiz/player.mjs)",
       "Bash(node --check lib/quiz/validators.mjs)",
-      "Bash(node --check lib/quiz/report.mjs)"
+      "Bash(node --check lib/quiz/report.mjs)",
+      "Bash(find D:quiz-game -name *.log -o -name test-report* -o -name *report*.html)"
     ]
   }
 }

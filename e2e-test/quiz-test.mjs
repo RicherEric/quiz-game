@@ -44,10 +44,6 @@ async function main() {
   const qrToken = await fetchQrToken();
   console.log(`  QR token loaded.`);
 
-  // Launch admin + test_viewer browsers
-  console.log('  Launching browsers (admin + test_viewer)...');
-  await launchBrowsers(qrToken);
-
   phaseEnd('0-setup');
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -93,6 +89,14 @@ async function main() {
   await admin.from('responses').delete().like('player_name', 'test_%');
   await admin.from('player_scores').update({ score: 0 }).like('player_name', 'test_%');
   console.log('  Edge case residual data cleaned.');
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Phase 1.55: Launch browsers AFTER edge cases
+  //   (test_viewer 的 index.html 會自動訂閱 realtime，若在 edge case 之前開啟，
+  //    EC8/EC9 更新 game_status 時會推送題目給 test_viewer)
+  // ══════════════════════════════════════════════════════════════════════════════
+  console.log('  Launching browsers (admin + test_viewer)...');
+  await launchBrowsers(qrToken);
 
   // ══════════════════════════════════════════════════════════════════════════════
   // Phase 1.6: Subscribe players to realtime (在 edge case 之後，避免收到測試狀態變更)

@@ -1255,6 +1255,7 @@
                         const img = document.createElement('img');
                         img.referrerPolicy = 'no-referrer';
                         img.crossOrigin = 'anonymous';
+                        img.loading = 'lazy';
                         img.className = 'rounded-xl max-h-80 cursor-zoom-in';
                         img.onerror = function() {
                             this.onerror = null;
@@ -1276,13 +1277,14 @@
                             div.className = 'flex justify-center';
                             const iframe = document.createElement('iframe');
                             iframe.src = `https://www.youtube.com/embed/${ytId}`;
+                            iframe.loading = 'lazy';
                             iframe.className = 'rounded-xl w-full max-w-2xl aspect-video';
                             iframe.frameBorder = '0'; iframe.allowFullscreen = true;
                             div.appendChild(iframe);
                             videosCol.appendChild(div);
                         } else {
                             const vid = document.createElement('video');
-                            vid.src = url; vid.className = 'rounded-xl max-h-80'; vid.controls = true;
+                            vid.src = url; vid.className = 'rounded-xl max-h-80'; vid.controls = true; vid.preload = 'none';
                             videosCol.appendChild(vid);
                         }
                     });
@@ -1541,6 +1543,13 @@
                     fetchCurrentQuestionStats();
                     switchTab('tab-stats');
                 }
+                // scoring/revealed/waiting 時暫停 stats polling，減少不必要的 DB 查詢
+                // playing 時恢復 polling（需要即時更新提交進度）
+                if (newState === 'playing') {
+                    startStatsPolling();
+                } else {
+                    stopStatsPolling();
+                }
                 // scoring 時自動切到排行榜
                 if (newState === 'scoring') {
                     fetchLeaderboard();
@@ -1593,10 +1602,26 @@
                 }
             }
 
-            // 將正確答案寫入資料庫，讓玩家端可以讀取
+            // 優先完成 DB 操作和狀態廣播（不讓媒體載入阻塞關鍵路徑）
             await sbClient.from('questions').update({ answer: selectedAnswer }).eq('id', qId);
             q.answer = selectedAnswer;
 
+            // 標記答案已公布
+            answerRevealed = true;
+
+            // 切換狀態為 revealed，通知玩家端顯示答案顏色（先廣播再載入媒體）
+            await changeState('revealed');
+
+            // 隱藏公布答案按鈕（已公布）
+            document.getElementById('btn-reveal').classList.add('hidden');
+
+            // 確保停留在作答監控頁面
+            switchTab('tab-stats');
+
+            // 刷新統計（顯示各選項人數）
+            fetchCurrentQuestionStats();
+
+            // DB 操作完成後，再載入答案媒體（不阻塞狀態推播）
             const container = document.getElementById('answer-reveal-display');
             const imagesRow = document.getElementById('answer-reveal-images-row');
             const videosCol = document.getElementById('answer-reveal-videos-col');
@@ -1616,6 +1641,7 @@
                     const img = document.createElement('img');
                     img.referrerPolicy = 'no-referrer';
                     img.crossOrigin = 'anonymous';
+                    img.loading = 'lazy';
                     img.className = 'rounded-xl max-h-80 cursor-zoom-in';
                     img.src = url;
                     img.onclick = function() { openLightbox(this.src); };
@@ -1632,13 +1658,14 @@
                         div.className = 'aspect-video w-full max-w-2xl rounded-2xl overflow-hidden border border-green-500/30 shadow-lg';
                         const iframe = document.createElement('iframe');
                         iframe.src = `https://www.youtube.com/embed/${ytId}`;
+                        iframe.loading = 'lazy';
                         iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
                         iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
                         div.appendChild(iframe);
                         videosCol.appendChild(div);
                     } else {
                         const vid = document.createElement('video');
-                        vid.src = url; vid.controls = true;
+                        vid.src = url; vid.controls = true; vid.preload = 'none';
                         vid.className = 'max-h-60 rounded-2xl border border-green-500/30 shadow-lg w-full max-w-2xl';
                         videosCol.appendChild(vid);
                     }
@@ -1659,19 +1686,6 @@
             }
 
             container.classList.remove('hidden');
-
-            // 標記答案已公布，重新渲染玩家列表以顯示選項顏色
-            answerRevealed = true;
-            fetchCurrentQuestionStats();
-
-            // 切換狀態為 revealed，通知玩家端顯示答案顏色
-            changeState('revealed');
-
-            // 隱藏公布答案按鈕（已公布）
-            document.getElementById('btn-reveal').classList.add('hidden');
-
-            // 確保停留在作答監控頁面
-            switchTab('tab-stats');
         }
 
         // 正確答案選擇
@@ -1742,6 +1756,16 @@
 
         // 下一題：自動選擇下一題，切回 waiting
         async function nextQuestion() {
+            // 先銷毀舊題的答案媒體（YouTube iframe 等），釋放網路連線和 CPU
+            // 避免新舊媒體同時載入，耗盡瀏覽器連線池導致 Supabase API 被阻塞
+            document.getElementById('answer-reveal-videos-col').innerHTML = '';
+            document.getElementById('answer-reveal-images-row').innerHTML = '';
+            document.getElementById('answer-reveal-display').classList.add('hidden');
+            document.getElementById('media-videos-col').innerHTML = '';
+            document.getElementById('media-images-row').innerHTML = '';
+            document.getElementById('media-display').classList.add('hidden');
+            answerRevealed = false;
+
             const selectEl = document.getElementById('q-selector');
             const currentIdx = selectEl.selectedIndex;
             if (currentIdx < selectEl.options.length - 1) {
