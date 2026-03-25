@@ -64,52 +64,55 @@ export async function runEdgeCaseTests(qrToken, questions) {
     if (!error) await admin.from('players').delete().eq('name', fakeName);
   }
 
-  // ── Test 3: Submit with invalid QR token ──
+  // ── Test 3: Submit by non-existent player ──
   {
     const q = questions[0];
+    const fakeName = `test_edge_nonexist_${Date.now()}`;
     const t0 = now();
     const { data, error } = await edgeClient.rpc('submit_response', {
-      p_player_name: testName,
+      p_player_name: fakeName,
       p_question_id: q.id,
       p_choice: 1,
       p_response_time_ms: 5000,
-      p_qr_token: 'invalid-token-12345',
+      p_qr_token: qrToken,
     });
     const dur = now() - t0;
     const pass = !!error;
     stats.edgeCases.push({
-      name: 'submit-invalid-qr',
-      description: '用無效 QR token 提交答案應被拒絕',
+      name: 'submit-nonexistent-player',
+      description: '未加入的玩家提交答案應被拒絕',
       expected: 'error (Not a verified player)',
       actual: error ? `rejected: ${error.message}` : `allowed (unexpected!)`,
       pass,
     });
-    recordStep('edge-case', 'submit-invalid-qr', '', dur, pass);
-    console.log(`  [EC3] Submit with bad QR: ${pass ? 'PASS' : 'FAIL'} (${fmtMs(dur)})`);
+    recordStep('edge-case', 'submit-nonexistent-player', '', dur, pass);
+    console.log(`  [EC3] Submit by non-existent player: ${pass ? 'PASS' : 'FAIL'} (${fmtMs(dur)})`);
+    // Clean up if wrongly inserted
+    if (!error) await admin.from('responses').delete().eq('player_name', fakeName);
   }
 
-  // ── Test 4: Submit with null QR token ──
+  // ── Test 4: Submit with null player name ──
   {
     const q = questions[0];
     const t0 = now();
     const { data, error } = await edgeClient.rpc('submit_response', {
-      p_player_name: testName,
+      p_player_name: null,
       p_question_id: q.id,
       p_choice: 1,
       p_response_time_ms: 5000,
-      p_qr_token: null,
+      p_qr_token: qrToken,
     });
     const dur = now() - t0;
     const pass = !!error;
     stats.edgeCases.push({
-      name: 'submit-null-qr',
-      description: '不帶 QR token 提交答案應被拒絕',
+      name: 'submit-null-player',
+      description: '空玩家名稱提交答案應被拒絕',
       expected: 'error (Not a verified player)',
       actual: error ? `rejected: ${error.message}` : `allowed (unexpected!)`,
       pass,
     });
-    recordStep('edge-case', 'submit-null-qr', '', dur, pass);
-    console.log(`  [EC4] Submit with null QR: ${pass ? 'PASS' : 'FAIL'} (${fmtMs(dur)})`);
+    recordStep('edge-case', 'submit-null-player', '', dur, pass);
+    console.log(`  [EC4] Submit with null player: ${pass ? 'PASS' : 'FAIL'} (${fmtMs(dur)})`);
   }
 
   // ── Test 5: Double answer submission (same player, same question) ──
@@ -573,7 +576,7 @@ export function evaluatePassFail(questions) {
 
   // Criterion 7: Edge case critical tests pass
   const criticalEdgeCases = stats.edgeCases.filter(e =>
-    ['duplicate-player-name', 'invalid-qr-token', 'submit-invalid-qr', 'submit-null-qr'].includes(e.name)
+    ['duplicate-player-name', 'invalid-qr-token', 'submit-nonexistent-player', 'submit-null-player'].includes(e.name)
   );
   const ecAllPass = criticalEdgeCases.length > 0 && criticalEdgeCases.every(e => e.pass);
   stats.passFail.push({
@@ -637,6 +640,26 @@ export function evaluatePassFail(questions) {
     threshold: '< 2000ms',
     actual: stats.playerFetchTimes.length > 0 ? fmtMs(pfP95) : 'N/A',
     pass: stats.playerFetchTimes.length === 0 || pfP95 < 2000,
+  });
+
+  // Criterion 13: Player question preload p95 < 3000ms
+  const preloadTimes = stats.preloadTimes || [];
+  const plP95 = preloadTimes.length > 0 ? percentile(preloadTimes, 95) : 0;
+  stats.passFail.push({
+    criterion: 'Player question preload p95 < 3000ms',
+    threshold: '< 3000ms',
+    actual: preloadTimes.length > 0 ? fmtMs(plP95) : 'N/A',
+    pass: preloadTimes.length === 0 || plP95 < 3000,
+  });
+
+  // Criterion 14: Player revealed-state response fetch p95 < 3000ms
+  const revFetchTimes = stats.revealedFetchTimes || [];
+  const rvP95 = revFetchTimes.length > 0 ? percentile(revFetchTimes, 95) : 0;
+  stats.passFail.push({
+    criterion: 'Player revealed fetch (responses) p95 < 3000ms',
+    threshold: '< 3000ms',
+    actual: revFetchTimes.length > 0 ? fmtMs(rvP95) : 'N/A',
+    pass: revFetchTimes.length === 0 || rvP95 < 3000,
   });
 
   const passed = stats.passFail.filter(p => p.pass).length;

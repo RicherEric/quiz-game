@@ -184,7 +184,9 @@ CREATE OR REPLACE FUNCTION submit_response(
 )
 RETURNS json AS $$
 BEGIN
-  IF p_qr_token IS NULL OR NOT EXISTS (SELECT 1 FROM qr_tokens WHERE token = p_qr_token) THEN
+  -- 驗證玩家身份：確認已通過 join_via_qr 加入（players.name 有 UNIQUE 索引）
+  -- 比每次查 qr_tokens 更高效：join 時已驗證 token，不需重複查
+  IF NOT EXISTS (SELECT 1 FROM players WHERE name = p_player_name) THEN
     RAISE EXCEPTION 'Not a verified player';
   END IF;
 

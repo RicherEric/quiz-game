@@ -1745,16 +1745,24 @@
                 selectEl.selectedIndex = currentIdx + 1;
                 selectEl.dispatchEvent(new Event('change'));
             }
-            // 切回 waiting
+            // 切回 waiting（使用 Date.now() 確保 dedup key 唯一）
             const qId = selectEl.value;
             const { data, error } = await sbClient.from('game_status').update({
                 current_q_id: parseInt(qId),
                 state: 'waiting',
-                start_time: 0,
+                start_time: Date.now(),
                 current_group_id: currentGroupId
             }).eq('id', 1).select();
 
             if (!error && data && data.length > 0) {
+                // 透過 broadcast 即時推送（與 changeState 一致）
+                if (gameStateBroadcastChannel) {
+                    gameStateBroadcastChannel.send({
+                        type: 'broadcast',
+                        event: 'state-change',
+                        payload: data[0]
+                    });
+                }
                 updateControlButtons('waiting');
                 switchTab('tab-stats');
             }
@@ -1777,19 +1785,33 @@
                     const { data, error } = await sbClient.from('game_status').update({
                         current_q_id: parseInt(qId),
                         state: 'waiting',
-                        start_time: 0,
+                        start_time: Date.now(),
                         current_group_id: currentGroupId
                     }).eq('id', 1).select();
                     if (!error && data && data.length > 0) {
+                        if (gameStateBroadcastChannel) {
+                            gameStateBroadcastChannel.send({
+                                type: 'broadcast',
+                                event: 'state-change',
+                                payload: data[0]
+                            });
+                        }
                         updateControlButtons('waiting');
                     }
                 } else {
                     // 踢回首頁：發送 dismissed 狀態
-                    await sbClient.from('game_status').update({
+                    const { data, error } = await sbClient.from('game_status').update({
                         state: 'dismissed',
-                        start_time: 0,
+                        start_time: Date.now(),
                         current_group_id: currentGroupId
                     }).eq('id', 1).select();
+                    if (!error && data && data.length > 0 && gameStateBroadcastChannel) {
+                        gameStateBroadcastChannel.send({
+                            type: 'broadcast',
+                            event: 'state-change',
+                            payload: data[0]
+                        });
+                    }
                 }
             }, 1500);
         }

@@ -83,6 +83,11 @@ export function printReport(questions) {
     const bcTotal = stats.scoreBroadcastHits + stats.scoreBroadcastMisses;
     if (bcTotal > 0) console.log(`    Score broadcast:    ${stats.scoreBroadcastHits}/${bcTotal} hit (${Math.round(stats.scoreBroadcastHits / bcTotal * 100)}%), ${stats.scoreBroadcastMisses} fallback RPC`);
     if (pfTimes.length > 0) console.log(`    Player fetch (fb):  p50=${fmtMs(percentile(pfTimes, 50))}, p95=${fmtMs(percentile(pfTimes, 95))}, max=${fmtMs(Math.max(...pfTimes))}`);
+    const plTimes = stats.preloadTimes || [];
+    if (plTimes.length > 0) console.log(`    Question preload:   p50=${fmtMs(percentile(plTimes, 50))}, p95=${fmtMs(percentile(plTimes, 95))}, max=${fmtMs(Math.max(...plTimes))}`);
+    const rvTimes = stats.revealedFetchTimes || [];
+    if (rvTimes.length > 0) console.log(`    Revealed fetch:     p50=${fmtMs(percentile(rvTimes, 50))}, p95=${fmtMs(percentile(rvTimes, 95))}, max=${fmtMs(Math.max(...rvTimes))}`);
+    if (stats.pollingCount) console.log(`    Polling queries:    ${stats.pollingCount} total during test`);
   }
 
   // Realtime propagation

@@ -12,7 +12,11 @@
       "Bash(curl -sI https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js)",
       "Bash(head:*)",
       "Bash(xxd dice.html)",
-      "Bash(xxd dice-admin.html)"
+      "Bash(xxd dice-admin.html)",
+      "Bash(node --check quiz-test.mjs)",
+      "Bash(node --check lib/quiz/player.mjs)",
+      "Bash(node --check lib/quiz/validators.mjs)",
+      "Bash(node --check lib/quiz/report.mjs)"
     ]
   }
 }
