@@ -1313,23 +1313,21 @@
             gameStateBroadcastChannel.subscribe();
 
             // 即時訂閱：玩家提交答案、新玩家加入、分數更新時立刻刷新
+            // 使用 debounce 合併高頻事件（70 個 INSERT → 1 次 fetch）
             adminChannel = sbClient.channel('admin-realtime')
                 .on('postgres_changes', {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'responses'
                 }, () => {
-                    fetchCurrentQuestionStats();
+                    debouncedFetchStats();
                 })
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
                     table: 'players'
                 }, () => {
-                    _playersCacheTime = 0; // 清除快取，強制下次重新查詢
-                    fetchPlayerList();
-                    fetchCurrentQuestionStats();
-                    fetchLeaderboard();
+                    debouncedPlayerChange();
                 })
                 .subscribe((status) => {
                     console.log("Admin 即時訂閱狀態:", status);
@@ -1819,6 +1817,24 @@
             }, 1500);
         }
 
+        // Debounce 工具：高頻事件合併為單次執行（如 70 個 INSERT 事件 → 1 次 fetch）
+        function debounce(fn, delay) {
+            let timer = null;
+            return function (...args) {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => { timer = null; fn.apply(this, args); }, delay);
+            };
+        }
+
+        // debounced 版本：responses INSERT 和 players 變更各自合併
+        const debouncedFetchStats = debounce(() => fetchCurrentQuestionStats(), 300);
+        const debouncedPlayerChange = debounce(() => {
+            _playersCacheTime = 0;
+            fetchPlayerList();
+            fetchCurrentQuestionStats();
+            fetchLeaderboard();
+        }, 500);
+
         // Players 快取機制（2 秒 TTL），減少重複查詢
         let _playersCache = null;
         let _playersCacheTime = 0;
@@ -1831,8 +1847,14 @@
             return _playersCache;
         }
 
-        // 讀取當前題目的作答統計 + 提交狀況
+        // 讀取當前題目的作答統計 + 提交狀況（加 in-flight guard 防止並發）
+        let _fetchingStats = false;
         async function fetchCurrentQuestionStats() {
+            if (_fetchingStats) return;
+            _fetchingStats = true;
+            try { await _fetchCurrentQuestionStatsImpl(); } finally { _fetchingStats = false; }
+        }
+        async function _fetchCurrentQuestionStatsImpl() {
             const qId = document.getElementById('q-selector').value;
             if (!qId) return;
 
@@ -1924,8 +1946,14 @@
             }
         }
 
-        // 讀取總排行榜
+        // 讀取總排行榜（加 in-flight guard 防止並發）
+        let _fetchingLeaderboard = false;
         async function fetchLeaderboard() {
+            if (_fetchingLeaderboard) return;
+            _fetchingLeaderboard = true;
+            try { await _fetchLeaderboardImpl(); } finally { _fetchingLeaderboard = false; }
+        }
+        async function _fetchLeaderboardImpl() {
             // 從 player_scores 取得該題組的排行榜
             const { data: scores } = await sbClient.from('player_scores')
                 .select('player_name, score')

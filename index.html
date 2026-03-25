@@ -522,13 +522,14 @@
                 const correctAnswer = currentQ ? currentQ.answer : null;
                 const myChoice = currentSelection;
 
-                // 取得各選項作答人數
+                // 取得各選項作答人數（使用 server-side 聚合 RPC，避免 70 人各拉全表）
                 let optCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
-                const { data: revResponses } = await withRetry(() => sbClient.from('responses').select('choice').eq('question_id', status.current_q_id), 1);
+                const { data: countData } = await withRetry(() => sbClient.rpc('get_response_counts', { p_question_id: status.current_q_id }), 1);
                 if (myVersion !== stateVersion) return; // 已被更新的狀態取代，放棄
-                if (revResponses) {
-                    revResponses.forEach(r => {
-                        if (optCounts[r.choice] !== undefined) optCounts[r.choice]++;
+                if (countData) {
+                    Object.entries(countData).forEach(([choice, cnt]) => {
+                        const key = parseInt(choice);
+                        if (optCounts[key] !== undefined) optCounts[key] = cnt;
                     });
                 }
 
