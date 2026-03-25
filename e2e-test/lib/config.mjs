@@ -38,7 +38,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ADMIN_PASSWORD) {
   process.exit(1);
 }
 
-export const NUM_PLAYERS = 100;
+export const NUM_PLAYERS = 70;
 export const ANSWER_TIMEOUT_MS = 30000;  // Admin waits up to 30s for all players to answer
 
 // ─── Dice Constants ─────────────────────────────────────────────────────────

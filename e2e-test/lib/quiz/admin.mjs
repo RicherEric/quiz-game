@@ -1,11 +1,12 @@
 /**
- * Admin Supabase operations + browser automation (Playwright clicks).
+ * Admin Supabase operations.
+ * Admin browser is launched automatically; operator clicks buttons manually.
+ * Test waits for state changes by polling game_status.
  */
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY, ADMIN_USERNAME, ADMIN_PASSWORD, getGameGroupId, setGameGroupId } from '../config.mjs';
 import { sleep, now, fmtMs, withRetry } from '../helpers.mjs';
 import { recordStep, recordError } from '../timing.mjs';
-import { getAdminPage } from '../browser.mjs';
 
 // ─── Supabase Client Factory ───────────────────────────────────────────────────
 
@@ -19,110 +20,59 @@ export function newClient() {
 
 export const admin = newClient();
 
-// ─── Admin Browser Automation ──────────────────────────────────────────────────
+// ─── Wait for Admin to change game state (polling) ──────────────────────────────
 
-export async function adminSelectQuestion(questionId) {
-  const adminPage = getAdminPage();
-  // Wait for the dropdown to be populated with actual question options (not placeholder)
-  await adminPage.waitForFunction(
-    (qId) => {
-      const sel = document.getElementById('q-selector');
-      if (!sel) return false;
-      // Check that the specific question option exists
-      return Array.from(sel.options).some(o => o.value === String(qId));
-    },
-    questionId,
-    { timeout: 15000 }
-  );
-  await adminPage.selectOption('#q-selector', String(questionId));
-  await sleep(300);
+/**
+ * Poll game_status until the expected state is reached.
+ * Used to wait for manual admin actions.
+ * @param {string} expectedState - The state to wait for
+ * @param {object} [opts]
+ * @param {number} [opts.timeoutMs=300000] - Max wait time (default 5 min)
+ * @param {number} [opts.pollMs=500] - Poll interval
+ * @param {number|null} [opts.expectedQId] - If set, also check current_q_id matches
+ * @returns {{ durationMs: number, sentAt: number, state: string, currentQId: number }}
+ */
+export async function waitForState(expectedState, opts = {}) {
+  const { timeoutMs = 300000, pollMs = 500, expectedQId = null } = opts;
+  const t0 = now();
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const { data, error } = await admin
+      .from('game_status')
+      .select('state, current_q_id, start_time')
+      .eq('id', 1)
+      .single();
+
+    if (!error && data && data.state === expectedState) {
+      if (expectedQId === null || data.current_q_id === expectedQId) {
+        const dur = now() - t0;
+        recordStep('admin-wait', `state->${expectedState}`, `q=${data.current_q_id}`, dur);
+        return {
+          durationMs: dur,
+          sentAt: data.start_time || Date.now(),
+          state: data.state,
+          currentQId: data.current_q_id,
+        };
+      }
+    }
+    await sleep(pollMs);
+  }
+
+  throw new Error(`Timeout waiting for state="${expectedState}" (waited ${timeoutMs}ms)`);
 }
 
-export async function adminClickStart() {
-  const adminPage = getAdminPage();
-  const sentAt = Date.now();
-  const t0 = now();
-  await adminPage.click('#btn-start');
-  await adminPage.waitForFunction(
-    () => document.getElementById('current-state-label')?.innerText?.includes('Playing'),
-    { timeout: 10000 }
-  );
-  const dur = now() - t0;
-  recordStep('admin-browser', 'click-start', '', dur);
-  return { durationMs: dur, sentAt };
-}
-
-export async function adminClickStop() {
-  const adminPage = getAdminPage();
-  adminPage.once('dialog', dialog => dialog.accept());
-  const sentAt = Date.now();
-  const t0 = now();
-  await adminPage.click('#btn-stop');
-  await adminPage.waitForFunction(
-    () => document.getElementById('current-state-label')?.innerText?.includes('Stopped'),
-    { timeout: 10000 }
-  );
-  const dur = now() - t0;
-  recordStep('admin-browser', 'click-stop', '', dur);
-  return { durationMs: dur, sentAt };
-}
-
-export async function adminClickReveal() {
-  const adminPage = getAdminPage();
-  const sentAt = Date.now();
-  const t0 = now();
-  await adminPage.click('#btn-reveal');
-  await adminPage.waitForFunction(
-    () => document.getElementById('current-state-label')?.innerText?.includes('Revealed'),
-    { timeout: 10000 }
-  );
-  const dur = now() - t0;
-  recordStep('admin-browser', 'click-reveal', '', dur);
-  return { durationMs: dur, sentAt };
-}
-
-export async function adminClickScore() {
-  const adminPage = getAdminPage();
-  const sentAt = Date.now();
-  const t0 = now();
-  await adminPage.click('#btn-score');
-  await adminPage.waitForFunction(
-    () => document.getElementById('current-state-label')?.innerText?.includes('Scoring'),
-    { timeout: 30000 }
-  );
-  const dur = now() - t0;
-  recordStep('admin-browser', 'click-score', '', dur);
-  return { durationMs: dur, sentAt };
-}
-
-export async function adminClickNext() {
-  const adminPage = getAdminPage();
-  const sentAt = Date.now();
-  const t0 = now();
-  await adminPage.click('#btn-next');
-  await adminPage.waitForFunction(
-    () => document.getElementById('current-state-label')?.innerText?.includes('Waiting'),
-    { timeout: 10000 }
-  );
-  const dur = now() - t0;
-  recordStep('admin-browser', 'click-next', '', dur);
-  return { durationMs: dur, sentAt };
-}
-
-export async function adminClickEnd() {
-  const adminPage = getAdminPage();
-  adminPage.on('dialog', dialog => dialog.dismiss());
-  const sentAt = Date.now();
-  const t0 = now();
-  await adminPage.click('#btn-end');
-  await adminPage.waitForFunction(
-    () => document.getElementById('current-state-label')?.innerText?.includes('Ended'),
-    { timeout: 10000 }
-  );
-  const dur = now() - t0;
-  adminPage.removeAllListeners('dialog');
-  recordStep('admin-browser', 'click-end', '', dur);
-  return { durationMs: dur, sentAt };
+/**
+ * Get current game state (single poll).
+ */
+export async function getCurrentState() {
+  const { data, error } = await admin
+    .from('game_status')
+    .select('state, current_q_id, start_time, current_group_id')
+    .eq('id', 1)
+    .single();
+  if (error) throw new Error(`Failed to fetch game_status: ${error.message}`);
+  return data;
 }
 
 // ─── Admin Supabase Operations ─────────────────────────────────────────────────

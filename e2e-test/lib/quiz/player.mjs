@@ -118,7 +118,7 @@ export function createPlayer(index, qrToken) {
       return pendingScores[questionId] || null;
     },
 
-    async answer(questionId) {
+    async answer(questionId, isAborted) {
       initQStats(questionId);
       const qs = stats.perQuestion[questionId];
 
@@ -128,7 +128,9 @@ export function createPlayer(index, qrToken) {
       // Random thinking time 1-12s
       const thinkTime = randomInt(1000, 12000);
       await sleep(thinkTime);
+      if (isAborted?.()) { qs.skipped++; return; }
       await randomSleep(200, 800);
+      if (isAborted?.()) { qs.skipped++; return; }
 
       const choice = weightedChoice();
       const responseTimeMs = thinkTime + randomInt(200, 800);

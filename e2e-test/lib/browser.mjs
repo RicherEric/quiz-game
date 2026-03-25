@@ -1,18 +1,18 @@
 /**
  * HTTP server + browser launch/close for monitoring.
+ * Both admin and test_viewer browsers are launched automatically.
  */
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
-import { SITE_URL, ADMIN_USERNAME, ADMIN_PASSWORD, E2E_DIR } from './config.mjs';
-import { sleep } from './helpers.mjs';
+import { SITE_URL, E2E_DIR } from './config.mjs';
 
 let httpServer = null;
 let serverPort = 0;
-let userBrowser = null;
 let adminBrowser = null;
 let _adminPage = null;
+let userBrowser = null;
 let _userPage = null;
 let diceUserBrowser = null;
 let diceAdminBrowser = null;
@@ -77,6 +77,24 @@ export async function launchBrowsers(qrToken) {
     baseUrl = `http://localhost:${port}`;
   }
 
+  // ── Admin browser: desktop viewport, login via admin-home then navigate ──
+  adminBrowser = await chromium.launch({ headless: false });
+  const adminCtx = await adminBrowser.newContext({
+    viewport: { width: 1440, height: 900 },
+  });
+  _adminPage = await adminCtx.newPage();
+  await _adminPage.goto(`${baseUrl}/admin-home.html`);
+  const { ADMIN_USERNAME, ADMIN_PASSWORD } = await import('./config.mjs');
+  await _adminPage.fill('#login-username', ADMIN_USERNAME);
+  await _adminPage.fill('#login-password', ADMIN_PASSWORD);
+  await _adminPage.click('button[onclick="doLogin()"]');
+  await _adminPage.waitForSelector('#home-panel:not(.hidden)', { timeout: 10000 });
+  await _adminPage.goto(`${baseUrl}/admin.html`);
+  await _adminPage.waitForSelector('#admin-panel:not(.hidden)', { timeout: 10000 });
+  // Auto-accept all confirm/alert dialogs so manual clicks work in Playwright
+  _adminPage.on('dialog', dialog => dialog.accept());
+  console.log('  Admin browser opened (logged in)');
+
   // ── User browser: mobile viewport, stays open throughout ──
   userBrowser = await chromium.launch({ headless: false });
   const userCtx = await userBrowser.newContext({
@@ -88,25 +106,6 @@ export async function launchBrowsers(qrToken) {
   await _userPage.click('button[onclick="join()"]');
   await _userPage.waitForSelector('#waiting-ui:not(.hidden)', { timeout: 10000 });
   console.log('  User browser opened (test_viewer joined)');
-
-  // ── Admin browser: desktop viewport, real-time monitoring ──
-  adminBrowser = await chromium.launch({ headless: false });
-  const adminCtx = await adminBrowser.newContext({
-    viewport: { width: 1440, height: 900 },
-  });
-  _adminPage = await adminCtx.newPage();
-  await _adminPage.goto(`${baseUrl}/admin-home.html`);
-  await _adminPage.fill('#login-username', ADMIN_USERNAME);
-  await _adminPage.fill('#login-password', ADMIN_PASSWORD);
-  await _adminPage.click('button[onclick="doLogin()"]');
-  await _adminPage.waitForSelector('#home-panel:not(.hidden)', { timeout: 10000 });
-  // Click "問答遊戲" card to navigate to quiz admin
-  await _adminPage.click('a[href="admin.html"]');
-  await _adminPage.waitForSelector('#admin-panel:not(.hidden)', { timeout: 10000 });
-  // Click "作答監控" tab
-  await _adminPage.click('#btn-tab-stats');
-  await _adminPage.waitForSelector('#tab-stats:not(.hidden)', { timeout: 5000 });
-  console.log('  Admin browser opened (logged in, 作答監控)');
 }
 
 export async function launchDiceBrowsers(qrToken) {
@@ -142,6 +141,7 @@ export async function launchDiceBrowsers(qrToken) {
   });
   _diceAdminPage = await adminCtx.newPage();
   await _diceAdminPage.goto(`${baseUrl}/admin-home.html`);
+  const { ADMIN_USERNAME, ADMIN_PASSWORD } = await import('./config.mjs');
   await _diceAdminPage.fill('#login-username', ADMIN_USERNAME);
   await _diceAdminPage.fill('#login-password', ADMIN_PASSWORD);
   await _diceAdminPage.click('button[onclick="doLogin()"]');
@@ -153,8 +153,8 @@ export async function launchDiceBrowsers(qrToken) {
 }
 
 export async function closeBrowsers() {
-  if (userBrowser) { try { await userBrowser.close(); } catch {} }
   if (adminBrowser) { try { await adminBrowser.close(); } catch {} }
+  if (userBrowser) { try { await userBrowser.close(); } catch {} }
   if (diceUserBrowser) { try { await diceUserBrowser.close(); } catch {} }
   if (diceAdminBrowser) { try { await diceAdminBrowser.close(); } catch {} }
   if (httpServer) { httpServer.close(); }

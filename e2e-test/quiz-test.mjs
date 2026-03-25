@@ -1,25 +1,25 @@
 /**
- * E2E Load Test: 100 Concurrent Players + 1 Admin
+ * E2E Load Test: 70 Concurrent Players + Admin Browser + 1 test_viewer
  *
- * Simulates a complete quiz game session with detailed timing:
- * - 1 admin controls the game flow (state transitions + scoring via RPC)
- * - 100 players join, listen for state changes via Realtime, and submit answers
- * - Measures every step: join, realtime propagation, answer submission,
- *   scoring RPC, leaderboard fetch, state transitions
- * - Generates an HTML report with SVG timeline & bar charts
- * - Opens a player browser (stays open) and admin browser (real-time monitoring)
+ * Admin browser is launched automatically (logged in, navigated to admin.html).
+ * You operate the admin page manually; the test waits for each state change,
+ * then triggers player actions automatically.
  *
- * Usage: node load-test.mjs
+ * Flow per question:
+ *   1. Console prompts you to perform an admin action
+ *   2. Test polls game_status until the expected state is reached
+ *   3. Players respond automatically (answer, fetch scores, etc.)
+ *
+ * Usage: node quiz-test.mjs
  */
 
-import { NUM_PLAYERS, ANSWER_TIMEOUT_MS, ADMIN_USERNAME, ADMIN_PASSWORD } from './lib/config.mjs';
+import { NUM_PLAYERS, ANSWER_TIMEOUT_MS } from './lib/config.mjs';
 import { sleep, now, fmtMs, percentile, staggeredAll } from './lib/helpers.mjs';
 import { timing, stats, initQStats, recordStep, recordError, phaseStart, phaseEnd } from './lib/timing.mjs';
-import { launchBrowsers, closeBrowsers, getAdminPage, getUserPage } from './lib/browser.mjs';
+import { launchBrowsers, closeBrowsers, getUserPage } from './lib/browser.mjs';
 import {
   admin, adminLogin, cleanTestData, fetchQrToken, fetchQuestions,
-  adminSelectQuestion, adminClickStart, adminClickStop, adminClickReveal,
-  adminClickScore, adminClickNext, adminClickEnd,
+  waitForState, getCurrentState,
   fetchResponseCounts, fetchLeaderboard, fetchPlayerStats,
 } from './lib/quiz/admin.mjs';
 import { createPlayer } from './lib/quiz/player.mjs';
@@ -29,7 +29,7 @@ import { printReport, generateHtmlReport } from './lib/quiz/report.mjs';
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('\n========== E2E Load Test: 100 Players + Admin (Detailed Timing) ==========\n');
+  console.log(`\n========== E2E Load Test: ${NUM_PLAYERS} Players + Admin Browser (Detailed Timing) ==========\n`);
 
   timing.testStartMs = Date.now();
 
@@ -44,8 +44,8 @@ async function main() {
   const qrToken = await fetchQrToken();
   console.log(`  QR token loaded.`);
 
-  // Launch browser monitors (user page + admin dashboard)
-  console.log('  Launching browser monitors...');
+  // Launch admin + test_viewer browsers
+  console.log('  Launching browsers (admin + test_viewer)...');
   await launchBrowsers(qrToken);
 
   phaseEnd('0-setup');
@@ -114,30 +114,16 @@ async function main() {
   await admin.from('player_scores').update({ score: 0 }).like('player_name', 'test_%');
   console.log('  Edge case residual data cleaned.');
 
-  // Reload admin browser after edge case tests to sync state
-  // (edge cases changed game_status via API, admin UI is out of sync)
-  const adminPage = getAdminPage();
-  if (adminPage) {
-    console.log('  Reloading admin browser to sync state...');
-    await adminPage.reload({ waitUntil: 'networkidle' });
-    // localStorage may auto-login; only fill credentials if login screen is visible
-    const loginVisible = await adminPage.locator('#login-screen:not(.hidden)').isVisible().catch(() => false);
-    if (loginVisible) {
-      await adminPage.fill('#login-username', ADMIN_USERNAME);
-      await adminPage.fill('#login-password', ADMIN_PASSWORD);
-      await adminPage.click('button[onclick="doLogin()"]');
-    }
-    await adminPage.waitForSelector('#admin-panel:not(.hidden)', { timeout: 10000 });
-    // Ensure 作答監控 tab is active
-    await adminPage.click('#btn-tab-stats');
-    await adminPage.waitForSelector('#tab-stats:not(.hidden)', { timeout: 5000 });
-    console.log('  Admin browser reloaded and logged in (作答監控).');
-  }
-
   // ══════════════════════════════════════════════════════════════════════════════
-  // Phase 2: Question loop
+  // Phase 2: Question loop (Admin manual, Players automated)
   // ══════════════════════════════════════════════════════════════════════════════
   phaseStart('2-question-loop');
+
+  console.log('\n╔══════════════════════════════════════════════════════════════╗');
+  console.log('║  Admin 手動模式：請在 admin.html 操作遊戲流程              ║');
+  console.log('║  測試會自動偵測狀態變更並觸發玩家行為                      ║');
+  console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
   for (let qi = 0; qi < questions.length; qi++) {
     const q = questions[qi];
     const qNum = qi + 1;
@@ -148,18 +134,11 @@ async function main() {
 
     console.log(`\n[Q${qNum}/${questions.length}] id=${q.id}: ${(q.question || '').slice(0, 40)}...`);
 
-    // ── Step 0: Select question in admin browser ──
-    if (qi === 0) {
-      // First question: select it in the dropdown
-      await adminSelectQuestion(q.id);
-      console.log(`  [0] Admin selected question ${q.id}`);
-    }
-    // Subsequent questions are auto-selected by "下一題" button click
-
-    // ── Step 1: Admin clicks "開放作答" → playing ──
-    console.log('  [1] Admin -> playing (browser click)');
-    const playResult = await adminClickStart();
+    // ── Step 1: Wait for admin to click "開放作答" → playing ──
+    console.log('  ⏳ 等待 Admin 點擊「開放作答」...');
+    const playResult = await waitForState('playing', { expectedQId: q.id });
     qs.stateTransitions['playing'] = playResult.durationMs;
+    console.log(`  [1] Admin -> playing (detected in ${fmtMs(playResult.durationMs)})`);
 
     // Measure realtime propagation for "playing"
     const playingLags = await measureRealtimePropagation(activePlayers, playResult.sentAt, 5000);
@@ -172,16 +151,20 @@ async function main() {
     // Wait for propagation to settle
     await sleep(500);
 
-    // ── Step 2+3: Players answer concurrently, admin waits up to 30s ──
+    // ── Step 2+3: Players answer concurrently ──
     console.log('  [2] Players answering...');
     const answerT0 = now();
+    let answerAborted = false;
     const answerPromises = [];
     for (let i = 0; i < activePlayers.length; i += 10) {
       const batch = activePlayers.slice(i, i + 10);
       const batchDelay = (i / 10) * 200;
       for (const p of batch) {
         answerPromises.push(
-          sleep(batchDelay).then(() => p.answer(q.id).catch(e => recordError(`answer(${p.name})`, e)))
+          sleep(batchDelay).then(() => {
+            if (answerAborted) { qs.skipped++; return; }
+            return p.answer(q.id, () => answerAborted).catch(e => recordError(`answer(${p.name})`, e));
+          })
         );
       }
     }
@@ -193,50 +176,56 @@ async function main() {
       allAnswered.then(() => { allDone = true; }),
       sleep(ANSWER_TIMEOUT_MS),
     ]);
+
+    // Abort orphaned promises to prevent snowball effect on subsequent questions
+    if (!allDone) {
+      answerAborted = true;
+      // Grace period for in-flight RPCs (already past the abort check) to complete
+      await Promise.race([allAnswered, sleep(5000)]);
+    }
+
     const answerDur = now() - answerT0;
     const submitted = qs.submitted + qs.skipped;
     if (allDone) {
       console.log(`  [2+3] All players answered: ${submitted}/${activePlayers.length} (${fmtMs(answerDur)})`);
     } else {
-      console.log(`  [2+3] 30s timeout reached, ${submitted}/${activePlayers.length} answered (${fmtMs(answerDur)})`);
+      console.log(`  [2+3] ⚠ Timeout: ${submitted}/${activePlayers.length} answered, ${qs.skipped} aborted (${fmtMs(answerDur)})`);
     }
     recordStep('question', 'answer-phase', `q=${q.id}, answered=${submitted}/${activePlayers.length}, allDone=${allDone}`, answerDur);
 
-    // ── Step 4: Admin clicks "停止作答" → stopped ──
-    console.log('  [4] Admin -> stopped (browser click)');
-    const stopResult = await adminClickStop();
+    // ── Step 4: Wait for admin to click "停止作答" → stopped ──
+    console.log('  ⏳ 等待 Admin 點擊「停止作答」...');
+    const stopResult = await waitForState('stopped');
     qs.stateTransitions['stopped'] = stopResult.durationMs;
+    console.log(`  [4] Admin -> stopped (detected in ${fmtMs(stopResult.durationMs)})`);
 
     // Measure realtime for "stopped"
     const stoppedLags = await measureRealtimePropagation(activePlayers, stopResult.sentAt, 5000);
     qs.realtimePropagation.push(...stoppedLags);
     timing.realtimeLags.push(...stoppedLags);
 
-    await sleep(1000);
-
-    // ── Step 5: Admin clicks "公布答案" → revealed ──
-    console.log('  [5] Admin -> revealed (browser click)');
-    const revealResult = await adminClickReveal();
+    // ── Step 5: Wait for admin to click "公布答案" → revealed ──
+    console.log('  ⏳ 等待 Admin 點擊「公布答案」...');
+    const revealResult = await waitForState('revealed');
     qs.stateTransitions['revealed'] = revealResult.durationMs;
+    console.log(`  [5] Admin -> revealed (detected in ${fmtMs(revealResult.durationMs)})`);
 
     // Measure realtime for "revealed"
     const revealLags = await measureRealtimePropagation(activePlayers, revealResult.sentAt, 5000);
     qs.realtimePropagation.push(...revealLags);
     timing.realtimeLags.push(...revealLags);
 
-    // Fetch response counts (admin browser already does this, also measure via API)
+    // Fetch response counts
     const respCounts = await fetchResponseCounts(q.id);
     qs.responseCountFetchMs = respCounts.durationMs;
     console.log(`  [5] Response counts: total=${respCounts.total}, fetch=${fmtMs(respCounts.durationMs)}`);
 
-    await sleep(2000);
-
-    // ── Step 6+7: Admin clicks "結算" → scoring RPC + state = scoring ──
-    console.log('  [6+7] Admin scoring + state->scoring (browser click)');
-    const scoringResult = await adminClickScore();
+    // ── Step 6+7: Wait for admin to click "結算" → scoring ──
+    console.log('  ⏳ 等待 Admin 點擊「結算」...');
+    const scoringResult = await waitForState('scoring');
     qs.scoringMs = scoringResult.durationMs;
     qs.stateTransitions['scoring'] = scoringResult.durationMs;
-    console.log(`  [6+7] Scoring complete: ${fmtMs(scoringResult.durationMs)}`);
+    console.log(`  [6+7] Admin -> scoring (detected in ${fmtMs(scoringResult.durationMs)})`);
 
     // Measure realtime for "scoring"
     const scoringLags = await measureRealtimePropagation(activePlayers, scoringResult.sentAt, 5000);
@@ -294,26 +283,23 @@ async function main() {
     recordStep('player', 'fetch-score', `q=${q.id}, broadcast=${broadcastHitPlayers.length}, fallback=${fallbackPlayers.length}`, scoreFetchDur);
     console.log(`  [8] Score: ${broadcastHitPlayers.length} via broadcast, ${fallbackPlayers.length} fallback RPC${scoreFetchTimes.length > 0 ? `, RPC p50=${fmtMs(percentile(scoreFetchTimes, 50))}, p95=${fmtMs(percentile(scoreFetchTimes, 95))}` : ''}`);
 
-    // ── Step 9: Admin fetches leaderboard ──
-    console.log('  [9] Admin fetching leaderboard...');
+    // ── Step 9: Fetch leaderboard ──
+    console.log('  [9] Fetching leaderboard...');
     const lb = await fetchLeaderboard();
     qs.leaderboardFetchMs = lb.durationMs;
     console.log(`  [9] Leaderboard: ${lb.players.length} players, ${fmtMs(lb.durationMs)}`);
 
-    await sleep(5000);
-
-    // ── Step 10: Admin clicks "下一題" or we're on the last question ──
+    // ── Step 10: Wait for admin to click "下一題" or last question ──
     if (qi < questions.length - 1) {
-      console.log(`  [10] Admin -> next question (browser click)`);
-      const waitResult = await adminClickNext();
+      console.log(`  ⏳ 等待 Admin 點擊「下一題」...`);
+      const waitResult = await waitForState('waiting');
       qs.stateTransitions['waiting'] = waitResult.durationMs;
+      console.log(`  [10] Admin -> waiting (detected in ${fmtMs(waitResult.durationMs)})`);
 
       // Measure realtime for "waiting" (next question)
       const waitingLags = await measureRealtimePropagation(activePlayers, waitResult.sentAt, 5000);
       qs.realtimePropagation.push(...waitingLags);
       timing.realtimeLags.push(...waitingLags);
-
-      await sleep(3000);
     }
 
     console.log(`  Done: ${qs.submitted} submitted, ${qs.succeeded} ok, ${qs.failed} fail, ${qs.skipped} skip`);
@@ -327,9 +313,10 @@ async function main() {
   phaseStart('3-end-game');
   console.log('\n[Phase 3] Ending game...');
 
-  // Admin clicks "結束遊戲" → ended
-  const endResult = await adminClickEnd();
-  console.log(`  state->ended (browser click): ${fmtMs(endResult.durationMs)}`);
+  // Wait for admin to click "結束遊戲" → ended
+  console.log('  ⏳ 等待 Admin 點擊「結束遊戲」...');
+  const endResult = await waitForState('ended');
+  console.log(`  state->ended (detected in ${fmtMs(endResult.durationMs)})`);
 
   // Measure realtime for "ended"
   const endLags = await measureRealtimePropagation(activePlayers, endResult.sentAt, 5000);
@@ -352,9 +339,9 @@ async function main() {
 
   // Admin fetches final leaderboard + player stats (for PDF export)
   const finalLb = await fetchLeaderboard();
-  console.log(`  Admin final leaderboard: ${fmtMs(finalLb.durationMs)}`);
+  console.log(`  Final leaderboard: ${fmtMs(finalLb.durationMs)}`);
   const playerStats = await fetchPlayerStats();
-  console.log(`  Admin player stats (PDF export): ${fmtMs(playerStats.durationMs)}`);
+  console.log(`  Player stats (PDF export): ${fmtMs(playerStats.durationMs)}`);
 
   // ── Data Integrity Validation ──
   await validateDataIntegrity(questions);
