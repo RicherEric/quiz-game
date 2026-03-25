@@ -1713,11 +1713,13 @@
                 }
             }
 
+            const t0 = performance.now();
             const { data, error } = await sbClient.rpc('score_question', {
                 p_question_id: qId,
                 p_correct_answer: selectedAnswer,
                 p_group_id: currentGroupId
             });
+            const rpcMs = (performance.now() - t0).toFixed(0);
             if (error) return alert("結算失敗：" + error.message);
 
             // 同步本地答案快取
@@ -1725,7 +1727,7 @@
                 q.answer = selectedAnswer;
             }
 
-            console.log(`結算完成: ${data.correct_count} 人答對`);
+            console.log(`結算完成: ${data.correct_count} 人答對 (RPC ${rpcMs}ms)`);
 
             // 直接用 RPC 回傳的 scores 廣播（省去 2 次額外 DB 查詢）
             scoreBroadcastChannel.send({

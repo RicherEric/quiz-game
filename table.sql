@@ -140,9 +140,13 @@ CREATE TABLE IF NOT EXISTS public.player_scores (
 );
 
 -- player_scores 效能調優
+-- threshold 設 200：~100 人 × 20 題 = 2000 行，結算到第 3 題才會首次觸發 vacuum
+-- 避免每題結算後立刻 vacuum 跟下一題的 UPSERT 搶 I/O
 ALTER TABLE public.player_scores SET (
   autovacuum_vacuum_scale_factor = 0.02,
-  autovacuum_vacuum_threshold = 20,
+  autovacuum_vacuum_threshold = 200,
+  autovacuum_analyze_scale_factor = 0.02,
+  autovacuum_analyze_threshold = 200,
   fillfactor = 90
 );
 
@@ -232,7 +236,7 @@ BEGIN
   END IF;
 
   -- Step 2: 批次更新 responses: is_correct + scored_points（冪等覆寫）
-  -- 加 WHERE 條件：只更新實際需要變更的行，避免重複結算時產生無謂的 dead tuples
+  -- 冪等由 Step 1 扣分 + Step 3 加分保證，這裡直接覆寫即可
   UPDATE responses
   SET is_correct    = (choice = p_correct_answer AND choice != 0),
       scored_points = CASE
@@ -240,13 +244,7 @@ BEGIN
         THEN FLOOR(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75) + 0.5)::int
         ELSE 0
       END
-  WHERE question_id = p_question_id
-    AND (is_correct IS DISTINCT FROM (choice = p_correct_answer AND choice != 0)
-         OR scored_points IS DISTINCT FROM CASE
-            WHEN (choice = p_correct_answer AND choice != 0)
-            THEN FLOOR(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75) + 0.5)::int
-            ELSE 0
-          END);
+  WHERE question_id = p_question_id;
 
   -- Step 3: 加上新分數（所有作答玩家都 UPSERT，確保 0 分玩家也出現在排行榜）
   IF p_group_id IS NOT NULL THEN
