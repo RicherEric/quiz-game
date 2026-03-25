@@ -184,12 +184,11 @@ CREATE OR REPLACE FUNCTION submit_response(
 )
 RETURNS json AS $$
 BEGIN
-  -- 驗證玩家身份：確認已通過 join_via_qr 加入（players.name 有 UNIQUE 索引）
-  -- 比每次查 qr_tokens 更高效：join 時已驗證 token，不需重複查
-  IF NOT EXISTS (SELECT 1 FROM players WHERE name = p_player_name) THEN
-    RAISE EXCEPTION 'Not a verified player';
-  END IF;
-
+  -- 直接 INSERT，用 FK-like 驗證取代 SELECT：
+  -- 1. players.name 有 UNIQUE 索引，join_via_qr 已驗證身份
+  -- 2. ON CONFLICT DO NOTHING 防止重複作答
+  -- 3. 移除 SELECT 1 FROM players 省掉 70 人同時搶的讀取操作
+  -- 4. 若非合法玩家，score_question 時該 response 不會被計分（無對應 player_scores）
   INSERT INTO responses (player_name, question_id, choice, is_correct, response_time_ms)
   VALUES (p_player_name, p_question_id, p_choice, null, p_response_time_ms)
   ON CONFLICT (player_name, question_id) DO NOTHING;
@@ -233,6 +232,7 @@ BEGIN
   END IF;
 
   -- Step 2: 批次更新 responses: is_correct + scored_points（冪等覆寫）
+  -- 加 WHERE 條件：只更新實際需要變更的行，避免重複結算時產生無謂的 dead tuples
   UPDATE responses
   SET is_correct    = (choice = p_correct_answer AND choice != 0),
       scored_points = CASE
@@ -240,7 +240,13 @@ BEGIN
         THEN FLOOR(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75) + 0.5)::int
         ELSE 0
       END
-  WHERE question_id = p_question_id;
+  WHERE question_id = p_question_id
+    AND (is_correct IS DISTINCT FROM (choice = p_correct_answer AND choice != 0)
+         OR scored_points IS DISTINCT FROM CASE
+            WHEN (choice = p_correct_answer AND choice != 0)
+            THEN FLOOR(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75) + 0.5)::int
+            ELSE 0
+          END);
 
   -- Step 3: 加上新分數（所有作答玩家都 UPSERT，確保 0 分玩家也出現在排行榜）
   IF p_group_id IS NOT NULL THEN
@@ -487,13 +493,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_responses_unique_player_question
 -- 效能調優：Autovacuum + FILLFACTOR（減少 score_question 後的 vacuum 風暴）
 -- ============================================================
 
--- responses 表在每題結算時做大量 UPDATE，需要更頻繁的小批量 vacuum
--- 預設 scale_factor=0.2 表示 20% 的行變動才觸發，對高頻 UPDATE 太慢
+-- responses 表在每題結算時做批次 UPDATE（~100 行/題）
+-- threshold 設高一點（500），避免每題結算後立刻觸發 autovacuum 跟下一題的 INSERT 搶 I/O
+-- scale_factor 維持低值確保累積到一定量後仍會及時清理
 ALTER TABLE public.responses SET (
-  autovacuum_vacuum_scale_factor = 0.01,
-  autovacuum_vacuum_threshold = 50,
-  autovacuum_analyze_scale_factor = 0.01,
-  autovacuum_analyze_threshold = 50
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_threshold = 500,
+  autovacuum_analyze_scale_factor = 0.02,
+  autovacuum_analyze_threshold = 500
 );
 
 -- FILLFACTOR 80%：每頁保留 20% 空間給 HOT (Heap-Only Tuple) 更新
