@@ -817,9 +817,14 @@
                 const bg = optOriginalBg[idx + 1];
                 if (bg && !btn.classList.contains(bg)) btn.classList.add(bg);
             });
-            // 隱藏公布答案媒體與註記
+            // 清除並隱藏公布答案媒體與註記（銷毀 YouTube iframe 釋放資源）
+            document.getElementById('reveal-videos-col').innerHTML = '';
+            document.getElementById('reveal-images-row').innerHTML = '';
             document.getElementById('reveal-media').classList.add('hidden');
             document.getElementById('reveal-note').classList.add('hidden');
+            // 同時清除 scoring 狀態的影片（避免跨題累積 iframe）
+            document.getElementById('scoring-videos-col').innerHTML = '';
+            document.getElementById('scoring-images-row').innerHTML = '';
             // Reset countdown display
             document.getElementById('countdown-container').classList.remove('invisible');
             document.getElementById('countdown-text').innerText = '15.0';
@@ -863,6 +868,30 @@
                     qImagesRow.appendChild(img);
                 });
                 qImagesRow.classList.remove('hidden');
+                hasQMedia = true;
+            }
+            // 題目影片（比照 admin 預覽）
+            const qVidUrls = (q.video_urls && q.video_urls.length) ? q.video_urls : (q.video_url ? [q.video_url] : []);
+            if (qVidUrls.length) {
+                qVidUrls.forEach(url => {
+                    const ytId = extractYouTubeId(url);
+                    if (ytId) {
+                        const div = document.createElement('div');
+                        div.className = 'aspect-video w-full max-w-lg rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg';
+                        const iframe = document.createElement('iframe');
+                        iframe.src = `https://www.youtube.com/embed/${ytId}`;
+                        iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
+                        iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
+                        div.appendChild(iframe);
+                        qVideosCol.appendChild(div);
+                    } else {
+                        const vid = document.createElement('video');
+                        vid.src = url; vid.controls = true;
+                        vid.className = 'max-h-60 rounded-2xl border border-gold-700/30 shadow-lg w-full max-w-lg';
+                        qVideosCol.appendChild(vid);
+                    }
+                });
+                qVideosCol.classList.remove('hidden');
                 hasQMedia = true;
             }
             qMedia.classList.toggle('hidden', !hasQMedia);

@@ -1424,12 +1424,16 @@
 
             if (state === 'waiting') {
                 answerRevealed = false;
-                // 回到待機時才隱藏答案公布區
+                // 回到待機時清除並隱藏答案公布區（銷毀 YouTube iframe 釋放資源）
+                document.getElementById('answer-reveal-videos-col').innerHTML = '';
+                document.getElementById('answer-reveal-images-row').innerHTML = '';
                 document.getElementById('answer-reveal-display').classList.add('hidden');
                 selector.disabled = false;
                 document.getElementById('btn-start').classList.remove('hidden');
             } else if (state === 'playing') {
-                // 新題目開始時隱藏答案公布區
+                // 新題目開始時清除並隱藏答案公布區
+                document.getElementById('answer-reveal-videos-col').innerHTML = '';
+                document.getElementById('answer-reveal-images-row').innerHTML = '';
                 document.getElementById('answer-reveal-display').classList.add('hidden');
                 selector.disabled = true;
                 document.getElementById('btn-rebroadcast').classList.remove('hidden');
@@ -1505,18 +1509,17 @@
                 current_group_id: currentGroupId
             };
 
-            // 先更新 game_status → 玩家立即收到通知，再背景執行 reset
-            const { data, error } = await sbClient.from('game_status').update(updateData).eq('id', 1).select();
-
-            // 開放作答時，背景重置舊作答紀錄（不阻塞狀態推播）
+            // 開放作答時，先重置舊作答紀錄，再更新狀態通知玩家
+            // 避免 race condition：玩家收到通知後提交的回答被背景 reset 刪除
             if (newState === 'playing') {
-                sbClient.rpc('reset_question_responses', {
+                const { data: resetResult, error: resetError } = await sbClient.rpc('reset_question_responses', {
                     p_question_id: parseInt(qId), p_group_id: currentGroupId
-                }).then(({ data: resetResult, error: resetError }) => {
-                    if (resetError) console.error('Reset failed:', resetError);
-                    else if (resetResult?.deleted > 0) _playersCache = null;
                 });
+                if (resetError) console.error('Reset failed:', resetError);
+                else if (resetResult?.deleted > 0) _playersCache = null;
             }
+
+            const { data, error } = await sbClient.from('game_status').update(updateData).eq('id', 1).select();
 
             if (error) {
                 alert(`狀態切換失敗！發生錯誤：${error.message}`);
