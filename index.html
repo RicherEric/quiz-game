@@ -303,10 +303,9 @@
             const savedName = sessionStorage.getItem('quiz_player_name');
             if (savedName) {
                 myName = savedName;
-                const { data: qList } = await withRetry(() => sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
+                const { data: qList } = await withRetry(() => sbClient.from('questions').select('id,question,option_a,option_b,option_c,option_d,sort_order,group_id,answer_note').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
                 questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, group_id: q.group_id }));
                 questionsMap = new Map((qList || []).map(q => [q.id, q]));
-                preloadQuestionMedia(qList || []);
                 document.getElementById('user-display').innerText = myName;
                 document.getElementById('login-ui').classList.add('hidden');
                 document.getElementById('waiting-ui').classList.remove('hidden');
@@ -337,10 +336,9 @@
             }
 
             // 預載所有題目內容（含選項），避免 playing 時再逐一 fetch
-            const { data: qList } = await withRetry(() => sbClient.from('questions').select('*').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
+            const { data: qList } = await withRetry(() => sbClient.from('questions').select('id,question,option_a,option_b,option_c,option_d,sort_order,group_id,answer_note').order('sort_order', { ascending: true }).order('id', { ascending: true }), 2);
             questionIdOrder = (qList || []).map(q => ({ id: q.id, sort_order: q.sort_order, group_id: q.group_id }));
             questionsMap = new Map((qList || []).map(q => [q.id, q]));
-            preloadQuestionMedia(qList || []);
 
             sessionStorage.setItem('quiz_player_name', myName);
             document.getElementById('user-display').innerText = myName;
@@ -480,7 +478,7 @@
                 // 優先用預載快取，cache miss 時才 fetch
                 let q = questionsMap.get(status.current_q_id);
                 if (!q) {
-                    const { data } = await withRetry(() => sbClient.from('questions').select('*').eq('id', status.current_q_id).single(), 1);
+                    const { data } = await withRetry(() => sbClient.from('questions').select('id,question,option_a,option_b,option_c,option_d,sort_order,group_id,answer_note').eq('id', status.current_q_id).single(), 1);
                     if (myVersion !== stateVersion) return;
                     q = data;
                     if (q) questionsMap.set(q.id, q);
@@ -511,7 +509,7 @@
                 // 優先用預載快取取得題目資料（含正確答案）
                 let revQ = questionsMap.get(status.current_q_id);
                 if (!revQ) {
-                    const { data } = await withRetry(() => sbClient.from('questions').select('*').eq('id', status.current_q_id).single(), 1);
+                    const { data } = await withRetry(() => sbClient.from('questions').select('id,question,option_a,option_b,option_c,option_d,sort_order,group_id,answer_note').eq('id', status.current_q_id).single(), 1);
                     if (myVersion !== stateVersion) return;
                     revQ = data;
                     if (revQ) questionsMap.set(revQ.id, revQ);
@@ -568,56 +566,8 @@
                     btn.innerHTML = `<span>${optTexts[i]}</span><span class="ml-2 text-lg opacity-80 bg-black/30 px-3 py-1 rounded-full">${optCounts[i]} 人</span>`;
                 }
 
-                // 顯示答案媒體（圖片與影片）
-                const revealMedia = document.getElementById('reveal-media');
-                const rImagesRow = document.getElementById('reveal-images-row');
-                const rVideosCol = document.getElementById('reveal-videos-col');
-                rImagesRow.innerHTML = ''; rVideosCol.innerHTML = '';
-                let hasRevealMedia = false;
-                if (currentQ) {
-                    const ansImgUrls = (currentQ.answer_image_urls && currentQ.answer_image_urls.length) ? currentQ.answer_image_urls : (currentQ.answer_image_url ? [currentQ.answer_image_url] : []);
-                    const ansVidUrls = (currentQ.answer_video_urls && currentQ.answer_video_urls.length) ? currentQ.answer_video_urls : (currentQ.answer_video_url ? [currentQ.answer_video_url] : []);
-                    if (ansImgUrls.length) {
-                        ansImgUrls.forEach(url => {
-                            const img = document.createElement('img');
-                            img.referrerPolicy = 'no-referrer';
-                            img.crossOrigin = 'anonymous';
-                            img.className = 'snap-center max-h-48 rounded-2xl border border-gold-700/30 shadow-lg cursor-zoom-in';
-                            if (ansImgUrls.length === 1) img.className += ' mx-auto';
-                            img.onclick = function() { openLightbox(this.src); };
-                            img.onerror = function() {
-                                this.onerror = null;
-                                this.crossOrigin = null;
-                                this.src = url;
-                            };
-                            img.src = url;
-                            rImagesRow.appendChild(img);
-                        });
-                        hasRevealMedia = true;
-                    }
-                    if (ansVidUrls.length) {
-                        ansVidUrls.forEach(url => {
-                            const ytId = extractYouTubeId(url);
-                            if (ytId) {
-                                const div = document.createElement('div');
-                                div.className = 'aspect-video w-full max-w-lg rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg';
-                                const iframe = document.createElement('iframe');
-                                iframe.src = `https://www.youtube.com/embed/${ytId}`;
-                                iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
-                                iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
-                                div.appendChild(iframe);
-                                rVideosCol.appendChild(div);
-                            } else {
-                                const vid = document.createElement('video');
-                                vid.src = url; vid.controls = true;
-                                vid.className = 'max-h-48 rounded-2xl border border-gold-700/30 shadow-lg w-full max-w-lg';
-                                rVideosCol.appendChild(vid);
-                            }
-                        });
-                        hasRevealMedia = true;
-                    }
-                }
-                revealMedia.classList.toggle('hidden', !hasRevealMedia);
+                // 答案媒體：不在玩家端顯示（僅 admin 端呈現）
+                document.getElementById('reveal-media').classList.add('hidden');
 
                 // 顯示答案 Note 註記
                 const revealNoteEl = document.getElementById('reveal-note');
@@ -651,56 +601,8 @@
                     scoringAnswer.classList.add('hidden');
                 }
 
-                // 顯示答案媒體（多媒體）
-                const scoringMedia = document.getElementById('scoring-media');
-                const sImagesRow = document.getElementById('scoring-images-row');
-                const sVideosCol = document.getElementById('scoring-videos-col');
-                sImagesRow.innerHTML = ''; sVideosCol.innerHTML = '';
-                let hasAnswerMedia = false;
-                if (currentQ) {
-                    const ansImgUrls = (currentQ.answer_image_urls && currentQ.answer_image_urls.length) ? currentQ.answer_image_urls : (currentQ.answer_image_url ? [currentQ.answer_image_url] : []);
-                    const ansVidUrls = (currentQ.answer_video_urls && currentQ.answer_video_urls.length) ? currentQ.answer_video_urls : (currentQ.answer_video_url ? [currentQ.answer_video_url] : []);
-                    if (ansImgUrls.length) {
-                        ansImgUrls.forEach(url => {
-                            const img = document.createElement('img');
-                            img.referrerPolicy = 'no-referrer';
-                            img.crossOrigin = 'anonymous';
-                            img.className = 'snap-center max-h-48 rounded-2xl border border-gold-700/30 shadow-lg cursor-zoom-in';
-                            if (ansImgUrls.length === 1) img.className += ' mx-auto';
-                            img.onclick = function() { openLightbox(this.src); };
-                            img.onerror = function() {
-                                this.onerror = null;
-                                this.crossOrigin = null;
-                                this.src = url;
-                            };
-                            img.src = url;
-                            sImagesRow.appendChild(img);
-                        });
-                        hasAnswerMedia = true;
-                    }
-                    if (ansVidUrls.length) {
-                        ansVidUrls.forEach(url => {
-                            const ytId = extractYouTubeId(url);
-                            if (ytId) {
-                                const div = document.createElement('div');
-                                div.className = 'aspect-video w-full max-w-lg rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg';
-                                const iframe = document.createElement('iframe');
-                                iframe.src = `https://www.youtube.com/embed/${ytId}`;
-                                iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
-                                iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
-                                div.appendChild(iframe);
-                                sVideosCol.appendChild(div);
-                            } else {
-                                const vid = document.createElement('video');
-                                vid.src = url; vid.controls = true;
-                                vid.className = 'max-h-48 rounded-2xl border border-gold-700/30 shadow-lg w-full max-w-lg';
-                                sVideosCol.appendChild(vid);
-                            }
-                        });
-                        hasAnswerMedia = true;
-                    }
-                }
-                scoringMedia.classList.toggle('hidden', !hasAnswerMedia);
+                // 答案媒體：不在玩家端顯示（僅 admin 端呈現）
+                document.getElementById('scoring-media').classList.add('hidden');
 
                 // 顯示答案 Note 註記
                 const scoringNoteEl = document.getElementById('scoring-note');
@@ -845,56 +747,8 @@
             document.getElementById('opt3').innerText = q.option_c;
             document.getElementById('opt4').innerText = q.option_d;
 
-            // 題目媒體：顯示題目圖片給玩家（比照 admin）
-            const qMedia = document.getElementById('q-media');
-            const qImagesRow = document.getElementById('q-images-row');
-            const qVideosCol = document.getElementById('q-videos-col');
-            qImagesRow.innerHTML = ''; qVideosCol.innerHTML = '';
-            qImagesRow.classList.add('hidden'); qVideosCol.classList.add('hidden');
-            let hasQMedia = false;
-            const qImgUrls = (q.image_urls && q.image_urls.length) ? q.image_urls : (q.image_url ? [q.image_url] : []);
-            if (qImgUrls.length) {
-                qImgUrls.forEach(url => {
-                    const img = document.createElement('img');
-                    img.referrerPolicy = 'no-referrer';
-                    img.crossOrigin = 'anonymous';
-                    img.className = 'rounded-xl max-h-60 snap-center';
-                    img.onerror = function() {
-                        this.onerror = null;
-                        this.crossOrigin = null;
-                        this.src = url;
-                    };
-                    img.src = url;
-                    qImagesRow.appendChild(img);
-                });
-                qImagesRow.classList.remove('hidden');
-                hasQMedia = true;
-            }
-            // 題目影片（比照 admin 預覽）
-            const qVidUrls = (q.video_urls && q.video_urls.length) ? q.video_urls : (q.video_url ? [q.video_url] : []);
-            if (qVidUrls.length) {
-                qVidUrls.forEach(url => {
-                    const ytId = extractYouTubeId(url);
-                    if (ytId) {
-                        const div = document.createElement('div');
-                        div.className = 'aspect-video w-full max-w-lg rounded-2xl overflow-hidden border border-gold-700/30 shadow-lg';
-                        const iframe = document.createElement('iframe');
-                        iframe.src = `https://www.youtube.com/embed/${ytId}`;
-                        iframe.className = 'w-full h-full'; iframe.frameBorder = '0';
-                        iframe.allow = 'autoplay; encrypted-media'; iframe.allowFullscreen = true;
-                        div.appendChild(iframe);
-                        qVideosCol.appendChild(div);
-                    } else {
-                        const vid = document.createElement('video');
-                        vid.src = url; vid.controls = true;
-                        vid.className = 'max-h-60 rounded-2xl border border-gold-700/30 shadow-lg w-full max-w-lg';
-                        qVideosCol.appendChild(vid);
-                    }
-                });
-                qVideosCol.classList.remove('hidden');
-                hasQMedia = true;
-            }
-            qMedia.classList.toggle('hidden', !hasQMedia);
+            // 題目媒體：不在玩家端顯示（僅 admin 端呈現，避免影片/圖片拖慢答題）
+            document.getElementById('q-media').classList.add('hidden');
         }
 
         const optOriginalBg = { 1: 'bg-blue-900', 2: 'bg-indigo-900', 3: 'bg-sky-900', 4: 'bg-cyan-900' };

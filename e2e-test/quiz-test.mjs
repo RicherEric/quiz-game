@@ -80,6 +80,24 @@ async function main() {
     console.log(`  Join time: p50=${fmtMs(percentile(joinTimes, 50))}, p95=${fmtMs(percentile(joinTimes, 95))}, max=${fmtMs(Math.max(...joinTimes))}`);
   }
 
+  phaseEnd('1-player-join');
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Phase 1.5: Edge case tests (在玩家訂閱 realtime 之前執行，
+  //   避免 EC8/EC9 更新 game_status 時觸發 postgres_changes 推送第二/三題給玩家)
+  // ══════════════════════════════════════════════════════════════════════════════
+  await runEdgeCaseTests(qrToken, questions);
+
+  // Blanket cleanup: remove ALL edge-case residual data before Phase 2
+  console.log('  Cleaning up edge case residual data...');
+  await admin.from('responses').delete().like('player_name', 'test_%');
+  await admin.from('player_scores').update({ score: 0 }).like('player_name', 'test_%');
+  console.log('  Edge case residual data cleaned.');
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Phase 1.6: Subscribe players to realtime (在 edge case 之後，避免收到測試狀態變更)
+  // ══════════════════════════════════════════════════════════════════════════════
+  phaseStart('1.6-player-subscribe');
   // Subscribe all active players to realtime (wait for SUBSCRIBED confirmation)
   console.log('  Subscribing all players to realtime...');
   const subscribeResults = await Promise.allSettled(
@@ -101,18 +119,7 @@ async function main() {
   console.log(`  Realtime subscribed: ${subOk} ok, ${subFail} failed out of ${activePlayers.length} players.`);
   // Extra settle time for WebSocket connections to stabilize
   await sleep(1000);
-  phaseEnd('1-player-join');
-
-  // ══════════════════════════════════════════════════════════════════════════════
-  // Phase 1.5: Edge case tests
-  // ══════════════════════════════════════════════════════════════════════════════
-  await runEdgeCaseTests(qrToken, questions);
-
-  // Blanket cleanup: remove ALL edge-case residual data before Phase 2
-  console.log('  Cleaning up edge case residual data...');
-  await admin.from('responses').delete().like('player_name', 'test_%');
-  await admin.from('player_scores').update({ score: 0 }).like('player_name', 'test_%');
-  console.log('  Edge case residual data cleaned.');
+  phaseEnd('1.6-player-subscribe');
 
   // ══════════════════════════════════════════════════════════════════════════════
   // Phase 2: Question loop (Admin manual, Players automated)
