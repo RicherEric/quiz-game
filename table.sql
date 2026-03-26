@@ -1021,3 +1021,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- Admin Authentication
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS admins (
+  username TEXT PRIMARY KEY,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- admin_login RPC
+CREATE OR REPLACE FUNCTION admin_login(p_username TEXT, p_password TEXT)
+RETURNS json AS $$
+DECLARE
+  v_match BOOLEAN;
+BEGIN
+  SELECT (password_hash = crypt(p_password, password_hash))
+  INTO v_match
+  FROM admins
+  WHERE username = p_username;
+
+  IF v_match IS TRUE THEN
+    RETURN json_build_object('success', true);
+  ELSE
+    RETURN json_build_object('success', false);
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
