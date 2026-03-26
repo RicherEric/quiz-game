@@ -140,19 +140,24 @@ CREATE TABLE IF NOT EXISTS public.player_scores (
 );
 
 -- player_scores 效能調優
--- threshold 設 200：~100 人 × 20 題 = 2000 行，結算到第 3 題才會首次觸發 vacuum
--- 避免每題結算後立刻 vacuum 跟下一題的 UPSERT 搶 I/O
+-- 每題結算 UPSERT ~70 行（Step 1 扣分 + Step 3 加分 = 2 次 UPDATE/row）
+-- 20 題 × 70 人 × 2 = 2800 dead rows，threshold 設 3000 確保整場不觸發 vacuum
+-- 避免 vacuum 跟 UPSERT 搶 row lock 導致 10-15s 延遲
 ALTER TABLE public.player_scores SET (
-  autovacuum_vacuum_scale_factor = 0.02,
-  autovacuum_vacuum_threshold = 200,
-  autovacuum_analyze_scale_factor = 0.02,
-  autovacuum_analyze_threshold = 200,
-  fillfactor = 90
+  autovacuum_vacuum_scale_factor = 0.05,
+  autovacuum_vacuum_threshold = 3000,
+  autovacuum_analyze_scale_factor = 0.05,
+  autovacuum_analyze_threshold = 3000,
+  fillfactor = 85
 );
 
 -- 題組排行榜索引
 CREATE INDEX IF NOT EXISTS idx_player_scores_group_score_desc
   ON public.player_scores(group_id, score DESC);
+-- score_question Step 4 LEFT JOIN 加速：player_name + group_id 查找
+-- 沒有此索引 = hash join fallback，70 人結算時 LEFT JOIN 耗時 1-3s
+CREATE INDEX IF NOT EXISTS idx_player_scores_player_group
+  ON public.player_scores(player_name, group_id);
 -- 題目按題組查詢索引
 CREATE INDEX IF NOT EXISTS idx_questions_group_id ON public.questions(group_id);
 
@@ -221,39 +226,48 @@ BEGIN
     INTO v_points, v_orig_answer
     FROM questions WHERE id = p_question_id;
 
-  -- 冪等結算：先扣除該題舊分數，再更新 responses，最後加回新分數
-  -- 這樣重複結算同一題不會導致分數累加
-  IF p_group_id IS NOT NULL THEN
-    -- Step 1: 扣除此題之前已結算的舊分數（首次結算時 scored_points 為 NULL/0，不影響）
-    UPDATE player_scores ps
-    SET score = ps.score - old.old_points
-    FROM (
-      SELECT r.player_name, COALESCE(r.scored_points, 0) AS old_points
-      FROM responses r
-      WHERE r.question_id = p_question_id AND COALESCE(r.scored_points, 0) > 0
-    ) old
-    WHERE ps.player_name = old.player_name AND ps.group_id = p_group_id;
-  END IF;
+  -- 冪等結算：CTE 同時記住舊分、更新 responses、計算 delta，再單次 UPSERT player_scores
+  -- 合併原 Step 1（扣舊分）+ Step 2（更新 responses）+ Step 3（加新分）
+  -- player_scores 只鎖一次（原本鎖兩次），消除 autovacuum 搶鎖導致的 10-15s 延遲
 
-  -- Step 2: 批次更新 responses: is_correct + scored_points（冪等覆寫）
-  -- 冪等由 Step 1 扣分 + Step 3 加分保證，這裡直接覆寫即可
-  UPDATE responses
-  SET is_correct    = (choice = p_correct_answer AND choice != 0),
-      scored_points = CASE
-        WHEN (choice = p_correct_answer AND choice != 0)
-        THEN FLOOR(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75) + 0.5)::int
-        ELSE 0
-      END
-  WHERE question_id = p_question_id;
-
-  -- Step 3: 加上新分數（所有作答玩家都 UPSERT，確保 0 分玩家也出現在排行榜）
   IF p_group_id IS NOT NULL THEN
+    -- 單一 CTE 語句：snapshot 舊分 → UPDATE responses → UPSERT player_scores（delta）
+    WITH old_vals AS (
+      -- 在 UPDATE 前 snapshot 舊的 scored_points（CTE 使用語句開始時的 snapshot）
+      SELECT player_name, COALESCE(scored_points, 0) AS old_pts
+      FROM responses WHERE question_id = p_question_id
+    ),
+    do_update AS (
+      -- 批次更新 responses: is_correct + scored_points（冪等覆寫）
+      UPDATE responses
+      SET is_correct    = (choice = p_correct_answer AND choice != 0),
+          scored_points = CASE
+            WHEN (choice = p_correct_answer AND choice != 0)
+            THEN FLOOR(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75) + 0.5)::int
+            ELSE 0
+          END
+      WHERE question_id = p_question_id
+      RETURNING player_name, scored_points AS new_pts
+    )
+    -- 單次 UPSERT：用 delta（new_pts - old_pts）更新，首次插入時 old_pts=0
+    -- ORDER BY player_name 確保一致的鎖順序，避免死鎖
     INSERT INTO player_scores (player_name, group_id, score)
-    SELECT r.player_name, p_group_id, COALESCE(r.scored_points, 0)
-    FROM responses r
-    WHERE r.question_id = p_question_id
+    SELECT du.player_name, p_group_id, du.new_pts - ov.old_pts
+    FROM do_update du
+    JOIN old_vals ov ON ov.player_name = du.player_name
+    ORDER BY du.player_name
     ON CONFLICT (player_name, group_id)
     DO UPDATE SET score = player_scores.score + EXCLUDED.score;
+  ELSE
+    -- 無 group_id 時只更新 responses（不動 player_scores）
+    UPDATE responses
+    SET is_correct    = (choice = p_correct_answer AND choice != 0),
+        scored_points = CASE
+          WHEN (choice = p_correct_answer AND choice != 0)
+          THEN FLOOR(v_points * (1 + GREATEST(0, 15000 - COALESCE(response_time_ms, 15000)) / 15000.0 * 0.75) + 0.5)::int
+          ELSE 0
+        END
+    WHERE question_id = p_question_id;
   END IF;
 
   -- 統計答對人數
@@ -492,23 +506,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_responses_unique_player_question
 -- ============================================================
 
 -- responses 表在每題結算時做批次 UPDATE（~100 行/題）
--- threshold 設高一點（500），避免每題結算後立刻觸發 autovacuum 跟下一題的 INSERT 搶 I/O
--- scale_factor 維持低值確保累積到一定量後仍會及時清理
+-- 20 題 × 70 人 = 1400 行 UPDATE，threshold 設 2000 確保整場遊戲不觸發 autovacuum
+-- 遊戲結束後 scale_factor 0.05 會在累積 5% dead rows 時清理
 ALTER TABLE public.responses SET (
-  autovacuum_vacuum_scale_factor = 0.02,
-  autovacuum_vacuum_threshold = 500,
-  autovacuum_analyze_scale_factor = 0.02,
-  autovacuum_analyze_threshold = 500
+  autovacuum_vacuum_scale_factor = 0.05,
+  autovacuum_vacuum_threshold = 2000,
+  autovacuum_analyze_scale_factor = 0.05,
+  autovacuum_analyze_threshold = 2000
 );
 
 -- FILLFACTOR 80%：每頁保留 20% 空間給 HOT (Heap-Only Tuple) 更新
 -- HOT 更新不需要修改索引，大幅減少 score_question UPDATE 的 I/O
 ALTER TABLE public.responses SET (fillfactor = 80);
 
--- players 表在結算時也會被批次 UPDATE
+-- players 表：quiz 遊戲期間不常 UPDATE，threshold 設 500 避免干擾
 ALTER TABLE public.players SET (
-  autovacuum_vacuum_scale_factor = 0.02,
-  autovacuum_vacuum_threshold = 20,
+  autovacuum_vacuum_scale_factor = 0.05,
+  autovacuum_vacuum_threshold = 500,
   fillfactor = 90
 );
 
