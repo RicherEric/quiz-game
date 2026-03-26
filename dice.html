@@ -15,6 +15,7 @@
             @apply fixed top-4 right-4 z-50 bg-gold-600/80 hover:bg-gold-500 text-midnight-950 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all active:scale-90;
             backdrop-filter: blur(8px);
         }
+
         .sync-btn.syncing svg {
             animation: spin 0.6s linear;
         }
@@ -22,6 +23,7 @@
         .countdown-ring {
             transform: rotate(-90deg);
         }
+
         .countdown-ring circle {
             transition: stroke-dashoffset 0.1s linear;
         }
@@ -30,9 +32,11 @@
             @apply relative flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all cursor-pointer select-none active:scale-95;
             min-height: 110px;
         }
+
         .symbol-card.selectable:hover {
-            @apply border-gold-400 shadow-[0_0_20px_rgba(255,210,100,0.3)];
+            @apply border-gold-400 shadow-[0_0_20px_rgba(255, 210, 100, 0.3)];
         }
+
         .symbol-card .bet-badge {
             @apply absolute -top-2 -right-2 bg-gold-500 text-midnight-950 text-xs font-black px-2 py-0.5 rounded-full shadow-md;
         }
@@ -40,8 +44,9 @@
         .chip-btn {
             @apply px-5 py-3 rounded-full font-black text-lg transition-all active:scale-90 border-2;
         }
+
         .chip-btn.selected {
-            @apply ring-4 ring-gold-400 scale-105 shadow-[0_0_20px_rgba(255,210,100,0.4)];
+            @apply ring-4 ring-gold-400 scale-105 shadow-[0_0_20px_rgba(255, 210, 100, 0.4)];
             background: linear-gradient(135deg, #ffbc40, #e8a020) !important;
             color: #182240 !important;
         }
@@ -50,26 +55,57 @@
             @apply text-6xl inline-block;
             animation: dice-spin 0.15s linear infinite;
         }
+
         .dice-face.settled {
             animation: dice-land 0.4s ease-out forwards;
         }
+
         @keyframes dice-spin {
-            0% { transform: rotateX(0deg) scale(1); }
-            25% { transform: rotateX(90deg) scale(1.1); }
-            50% { transform: rotateX(180deg) scale(1); }
-            75% { transform: rotateX(270deg) scale(1.1); }
-            100% { transform: rotateX(360deg) scale(1); }
+            0% {
+                transform: rotateX(0deg) scale(1);
+            }
+
+            25% {
+                transform: rotateX(90deg) scale(1.1);
+            }
+
+            50% {
+                transform: rotateX(180deg) scale(1);
+            }
+
+            75% {
+                transform: rotateX(270deg) scale(1.1);
+            }
+
+            100% {
+                transform: rotateX(360deg) scale(1);
+            }
         }
+
         @keyframes dice-land {
-            0% { transform: scale(1.3) rotateX(20deg); }
-            50% { transform: scale(0.9) rotateX(-5deg); }
-            100% { transform: scale(1) rotateX(0deg); }
+            0% {
+                transform: scale(1.3) rotateX(20deg);
+            }
+
+            50% {
+                transform: scale(0.9) rotateX(-5deg);
+            }
+
+            100% {
+                transform: scale(1) rotateX(0deg);
+            }
         }
 
         @keyframes slide-up {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
+            from {
+                transform: translateY(100%);
+            }
+
+            to {
+                transform: translateY(0);
+            }
         }
+
         .animate-slide-up {
             animation: slide-up 0.3s ease-out;
         }
@@ -88,7 +124,8 @@
 <body class="bg-midnight-900 text-gold-100 font-sans min-h-screen">
     <!-- Sync button (shown after login) -->
     <button id="sync-btn" class="sync-btn hidden" onclick="manualRefresh()" title="同步遊戲狀態">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="23 4 23 10 17 10"></polyline>
             <polyline points="1 20 1 14 7 14"></polyline>
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -128,9 +165,11 @@
 
         <!-- Waiting UI -->
         <div id="waiting-ui" class="hidden text-center mt-20 space-y-10">
-            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+            <div
+                class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
                 <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-gold-400 mx-auto"></div>
-                <h2 class="text-4xl font-bold text-gold-100">哈囉，<span id="user-display" class="text-gold-gradient"></span></h2>
+                <h2 class="text-4xl font-bold text-gold-100">哈囉，<span id="user-display"
+                        class="text-gold-gradient"></span></h2>
                 <p class="text-2xl text-gold-200/80 leading-relaxed">等待莊家開局...</p>
                 <div class="pt-4 border-t border-gold-600/20">
                     <p class="text-lg text-gold-300/60 mb-2">您的籌碼</p>
@@ -141,7 +180,8 @@
                     <p id="waiting-round-num" class="text-2xl font-bold text-gold-200"></p>
                 </div>
             </div>
-            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
+            <button onclick="exitGame()"
+                class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
         </div>
 
         <!-- Betting UI -->
@@ -153,14 +193,14 @@
                     <div id="betting-balance" class="text-2xl font-black text-gold-gradient">0</div>
                 </div>
                 <div class="text-center">
-                    <p class="text-sm text-gold-300/60">第 <span id="betting-round" class="font-bold text-gold-200">0</span> 局</p>
+                    <p class="text-sm text-gold-300/60">第 <span id="betting-round"
+                            class="font-bold text-gold-200">0</span> 局</p>
                 </div>
                 <div class="relative flex items-center justify-center">
                     <svg class="countdown-ring" width="64" height="64" viewBox="0 0 64 64">
                         <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(187,82,0,0.3)" stroke-width="5" />
                         <circle id="countdown-circle" cx="32" cy="32" r="28" fill="none" stroke="#ffaa1d"
-                            stroke-width="5" stroke-linecap="round" stroke-dasharray="175.93"
-                            stroke-dashoffset="0" />
+                            stroke-width="5" stroke-linecap="round" stroke-dasharray="175.93" stroke-dashoffset="0" />
                     </svg>
                     <span id="countdown-text" class="absolute text-xl font-black text-gold-300">30</span>
                 </div>
@@ -207,14 +247,19 @@
             <div class="bg-midnight-900/60 p-4 rounded-2xl border border-gold-600/30 space-y-3">
                 <p class="text-sm text-gold-300/60 text-center font-bold">選擇籌碼</p>
                 <div id="chip-selector" class="flex justify-center gap-3 flex-wrap">
-                    <button onclick="selectChip(100)" class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200 selected" data-chip="100">100</button>
-                    <button onclick="selectChip(200)" class="chip-btn bg-teal-700/60 border-teal-500/40 text-teal-200" data-chip="200">200</button>
-                    <button onclick="selectChip(500)" class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200" data-chip="500">500</button>
+                    <button onclick="selectChip(100)"
+                        class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200 selected"
+                        data-chip="100">100</button>
+                    <button onclick="selectChip(200)" class="chip-btn bg-teal-700/60 border-teal-500/40 text-teal-200"
+                        data-chip="200">200</button>
+                    <button onclick="selectChip(500)" class="chip-btn bg-teal-800/60 border-teal-500/40 text-teal-200"
+                        data-chip="500">500</button>
                 </div>
             </div>
 
             <!-- My Bets Summary -->
-            <div id="my-bets-summary" class="hidden bg-midnight-900/60 p-4 rounded-2xl border border-gold-600/30 space-y-2">
+            <div id="my-bets-summary"
+                class="hidden bg-midnight-900/60 p-4 rounded-2xl border border-gold-600/30 space-y-2">
                 <p class="text-sm text-gold-300/60 font-bold">我的押注</p>
                 <div id="my-bets-list" class="space-y-1"></div>
                 <div class="flex justify-between items-center pt-2 border-t border-gold-600/20">
@@ -223,12 +268,14 @@
                 </div>
             </div>
 
-            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
+            <button onclick="exitGame()"
+                class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
         </div>
 
         <!-- Stopped UI -->
         <div id="stopped-ui" class="hidden text-center mt-16 space-y-8">
-            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+            <div
+                class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
                 <div class="text-5xl">🎲</div>
                 <h2 class="text-3xl font-bold text-gold-100">押注已截止</h2>
                 <p class="text-xl text-gold-200/80">等待莊家擲骰...</p>
@@ -242,7 +289,8 @@
 
         <!-- Rolling UI -->
         <div id="rolling-ui" class="hidden text-center mt-16 space-y-8">
-            <div class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+            <div
+                class="bg-midnight-900/60 p-10 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
                 <h2 class="text-3xl font-bold text-gold-100">莊家擲骰中...</h2>
                 <div id="dice-display" class="flex justify-center gap-6 py-6">
                     <span class="dice-face" id="dice-1">🎲</span>
@@ -255,7 +303,8 @@
 
         <!-- Resolved UI -->
         <div id="resolved-ui" class="hidden text-center mt-10 space-y-6">
-            <div class="bg-midnight-900/60 p-8 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
+            <div
+                class="bg-midnight-900/60 p-8 rounded-3xl border-2 border-gold-600/40 shadow-2xl backdrop-blur-md space-y-6">
                 <!-- Dice Result -->
                 <div>
                     <p class="text-lg text-gold-300/60 mb-2">骰子結果</p>
@@ -283,7 +332,8 @@
                     <p class="text-lg text-gold-200/50">等待下一局...</p>
                 </div>
             </div>
-            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
+            <button onclick="exitGame()"
+                class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
         </div>
 
         <!-- Ended UI -->
@@ -294,12 +344,14 @@
                 <h1 class="text-5xl md:text-6xl font-black text-teal-900 tracking-tight drop-shadow-lg">遊戲結束！</h1>
             </div>
             <!-- My Rank and Balance -->
-            <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-10 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
+            <div
+                class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-10 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
                 <div id="end-rank" class="text-5xl font-black text-gold-300"></div>
                 <div id="end-balance" class="text-3xl text-gold-200 font-bold"></div>
             </div>
             <!-- Leaderboard -->
-            <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-8 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
+            <div
+                class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-8 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
                 <h2 class="text-3xl font-black text-gold-100">排行榜</h2>
                 <div id="end-top" class="space-y-3"></div>
             </div>
@@ -312,8 +364,8 @@
     <div id="toast-container"></div>
 
     <script>
-        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const SUPABASE_URL = "https://fgklnzslrnmwmfuecnwu.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZna2xuenNscm5td21mdWVjbnd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTI0MjAsImV4cCI6MjA5MDA2ODQyMH0.7IQ24I5u61Dcs9hh9XAnl0GXFHKj_gSa3z6POmQYVeQ";
 
         // Symbol definitions
         const COIN_IMG = '<img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle">';

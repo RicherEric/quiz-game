@@ -21,11 +21,11 @@
             font-weight: 900;
             font-size: 11px;
             color: #fff;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
             transition: none;
             user-select: none;
             pointer-events: none;
-            box-shadow: inset -3px -3px 8px rgba(0,0,0,0.3), inset 3px 3px 8px rgba(255,255,255,0.2), 0 2px 8px rgba(0,0,0,0.4);
+            box-shadow: inset -3px -3px 8px rgba(0, 0, 0, 0.3), inset 3px 3px 8px rgba(255, 255, 255, 0.2), 0 2px 8px rgba(0, 0, 0, 0.4);
             overflow: hidden;
             text-align: center;
             line-height: 1.2;
@@ -44,13 +44,29 @@
         }
 
         @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 15px rgba(255, 170, 29, 0.6), inset -3px -3px 8px rgba(0,0,0,0.3), inset 3px 3px 8px rgba(255,255,255,0.2); transform: scale(1); }
-            50% { box-shadow: 0 0 35px rgba(255, 170, 29, 1), 0 0 60px rgba(255, 170, 29, 0.4), inset -3px -3px 8px rgba(0,0,0,0.3), inset 3px 3px 8px rgba(255,255,255,0.2); transform: scale(1.08); }
+
+            0%,
+            100% {
+                box-shadow: 0 0 15px rgba(255, 170, 29, 0.6), inset -3px -3px 8px rgba(0, 0, 0, 0.3), inset 3px 3px 8px rgba(255, 255, 255, 0.2);
+                transform: scale(1);
+            }
+
+            50% {
+                box-shadow: 0 0 35px rgba(255, 170, 29, 1), 0 0 60px rgba(255, 170, 29, 0.4), inset -3px -3px 8px rgba(0, 0, 0, 0.3), inset 3px 3px 8px rgba(255, 255, 255, 0.2);
+                transform: scale(1.08);
+            }
         }
 
         @keyframes winner-card-in {
-            from { opacity: 0; transform: translateY(30px) scale(0.9); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.9);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
         }
 
         .winner-card-anim {
@@ -58,9 +74,18 @@
         }
 
         /* Custom scrollbar */
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255, 170, 29, 0.3); border-radius: 3px; }
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 170, 29, 0.3);
+            border-radius: 3px;
+        }
     </style>
 </head>
 
@@ -71,17 +96,20 @@
             <div class="text-6xl">🔒</div>
             <h1 class="text-3xl font-bold text-gold-300">請先登入管理後台</h1>
             <p class="text-gold-100/60">此頁面需要管理員權限才能使用</p>
-            <a href="admin.html" class="inline-block px-6 py-3 bg-gold-500 text-midnight-950 font-bold rounded-xl hover:bg-gold-400 transition">前往登入</a>
+            <a href="admin.html"
+                class="inline-block px-6 py-3 bg-gold-500 text-midnight-950 font-bold rounded-xl hover:bg-gold-400 transition">前往登入</a>
         </div>
     </div>
 
     <div id="lottery-main-content" class="flex h-screen">
 
         <!-- Left Panel (30%) -->
-        <div class="w-[30%] min-w-[320px] bg-midnight-900/80 border-r border-gold-700/30 flex flex-col p-6 space-y-5 overflow-y-auto custom-scroll">
+        <div
+            class="w-[30%] min-w-[320px] bg-midnight-900/80 border-r border-gold-700/30 flex flex-col p-6 space-y-5 overflow-y-auto custom-scroll">
             <!-- Header -->
             <div class="flex items-center space-x-4">
-                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo" class="h-14 drop-shadow-md">
+                <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
+                    class="h-14 drop-shadow-md">
                 <div>
                     <h1 class="text-2xl font-black text-gold-gradient">摸彩抽獎</h1>
                     <p class="text-gold-400/60 text-sm">滙智 10 週年</p>
@@ -105,7 +133,8 @@
                     class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold text-lg border border-gold-700/50 cursor-pointer">
                     <option value="">載入中...</option>
                 </select>
-                <p class="text-gold-400/50 text-sm">中獎人數：<span id="prize-winner-count" class="text-gold-300 font-bold">-</span></p>
+                <p class="text-gold-400/50 text-sm">中獎人數：<span id="prize-winner-count"
+                        class="text-gold-300 font-bold">-</span></p>
             </div>
 
             <!-- Settings -->
@@ -124,7 +153,8 @@
                     </div>
                 </div>
                 <div class="text-gold-400/60 text-sm">
-                    <span id="eligible-label">合格人數</span>：<span id="eligible-count" class="text-gold-300 font-bold">0</span>
+                    <span id="eligible-label">合格人數</span>：<span id="eligible-count"
+                        class="text-gold-300 font-bold">0</span>
                 </div>
             </div>
 
@@ -158,21 +188,27 @@
             <!-- Tab Navigation -->
             <div class="flex border-b border-gold-700/30 bg-midnight-900/60 px-4 shrink-0">
                 <button data-lottery-tab="draw" onclick="switchLotteryTab('draw')"
-                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-gold-400 text-gold-200">🎱 摸彩抽獎</button>
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-gold-400 text-gold-200">🎱
+                    摸彩抽獎</button>
                 <button data-lottery-tab="group-view" onclick="switchLotteryTab('group-view')"
-                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">👥 群組檢視</button>
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">👥
+                    群組檢視</button>
                 <button data-lottery-tab="member-stats" onclick="switchLotteryTab('member-stats')"
-                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">📊 群組人數統計</button>
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">📊
+                    群組人數統計</button>
                 <button data-lottery-tab="winner-stats" onclick="switchLotteryTab('winner-stats')"
-                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">🏆 中獎群組統計</button>
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">🏆
+                    中獎群組統計</button>
                 <button data-lottery-tab="individual-stats" onclick="switchLotteryTab('individual-stats')"
-                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">👤 個人中獎統計</button>
+                    class="lottery-tab-btn px-5 py-3 font-bold text-sm transition-all border-b-2 border-transparent text-gold-500/50 hover:text-gold-300">👤
+                    個人中獎統計</button>
             </div>
 
             <!-- Tab: Draw (existing) -->
             <div id="lottery-tab-draw" class="flex-1 flex flex-col relative">
                 <!-- Ball Container -->
-                <div id="ball-container" class="flex-1 relative overflow-hidden bg-gradient-to-b from-midnight-950 via-midnight-900 to-midnight-950">
+                <div id="ball-container"
+                    class="flex-1 relative overflow-hidden bg-gradient-to-b from-midnight-950 via-midnight-900 to-midnight-950">
                     <div id="ball-area" class="absolute inset-4"></div>
                     <!-- Idle message -->
                     <div id="idle-message" class="absolute inset-0 flex items-center justify-center">
@@ -184,7 +220,8 @@
                 </div>
 
                 <!-- Winner reveal area -->
-                <div id="winner-reveal" class="hidden absolute inset-0 flex items-center justify-center z-20 bg-midnight-950/60 backdrop-blur-sm">
+                <div id="winner-reveal"
+                    class="hidden absolute inset-0 flex items-center justify-center z-20 bg-midnight-950/60 backdrop-blur-sm">
                     <div class="text-center space-y-6 max-w-2xl">
                         <h2 id="reveal-prize-name" class="text-4xl font-black text-gold-gradient"></h2>
                         <div id="reveal-winners" class="flex flex-wrap justify-center gap-4"></div>
@@ -227,7 +264,8 @@
     </div>
 
     <!-- Lottery Prize Modal -->
-    <div id="lottery-prize-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+    <div id="lottery-prize-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
         onclick="if(event.target===this)closeLotteryPrizeModal()">
         <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-md">
             <h2 id="lottery-prize-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增獎項</h2>
@@ -253,7 +291,7 @@
 
     <script>
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZna2xuenNscm5td21mdWVjbnd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTI0MjAsImV4cCI6MjA5MDA2ODQyMH0.7IQ24I5u61Dcs9hh9XAnl0GXFHKj_gSa3z6POmQYVeQ";
         const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let allGroups = [];

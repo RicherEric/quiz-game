@@ -53,7 +53,6 @@
             opacity: 0.4;
             background: rgba(204, 106, 24, 0.15);
         }
-
     </style>
 </head>
 
@@ -61,7 +60,8 @@
 
     <!-- 未登入時的提示（正常流程會被導向 admin-home.html） -->
     <div id="login-screen" class="flex items-center justify-center min-h-[80vh]">
-        <div class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
+        <div
+            class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
             <div class="text-center bg-amber-50 p-6 rounded-2xl">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-20 mx-auto drop-shadow-md mb-4">
@@ -76,7 +76,8 @@
     </div>
 
     <!-- 開放作答計時器（固定右上角） -->
-    <div id="playing-timer" class="hidden fixed top-4 right-4 z-50 bg-midnight-900/90 border-2 border-orange-500 rounded-2xl px-5 py-3 shadow-2xl backdrop-blur-sm">
+    <div id="playing-timer"
+        class="hidden fixed top-4 right-4 z-50 bg-midnight-900/90 border-2 border-orange-500 rounded-2xl px-5 py-3 shadow-2xl backdrop-blur-sm">
         <div class="text-center">
             <p class="text-xs font-bold text-orange-300/80 mb-1">作答經過時間</p>
             <span id="playing-timer-text" class="text-3xl font-black text-orange-400 tabular-nums">0s</span>
@@ -229,12 +230,15 @@
                 </div>
 
                 <!-- 答案媒體顯示（公布答案時） -->
-                <div id="answer-reveal-display" class="hidden mb-4 space-y-4 bg-green-900/20 p-6 rounded-2xl border-2 border-green-500/40">
+                <div id="answer-reveal-display"
+                    class="hidden mb-4 space-y-4 bg-green-900/20 p-6 rounded-2xl border-2 border-green-500/40">
                     <h3 class="text-xl font-bold text-green-300 text-center">📢 答案公布</h3>
-                    <div id="answer-reveal-images-row" class="hidden flex flex-wrap gap-3 justify-center overflow-x-auto"></div>
+                    <div id="answer-reveal-images-row"
+                        class="hidden flex flex-wrap gap-3 justify-center overflow-x-auto"></div>
                     <div id="answer-reveal-videos-col" class="hidden space-y-3 flex flex-col items-center"></div>
                     <p id="answer-reveal-none" class="hidden text-green-300/60 text-center">此題無答案媒體</p>
-                    <div id="answer-reveal-note" class="hidden bg-green-900/30 px-5 py-3 rounded-xl border border-green-500/30 mt-2">
+                    <div id="answer-reveal-note"
+                        class="hidden bg-green-900/30 px-5 py-3 rounded-xl border border-green-500/30 mt-2">
                         <p class="text-sm text-green-300/70 font-bold mb-1">📝 Note</p>
                         <p id="answer-reveal-note-text" class="text-green-200 font-bold whitespace-pre-wrap"></p>
                     </div>
@@ -308,31 +312,32 @@
             </div>
 
             <div id="tab-leaderboard" class="hidden">
-                <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] rounded-3xl p-8 border border-gold-500/25 shadow-xl">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-gold-100">榮耀排行榜</h2>
-                    <div class="flex items-center gap-4">
-                        <p class="text-gold-400/90">參賽總人數: <span id="total-players"
-                                class="font-bold text-2xl text-gold-100">0</span></p>
-                        <button onclick="doScoring()"
-                            class="px-5 py-2 bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white font-bold rounded-xl transition shadow-lg text-sm">
-                            💰 結算
-                        </button>
-                        <button onclick="exportLeaderboardPDF()"
-                            class="px-5 py-2 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg text-sm">
-                            📄 匯出 PDF
-                        </button>
-                    </div>
-                </div>
                 <div
-                    class="bg-[#1a2f4d]/90 px-8 py-4 border-b border-gold-500/30 grid grid-cols-12 gap-4 text-gold-300/90 font-bold uppercase text-sm rounded-t-2xl">
-                    <div class="col-span-2 text-center">排名</div>
-                    <div class="col-span-3">玩家</div>
-                    <div class="col-span-2 text-center">答對題數</div>
-                    <div class="col-span-2 text-center">平均答題時間</div>
-                    <div class="col-span-3 text-right">積分</div>
-                </div>
-                <div id="leaderboard-container" class="space-y-2 mt-2"></div>
+                    class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] rounded-3xl p-8 border border-gold-500/25 shadow-xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-3xl font-bold text-gold-100">榮耀排行榜</h2>
+                        <div class="flex items-center gap-4">
+                            <p class="text-gold-400/90">參賽總人數: <span id="total-players"
+                                    class="font-bold text-2xl text-gold-100">0</span></p>
+                            <button onclick="doScoring()"
+                                class="px-5 py-2 bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white font-bold rounded-xl transition shadow-lg text-sm">
+                                💰 結算
+                            </button>
+                            <button onclick="exportLeaderboardPDF()"
+                                class="px-5 py-2 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 font-bold rounded-xl transition shadow-lg text-sm">
+                                📄 匯出 PDF
+                            </button>
+                        </div>
+                    </div>
+                    <div
+                        class="bg-[#1a2f4d]/90 px-8 py-4 border-b border-gold-500/30 grid grid-cols-12 gap-4 text-gold-300/90 font-bold uppercase text-sm rounded-t-2xl">
+                        <div class="col-span-2 text-center">排名</div>
+                        <div class="col-span-3">玩家</div>
+                        <div class="col-span-2 text-center">答對題數</div>
+                        <div class="col-span-2 text-center">平均答題時間</div>
+                        <div class="col-span-3 text-right">積分</div>
+                    </div>
+                    <div id="leaderboard-container" class="space-y-2 mt-2"></div>
                 </div>
             </div>
 
@@ -438,8 +443,11 @@
             </div>
 
             <!-- 題組新增/編輯 Modal -->
-            <div id="group-create-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this)closeGroupCreateModal()">
-                <div class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-md">
+            <div id="group-create-modal"
+                class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+                onclick="if(event.target===this)closeGroupCreateModal()">
+                <div
+                    class="bg-midnight-900 border-2 border-gold-600/50 rounded-3xl p-10 space-y-6 shadow-2xl w-full max-w-md">
                     <h2 id="qgroup-modal-title" class="text-2xl font-black text-gold-gradient text-center">新增題組</h2>
                     <input type="hidden" id="qgroup-edit-id">
                     <div>
@@ -448,8 +456,10 @@
                             class="w-full bg-midnight-800 text-gold-200 p-4 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition">
                     </div>
                     <div class="flex gap-4">
-                        <button onclick="saveQuestionGroup()" class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-4 rounded-xl font-black text-xl transition shadow-lg">儲存</button>
-                        <button onclick="closeGroupCreateModal()" class="flex-1 bg-midnight-800 text-gold-300 hover:bg-midnight-700 px-6 py-4 rounded-xl font-bold text-xl transition border border-gold-700/50">取消</button>
+                        <button onclick="saveQuestionGroup()"
+                            class="flex-1 bg-gradient-to-r from-gold-500 to-gold-700 hover:from-gold-400 hover:to-gold-600 text-midnight-950 px-6 py-4 rounded-xl font-black text-xl transition shadow-lg">儲存</button>
+                        <button onclick="closeGroupCreateModal()"
+                            class="flex-1 bg-midnight-800 text-gold-300 hover:bg-midnight-700 px-6 py-4 rounded-xl font-bold text-xl transition border border-gold-700/50">取消</button>
                     </div>
                 </div>
             </div>
@@ -681,13 +691,15 @@
                     <div class="flex items-center space-x-2">
                         <input id="question-image-url-input" type="text" placeholder="外部圖片 URL"
                             class="flex-1 bg-midnight-800 text-gold-200 p-2 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm">
-                        <label class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
+                        <label
+                            class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
                             上傳
-                            <input id="question-image-file-input" type="file" accept="image/*,.heic,.heif" class="hidden"
-                                onchange="addMediaFile(this, 'question-images')">
+                            <input id="question-image-file-input" type="file" accept="image/*,.heic,.heif"
+                                class="hidden" onchange="addMediaFile(this, 'question-images')">
                         </label>
                         <button type="button" onclick="addMediaUrl('question-image-url-input', 'question-images')"
-                            class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+ 新增</button>
+                            class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+
+                            新增</button>
                     </div>
                 </div>
             </div>
@@ -699,13 +711,15 @@
                     <div class="flex items-center space-x-2">
                         <input id="question-video-url-input" type="text" placeholder="YouTube 或直連影片 URL"
                             class="flex-1 bg-midnight-800 text-gold-200 p-2 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm">
-                        <label class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
+                        <label
+                            class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
                             上傳
                             <input id="question-video-file-input" type="file" accept="video/*" class="hidden"
                                 onchange="addMediaFile(this, 'question-videos')">
                         </label>
                         <button type="button" onclick="addMediaUrl('question-video-url-input', 'question-videos')"
-                            class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+ 新增</button>
+                            class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+
+                            新增</button>
                     </div>
                 </div>
             </div>
@@ -723,13 +737,15 @@
                     <div class="flex items-center space-x-2">
                         <input id="answer-image-url-input" type="text" placeholder="外部圖片 URL"
                             class="flex-1 bg-midnight-800 text-gold-200 p-2 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm">
-                        <label class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
+                        <label
+                            class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
                             上傳
                             <input id="answer-image-file-input" type="file" accept="image/*,.heic,.heif" class="hidden"
                                 onchange="addMediaFile(this, 'answer-images')">
                         </label>
                         <button type="button" onclick="addMediaUrl('answer-image-url-input', 'answer-images')"
-                            class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+ 新增</button>
+                            class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+
+                            新增</button>
                     </div>
                 </div>
             </div>
@@ -741,13 +757,15 @@
                     <div class="flex items-center space-x-2">
                         <input id="answer-video-url-input" type="text" placeholder="YouTube 或直連影片 URL"
                             class="flex-1 bg-midnight-800 text-gold-200 p-2 rounded-xl outline-none font-bold border border-gold-700/50 focus:border-gold-400 transition text-sm">
-                        <label class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
+                        <label
+                            class="cursor-pointer px-3 py-2 bg-midnight-800 border border-gold-700/50 text-gold-300 font-bold rounded-xl text-sm hover:border-gold-400 transition whitespace-nowrap">
                             上傳
                             <input id="answer-video-file-input" type="file" accept="video/*" class="hidden"
                                 onchange="addMediaFile(this, 'answer-videos')">
                         </label>
                         <button type="button" onclick="addMediaUrl('answer-video-url-input', 'answer-videos')"
-                            class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+ 新增</button>
+                            class="px-3 py-2 bg-gold-700/30 text-gold-300 font-bold rounded-xl text-sm hover:bg-gold-600/40 transition">+
+                            新增</button>
                     </div>
                 </div>
             </div>
@@ -770,7 +788,7 @@
         function showQRCode() {
             const playerUrl = window.location.origin + '/?token=' + 'qz-w10-8f3a2b1c4d5e6f7a';
             const canvas = document.getElementById('qr-img');
-            QRCode.toCanvas(canvas, playerUrl, { width: 256, margin: 1 }, function(err) {
+            QRCode.toCanvas(canvas, playerUrl, { width: 256, margin: 1 }, function (err) {
                 if (err) console.error('QR Code 產生失敗:', err);
             });
             document.getElementById('qr-url').innerText = playerUrl;
@@ -782,9 +800,9 @@
     </script>
 
     <script>
-        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
+        const SUPABASE_URL = "https://fgklnzslrnmwmfuecnwu.supabase.co";
         // TODO: 請替換為你的 Supabase service_role key（Supabase Dashboard → Settings → API）
-        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZna2xuenNscm5td21mdWVjbnd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTI0MjAsImV4cCI6MjA5MDA2ODQyMH0.7IQ24I5u61Dcs9hh9XAnl0GXFHKj_gSa3z6POmQYVeQ";
         const QR_FIXED_TOKEN = "qz-w10-8f3a2b1c4d5e6f7a";
         const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -1004,11 +1022,11 @@
                     img.crossOrigin = 'anonymous';
                     img.className = 'rounded-xl max-h-32 border border-gold-700/30';
                     img.alt = '圖片預覽';
-                    img.onerror = function() {
+                    img.onerror = function () {
                         this.onerror = null;
                         this.crossOrigin = null;
                         this.src = item.file ? URL.createObjectURL(item.file) : item.url;
-                        this.onerror = function() {
+                        this.onerror = function () {
                             this.onerror = null;
                             this.style.display = 'none';
                             const fallback = document.createElement('div');
@@ -1257,13 +1275,13 @@
                         img.crossOrigin = 'anonymous';
                         img.loading = 'lazy';
                         img.className = 'rounded-xl max-h-80 cursor-zoom-in';
-                        img.onerror = function() {
+                        img.onerror = function () {
                             this.onerror = null;
                             this.crossOrigin = null;
                             this.src = url;
                         };
                         img.src = url;
-                        img.onclick = function() { openLightbox(this.src); };
+                        img.onclick = function () { openLightbox(this.src); };
                         imagesRow.appendChild(img);
                     });
                     imagesRow.classList.remove('hidden');
@@ -1625,7 +1643,7 @@
                     img.loading = 'lazy';
                     img.className = 'rounded-xl max-h-80 cursor-zoom-in';
                     img.src = url;
-                    img.onclick = function() { openLightbox(this.src); };
+                    img.onclick = function () { openLightbox(this.src); };
                     imagesRow.appendChild(img);
                 });
                 imagesRow.classList.remove('hidden');
@@ -3877,7 +3895,7 @@
                         const pathname = new URL(url).pathname;
                         const ext = pathname.split('.').pop().split('?')[0].toLowerCase();
                         if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'webm', 'mov', 'avi'].includes(ext)) return '.' + ext;
-                    } catch (e) {}
+                    } catch (e) { }
                     return '';
                 }
 

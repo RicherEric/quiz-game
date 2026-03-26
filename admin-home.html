@@ -13,6 +13,7 @@
         .game-card {
             transition: transform 0.2s, box-shadow 0.2s;
         }
+
         .game-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 12px 40px rgba(255, 168, 48, 0.15);
@@ -24,7 +25,8 @@
 
     <!-- 登入畫面 -->
     <div id="login-screen" class="flex items-center justify-center min-h-[80vh]">
-        <div class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
+        <div
+            class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
             <div class="text-center bg-amber-50 p-6 rounded-2xl">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-20 mx-auto drop-shadow-md mb-4">
@@ -73,7 +75,8 @@
                     <div class="text-6xl">🎯</div>
                     <h2 class="text-2xl font-black text-gold-300">問答遊戲</h2>
                     <p class="text-gold-500/70 text-sm">題目管理、遊戲控場、排行榜、抽獎</p>
-                    <div class="bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 px-6 py-3 rounded-xl font-black text-lg inline-block">
+                    <div
+                        class="bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 px-6 py-3 rounded-xl font-black text-lg inline-block">
                         進入控場台
                     </div>
                 </a>
@@ -84,7 +87,8 @@
                     <div class="text-6xl">🎲</div>
                     <h2 class="text-2xl font-black text-gold-300">魚蝦蟹</h2>
                     <p class="text-gold-500/70 text-sm">房間管理、擲骰開獎、押注結算</p>
-                    <div class="bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 px-6 py-3 rounded-xl font-black text-lg inline-block">
+                    <div
+                        class="bg-gradient-to-r from-gold-500 to-gold-700 text-midnight-950 px-6 py-3 rounded-xl font-black text-lg inline-block">
                         進入莊家台
                     </div>
                 </a>
@@ -92,8 +96,7 @@
 
             <!-- Logout -->
             <div class="text-center">
-                <button onclick="doLogout()"
-                    class="text-gold-500/50 hover:text-red-400 text-sm font-bold transition">
+                <button onclick="doLogout()" class="text-gold-500/50 hover:text-red-400 text-sm font-bold transition">
                     登出
                 </button>
             </div>
@@ -101,8 +104,8 @@
     </div>
 
     <script>
-        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
-        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const SUPABASE_URL = "https://fgklnzslrnmwmfuecnwu.supabase.co";
+        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZna2xuenNscm5td21mdWVjbnd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTI0MjAsImV4cCI6MjA5MDA2ODQyMH0.7IQ24I5u61Dcs9hh9XAnl0GXFHKj_gSa3z6POmQYVeQ";
         const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
         async function doLogin() {

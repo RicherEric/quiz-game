@@ -24,6 +24,7 @@
                 opacity: 0;
                 transform: translateY(12px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -36,11 +37,25 @@
         }
 
         @keyframes diceRoll {
-            0% { transform: rotateX(0deg) rotateY(0deg); }
-            25% { transform: rotateX(90deg) rotateY(90deg); }
-            50% { transform: rotateX(180deg) rotateY(180deg); }
-            75% { transform: rotateX(270deg) rotateY(90deg); }
-            100% { transform: rotateX(360deg) rotateY(360deg); }
+            0% {
+                transform: rotateX(0deg) rotateY(0deg);
+            }
+
+            25% {
+                transform: rotateX(90deg) rotateY(90deg);
+            }
+
+            50% {
+                transform: rotateX(180deg) rotateY(180deg);
+            }
+
+            75% {
+                transform: rotateX(270deg) rotateY(90deg);
+            }
+
+            100% {
+                transform: rotateX(360deg) rotateY(360deg);
+            }
         }
 
         .dice-rolling {
@@ -59,8 +74,17 @@
         }
 
         @keyframes tripleFlash {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.7; transform: scale(1.05); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.7;
+                transform: scale(1.05);
+            }
         }
 
         .triple-flash {
@@ -73,7 +97,8 @@
 
     <!-- Login Guard -->
     <div id="login-guard" class="flex items-center justify-center min-h-[80vh]">
-        <div class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
+        <div
+            class="bg-midnight-900/80 border border-gold-700/50 rounded-3xl p-6 md:p-10 shadow-2xl w-full max-w-md space-y-6">
             <div class="text-center bg-amber-50 p-6 rounded-2xl">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-20 mx-auto drop-shadow-md mb-4">
@@ -88,7 +113,8 @@
     </div>
 
     <!-- Betting Timer (fixed top-right) -->
-    <div id="betting-timer" class="hidden fixed top-4 right-4 z-50 bg-midnight-900/90 border-2 border-orange-500 rounded-2xl px-5 py-3 shadow-2xl backdrop-blur-sm">
+    <div id="betting-timer"
+        class="hidden fixed top-4 right-4 z-50 bg-midnight-900/90 border-2 border-orange-500 rounded-2xl px-5 py-3 shadow-2xl backdrop-blur-sm">
         <div class="text-center">
             <p class="text-xs font-bold text-orange-300/80 mb-1">押注倒數</p>
             <span id="betting-timer-text" class="text-3xl font-black text-orange-400 tabular-nums">30s</span>
@@ -99,7 +125,8 @@
     <div id="admin-panel" class="hidden max-w-7xl mx-auto space-y-8">
 
         <!-- Header -->
-        <header class="bg-midnight-800/90 border border-gold-700/50 rounded-3xl p-4 md:p-6 shadow-2xl flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+        <header
+            class="bg-midnight-800/90 border border-gold-700/50 rounded-3xl p-4 md:p-6 shadow-2xl flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
             <div class="flex items-center space-x-4 md:space-x-6 bg-amber-50 p-4 rounded-2xl">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-12 md:h-20 drop-shadow-md">
@@ -202,14 +229,17 @@
 
         <!-- Tabs -->
         <div class="flex flex-wrap gap-1 md:gap-2 border-b border-gold-800/50">
-            <button onclick="switchTab('tab-control')" id="btn-tab-control" class="tab-btn tab-active">&#x1F3AE; 遊戲控制</button>
+            <button onclick="switchTab('tab-control')" id="btn-tab-control" class="tab-btn tab-active">&#x1F3AE;
+                遊戲控制</button>
             <button onclick="switchTab('tab-rooms')" id="btn-tab-rooms" class="tab-btn">&#x1F3E0; 房間管理</button>
-            <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">&#x1F3C6; 排行榜</button>
+            <button onclick="switchTab('tab-leaderboard')" id="btn-tab-leaderboard" class="tab-btn">&#x1F3C6;
+                排行榜</button>
             <button onclick="switchTab('tab-players')" id="btn-tab-players" class="tab-btn">&#x1F465; 玩家管理</button>
         </div>
 
         <!-- Main Content Area -->
-        <main class="bg-midnight-800/50 rounded-b-3xl rounded-tr-3xl border border-gold-700/30 shadow-2xl p-4 md:p-8 min-h-[500px]">
+        <main
+            class="bg-midnight-800/50 rounded-b-3xl rounded-tr-3xl border border-gold-700/30 shadow-2xl p-4 md:p-8 min-h-[500px]">
 
             <!-- Tab 1: Game Control -->
             <div id="tab-control" class="space-y-6">
@@ -222,7 +252,8 @@
                         <span class="dice-symbol-lg text-gold-500/30">?</span>
                     </div>
                     <div id="triple-badge" class="hidden mt-4">
-                        <span class="triple-flash inline-block bg-gradient-to-r from-red-600 to-red-800 text-white px-6 py-2 rounded-full font-black text-2xl border-2 border-red-400/50 shadow-lg">
+                        <span
+                            class="triple-flash inline-block bg-gradient-to-r from-red-600 to-red-800 text-white px-6 py-2 rounded-full font-black text-2xl border-2 border-red-400/50 shadow-lg">
                             圍骰！
                         </span>
                     </div>
@@ -233,44 +264,52 @@
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-2xl font-bold text-gold-200">押注統計</h3>
                         <div class="flex items-center gap-3">
-                            <span class="text-gold-400 font-bold">總押注：<span id="total-bet-pool" class="text-gold-100 text-xl">0</span></span>
+                            <span class="text-gold-400 font-bold">總押注：<span id="total-bet-pool"
+                                    class="text-gold-100 text-xl">0</span></span>
                             <button onclick="fetchBetStats()"
                                 class="text-gold-400 hover:text-gold-200 underline text-sm">手動刷新</button>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" id="symbol-stats-grid">
-                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-blue-500/30 text-center" data-symbol="1">
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-blue-500/30 text-center"
+                            data-symbol="1">
                             <div class="text-4xl mb-1">&#x1F41F;</div>
                             <div class="text-sm font-bold text-blue-300">魚</div>
                             <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-1">0</span> 注</div>
                             <div class="text-sm text-gold-400">$<span id="stat-amount-1">0</span></div>
                         </div>
-                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-orange-500/30 text-center" data-symbol="2">
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-orange-500/30 text-center"
+                            data-symbol="2">
                             <div class="text-4xl mb-1">&#x1F990;</div>
                             <div class="text-sm font-bold text-orange-300">蝦</div>
                             <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-2">0</span> 注</div>
                             <div class="text-sm text-gold-400">$<span id="stat-amount-2">0</span></div>
                         </div>
-                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-red-500/30 text-center" data-symbol="3">
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-red-500/30 text-center"
+                            data-symbol="3">
                             <div class="text-4xl mb-1">&#x1F980;</div>
                             <div class="text-sm font-bold text-red-300">蟹</div>
                             <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-3">0</span> 注</div>
                             <div class="text-sm text-gold-400">$<span id="stat-amount-3">0</span></div>
                         </div>
-                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-yellow-500/30 text-center" data-symbol="4">
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-yellow-500/30 text-center"
+                            data-symbol="4">
                             <div class="text-4xl mb-1">&#x1F413;</div>
                             <div class="text-sm font-bold text-yellow-300">雞</div>
                             <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-4">0</span> 注</div>
                             <div class="text-sm text-gold-400">$<span id="stat-amount-4">0</span></div>
                         </div>
-                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-green-500/30 text-center" data-symbol="5">
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-green-500/30 text-center"
+                            data-symbol="5">
                             <div class="text-4xl mb-1">&#x1F350;</div>
                             <div class="text-sm font-bold text-green-300">葫蘆</div>
                             <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-5">0</span> 注</div>
                             <div class="text-sm text-gold-400">$<span id="stat-amount-5">0</span></div>
                         </div>
-                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-amber-500/30 text-center" data-symbol="6">
-                            <div class="text-4xl mb-1"><img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle"></div>
+                        <div class="bg-midnight-800/80 rounded-xl p-4 border border-amber-500/30 text-center"
+                            data-symbol="6">
+                            <div class="text-4xl mb-1"><img src="img/coin.svg"
+                                    style="display:inline;width:1em;height:1em;vertical-align:middle"></div>
                             <div class="text-sm font-bold text-amber-300">錢幣</div>
                             <div class="mt-2 text-lg font-black text-gold-200"><span id="stat-count-6">0</span> 注</div>
                             <div class="text-sm text-gold-400">$<span id="stat-amount-6">0</span></div>
@@ -281,40 +320,57 @@
                     <div id="triple-stats-section" class="hidden mt-4">
                         <h4 class="text-lg font-bold text-purple-300 mb-2">指定圍骰</h4>
                         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" id="triple-stats-grid">
-                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="1">
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center"
+                                data-triple="1">
                                 <div class="text-2xl">🐟🐟🐟</div>
                                 <div class="text-xs font-bold text-purple-200">魚圍骰</div>
-                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-1">0</span> 注</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span
+                                        id="stat-triple-count-1">0</span> 注</div>
                                 <div class="text-sm text-gold-400">$<span id="stat-triple-amount-1">0</span></div>
                             </div>
-                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="2">
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center"
+                                data-triple="2">
                                 <div class="text-2xl">🦐🦐🦐</div>
                                 <div class="text-xs font-bold text-purple-200">蝦圍骰</div>
-                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-2">0</span> 注</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span
+                                        id="stat-triple-count-2">0</span> 注</div>
                                 <div class="text-sm text-gold-400">$<span id="stat-triple-amount-2">0</span></div>
                             </div>
-                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="3">
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center"
+                                data-triple="3">
                                 <div class="text-2xl">🦀🦀🦀</div>
                                 <div class="text-xs font-bold text-purple-200">蟹圍骰</div>
-                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-3">0</span> 注</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span
+                                        id="stat-triple-count-3">0</span> 注</div>
                                 <div class="text-sm text-gold-400">$<span id="stat-triple-amount-3">0</span></div>
                             </div>
-                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="4">
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center"
+                                data-triple="4">
                                 <div class="text-2xl">🐓🐓🐓</div>
                                 <div class="text-xs font-bold text-purple-200">雞圍骰</div>
-                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-4">0</span> 注</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span
+                                        id="stat-triple-count-4">0</span> 注</div>
                                 <div class="text-sm text-gold-400">$<span id="stat-triple-amount-4">0</span></div>
                             </div>
-                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="5">
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center"
+                                data-triple="5">
                                 <div class="text-2xl">🍐🍐🍐</div>
                                 <div class="text-xs font-bold text-purple-200">葫蘆圍骰</div>
-                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-5">0</span> 注</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span
+                                        id="stat-triple-count-5">0</span> 注</div>
                                 <div class="text-sm text-gold-400">$<span id="stat-triple-amount-5">0</span></div>
                             </div>
-                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center" data-triple="6">
-                                <div class="text-2xl"><img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle"><img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle"><img src="img/coin.svg" style="display:inline;width:1em;height:1em;vertical-align:middle"></div>
+                            <div class="bg-purple-900/40 rounded-xl p-3 border border-purple-500/30 text-center"
+                                data-triple="6">
+                                <div class="text-2xl"><img src="img/coin.svg"
+                                        style="display:inline;width:1em;height:1em;vertical-align:middle"><img
+                                        src="img/coin.svg"
+                                        style="display:inline;width:1em;height:1em;vertical-align:middle"><img
+                                        src="img/coin.svg"
+                                        style="display:inline;width:1em;height:1em;vertical-align:middle"></div>
                                 <div class="text-xs font-bold text-purple-200">錢幣圍骰</div>
-                                <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-triple-count-6">0</span> 注</div>
+                                <div class="mt-1 text-lg font-black text-gold-200"><span
+                                        id="stat-triple-count-6">0</span> 注</div>
                                 <div class="text-sm text-gold-400">$<span id="stat-triple-amount-6">0</span></div>
                             </div>
                         </div>
@@ -323,10 +379,12 @@
                     <!-- Any triple stats -->
                     <div id="any-triple-stats-section" class="hidden mt-4">
                         <h4 class="text-lg font-bold text-amber-300 mb-2">全圍</h4>
-                        <div class="bg-amber-900/40 rounded-xl p-4 border border-amber-500/30 text-center inline-block min-w-[140px]">
+                        <div
+                            class="bg-amber-900/40 rounded-xl p-4 border border-amber-500/30 text-center inline-block min-w-[140px]">
                             <div class="text-2xl">🎲🎲🎲</div>
                             <div class="text-xs font-bold text-amber-200">任意圍骰</div>
-                            <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-any-triple-count">0</span> 注</div>
+                            <div class="mt-1 text-lg font-black text-gold-200"><span id="stat-any-triple-count">0</span>
+                                注</div>
                             <div class="text-sm text-gold-400">$<span id="stat-any-triple-amount">0</span></div>
                         </div>
                     </div>
@@ -343,15 +401,18 @@
                             <span class="text-sm ml-1">已投注</span>
                         </span>
                     </div>
-                    <div id="bet-status-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                    <div id="bet-status-grid"
+                        class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                     </div>
                 </div>
 
                 <!-- Round Results (shown in resolved state) -->
-                <div id="round-results-area" class="hidden bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30">
+                <div id="round-results-area"
+                    class="hidden bg-midnight-900/60 p-6 rounded-2xl border border-gold-700/30">
                     <h3 class="text-2xl font-bold text-gold-200 mb-2">本局結算</h3>
                     <div class="flex justify-between items-center mb-4">
-                        <span class="text-lg text-gold-400">莊家盈虧：<span id="house-profit" class="font-black text-2xl">0</span></span>
+                        <span class="text-lg text-gold-400">莊家盈虧：<span id="house-profit"
+                                class="font-black text-2xl">0</span></span>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
@@ -387,13 +448,15 @@
 
             <!-- Tab 3: Leaderboard -->
             <div id="tab-leaderboard" class="hidden">
-                <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] rounded-3xl p-8 border border-gold-500/25 shadow-xl">
+                <div
+                    class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] rounded-3xl p-8 border border-gold-500/25 shadow-xl">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-3xl font-bold text-gold-100">籌碼排行榜</h2>
                         <p class="text-gold-400/90">參賽總人數: <span id="total-players"
                                 class="font-bold text-2xl text-gold-100">0</span></p>
                     </div>
-                    <div class="bg-[#1a2f4d]/90 px-8 py-4 border-b border-gold-500/30 grid grid-cols-12 gap-4 text-gold-300/90 font-bold uppercase text-sm rounded-t-2xl">
+                    <div
+                        class="bg-[#1a2f4d]/90 px-8 py-4 border-b border-gold-500/30 grid grid-cols-12 gap-4 text-gold-300/90 font-bold uppercase text-sm rounded-t-2xl">
                         <div class="col-span-2 text-center">排名</div>
                         <div class="col-span-4">玩家</div>
                         <div class="col-span-3 text-right">餘額</div>
@@ -424,7 +487,9 @@
                             </tr>
                         </thead>
                         <tbody id="players-table-body">
-                            <tr><td colspan="3" class="text-center text-gold-400/50 py-10">載入中...</td></tr>
+                            <tr>
+                                <td colspan="3" class="text-center text-gold-400/50 py-10">載入中...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -435,12 +500,14 @@
 
     <!-- Manual Dice Modal -->
     <div id="manual-dice-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-        <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-lg space-y-6">
+        <div
+            class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-lg space-y-6">
             <h3 class="text-2xl font-bold text-gold-200 text-center">手動設定骰子結果</h3>
             <div class="flex justify-center gap-4">
                 <div>
                     <label class="block text-gold-300 font-bold mb-2 text-center">骰子 1</label>
-                    <select id="manual-dice-1" class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
+                    <select id="manual-dice-1"
+                        class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
                         <option value="1">&#x1F41F; 魚</option>
                         <option value="2">&#x1F990; 蝦</option>
                         <option value="3">&#x1F980; 蟹</option>
@@ -451,7 +518,8 @@
                 </div>
                 <div>
                     <label class="block text-gold-300 font-bold mb-2 text-center">骰子 2</label>
-                    <select id="manual-dice-2" class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
+                    <select id="manual-dice-2"
+                        class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
                         <option value="1">&#x1F41F; 魚</option>
                         <option value="2">&#x1F990; 蝦</option>
                         <option value="3">&#x1F980; 蟹</option>
@@ -462,7 +530,8 @@
                 </div>
                 <div>
                     <label class="block text-gold-300 font-bold mb-2 text-center">骰子 3</label>
-                    <select id="manual-dice-3" class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
+                    <select id="manual-dice-3"
+                        class="bg-midnight-800 text-gold-200 px-4 py-3 rounded-xl outline-none font-bold text-xl border border-gold-700/50 text-center w-28">
                         <option value="1">&#x1F41F; 魚</option>
                         <option value="2">&#x1F990; 蝦</option>
                         <option value="3">&#x1F980; 蟹</option>
@@ -494,7 +563,8 @@
 
     <!-- Create/Edit Room Modal -->
     <div id="room-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-        <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+        <div
+            class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 id="room-modal-title" class="text-2xl font-bold text-gold-200 text-center">新增房間</h3>
             <input type="hidden" id="room-edit-id" value="">
             <div>
@@ -574,7 +644,8 @@
 
     <!-- QR Code Modal -->
     <div id="qr-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-        <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-md space-y-4 text-center">
+        <div
+            class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-md space-y-4 text-center">
             <h3 class="text-2xl font-bold text-gold-200">QR Code</h3>
             <p id="qr-room-name" class="text-gold-400 font-bold"></p>
             <canvas id="qr-code-canvas" class="mx-auto rounded-xl bg-white p-4" style="max-width:300px"></canvas>
@@ -588,9 +659,11 @@
 
     <!-- Adjust Balance Modal -->
     <div id="balance-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-        <div class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-sm space-y-4">
+        <div
+            class="bg-midnight-900 border border-gold-700/50 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-sm space-y-4">
             <h3 class="text-2xl font-bold text-gold-200 text-center">調整餘額</h3>
-            <p class="text-gold-400 text-center">玩家：<span id="balance-player-name" class="font-bold text-gold-100"></span></p>
+            <p class="text-gold-400 text-center">玩家：<span id="balance-player-name"
+                    class="font-bold text-gold-100"></span></p>
             <div>
                 <label class="block text-gold-300 font-bold mb-1">新餘額</label>
                 <input id="balance-new-value" type="number"
@@ -611,8 +684,8 @@
 
     <script>
         // ===== Supabase Init =====
-        const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
-        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const SUPABASE_URL = "https://fgklnzslrnmwmfuecnwu.supabase.co";
+        const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZna2xuenNscm5td21mdWVjbnd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTI0MjAsImV4cCI6MjA5MDA2ODQyMH0.7IQ24I5u61Dcs9hh9XAnl0GXFHKj_gSa3z6POmQYVeQ";
         const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
         // ===== Symbol Map =====
@@ -1664,7 +1737,7 @@
             document.getElementById('qr-room-name').textContent = room.name;
             document.getElementById('qr-url-text').textContent = url;
             const canvas = document.getElementById('qr-code-canvas');
-            QRCode.toCanvas(canvas, url, { width: 260, margin: 1 }, function(err) {
+            QRCode.toCanvas(canvas, url, { width: 260, margin: 1 }, function (err) {
                 if (err) console.error('QR Code 產生失敗:', err);
             });
             document.getElementById('qr-modal').classList.remove('hidden');

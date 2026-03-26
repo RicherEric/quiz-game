@@ -39,14 +39,21 @@
             @apply fixed top-4 right-4 z-50 bg-gold-600/80 hover:bg-gold-500 text-midnight-950 rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all active:scale-90;
             backdrop-filter: blur(8px);
         }
+
         .sync-btn.syncing svg {
             animation: spin 0.6s linear;
         }
 
         @keyframes slide-up {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
+            from {
+                transform: translateY(100%);
+            }
+
+            to {
+                transform: translateY(0);
+            }
         }
+
         .animate-slide-up {
             animation: slide-up 0.3s ease-out;
         }
@@ -75,7 +82,8 @@
 <body class="bg-midnight-900 text-gold-100 font-sans min-h-screen">
     <!-- 手動同步按鈕（登入後才顯示） -->
     <button id="sync-btn" class="sync-btn hidden" onclick="manualRefresh()" title="同步題目狀態">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="23 4 23 10 17 10"></polyline>
             <polyline points="1 20 1 14 7 14"></polyline>
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -120,14 +128,16 @@
                         class="text-gold-gradient"></span></h2>
                 <p class="text-2xl text-gold-200/80 leading-relaxed">請看大螢幕，<br>等待主持人開放作答...</p>
             </div>
-            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
+            <button onclick="exitGame()"
+                class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
         </div>
 
         <div id="scoring-ui" class="hidden text-center mt-16 space-y-6">
             <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                 class="h-28 w-auto object-contain mx-auto drop-shadow-[0_0_15px_rgba(255,210,100,0.2)]">
             <div id="test-mode-badge" class="hidden">
-                <span class="inline-block bg-amber-600/80 text-white text-sm font-bold px-4 py-1 rounded-full">測試模式</span>
+                <span
+                    class="inline-block bg-amber-600/80 text-white text-sm font-bold px-4 py-1 rounded-full">測試模式</span>
             </div>
             <p class="text-3xl text-gold-200 font-bold">本題結算完成</p>
 
@@ -156,7 +166,8 @@
             </div>
 
             <!-- 累計積分 -->
-            <div class="bg-midnight-900/60 px-8 py-8 rounded-3xl border-2 border-gold-600/40 shadow-[0_0_30px_rgba(255,210,100,0.08)]">
+            <div
+                class="bg-midnight-900/60 px-8 py-8 rounded-3xl border-2 border-gold-600/40 shadow-[0_0_30px_rgba(255,210,100,0.08)]">
                 <p class="text-lg text-gold-300/70 mb-2">您的累計積分</p>
                 <div id="scoring-total-score" class="text-6xl font-black text-gold-gradient"></div>
             </div>
@@ -166,12 +177,12 @@
                 <div class="animate-spin rounded-full h-8 w-8 border-b-3 border-gold-400"></div>
                 <p class="text-xl text-gold-200/50">等待主持人進入下一題...</p>
             </div>
-            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
+            <button onclick="exitGame()"
+                class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors">退出遊戲</button>
         </div>
 
         <div id="game-ui" class="hidden space-y-6">
-            <div
-                class="flex justify-center items-center bg-amber-50 p-5 rounded-3xl border-2 border-gold-600/40">
+            <div class="flex justify-center items-center bg-amber-50 p-5 rounded-3xl border-2 border-gold-600/40">
                 <img src="https://wisdom-financial.com/dist/images/10th/W10_WGHL.png" alt="Logo"
                     class="h-12 w-auto object-contain opacity-80">
             </div>
@@ -228,7 +239,8 @@
                 <p class="text-sm text-green-300/70 font-bold mb-1">📝 Note</p>
                 <p id="reveal-note-text" class="text-green-200 font-bold text-lg whitespace-pre-wrap"></p>
             </div>
-            <button onclick="exitGame()" class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors mt-4">退出遊戲</button>
+            <button onclick="exitGame()"
+                class="text-gold-300/50 hover:text-gold-200 text-base underline underline-offset-4 transition-colors mt-4">退出遊戲</button>
         </div>
 
         <div id="end-ui" class="hidden text-center mt-20 space-y-8">
@@ -238,12 +250,14 @@
                 <h1 class="text-5xl md:text-6xl font-black text-teal-900 tracking-tight drop-shadow-lg">挑戰結束！</h1>
             </div>
             <!-- 自己的名次與分數 -->
-            <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-10 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
+            <div
+                class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-10 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
                 <div id="end-rank" class="text-5xl font-black text-gold-300"></div>
                 <div id="end-score" class="text-3xl text-gold-200 font-bold"></div>
             </div>
             <!-- 前三名排行榜 -->
-            <div class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-8 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
+            <div
+                class="bg-gradient-to-b from-[#243d5c] to-[#1c3250] p-8 rounded-3xl border border-gold-500/25 shadow-xl space-y-4">
                 <h2 class="text-3xl font-black text-gold-100">🏆 排行榜</h2>
                 <div id="end-top3" class="space-y-3"></div>
             </div>
@@ -254,7 +268,7 @@
 
     <script>
         const SUPABASE_URL = "https://jwwhkbxgcbasmgkgmrvl.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3d2hrYnhnY2Jhc21na2dtcnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzEzODYsImV4cCI6MjA4ODI0NzM4Nn0.B_9hBrm8aUO6lGmyCCyBdSU49Xv2EPLGOnjet1Lf8jE";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZna2xuenNscm5td21mdWVjbnd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTI0MjAsImV4cCI6MjA5MDA2ODQyMH0.7IQ24I5u61Dcs9hh9XAnl0GXFHKj_gSa3z6POmQYVeQ";
 
         let sbClient, myName = "", currentQ = null, startTime = 0, hasAnswered = false, currentSelection = 0, channel = null, lastProcessedKey = '', pollInterval = null, questionIdOrder = [], qrToken = null, currentGroupId = null;
         let questionsMap = new Map(); // 預載題目內容快取，避免 playing 時 100 人同時 fetch
