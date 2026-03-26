@@ -101,10 +101,31 @@ export async function launchBrowsers(qrToken) {
     viewport: { width: 390, height: 844 },
   });
   _userPage = await userCtx.newPage();
+  // Auto-accept alerts so they don't block Playwright (e.g. join errors)
+  let lastDialog = '';
+  _userPage.on('dialog', dialog => {
+    lastDialog = dialog.message();
+    console.log(`  [user-page dialog] ${lastDialog}`);
+    dialog.accept();
+  });
   await _userPage.goto(`${baseUrl}/index.html?token=${qrToken}`);
+  // Wait for login UI to be ready
+  await _userPage.waitForSelector('#login-ui:not(.hidden)', { timeout: 10000 });
   await _userPage.fill('#p-name', 'test_viewer');
   await _userPage.click('button[onclick="join()"]');
-  await _userPage.waitForSelector('#waiting-ui:not(.hidden)', { timeout: 10000 });
+  // Retry join if it fails (e.g. transient network error or stale duplicate)
+  try {
+    await _userPage.waitForSelector('#waiting-ui:not(.hidden)', { timeout: 10000 });
+  } catch (_e) {
+    console.log(`  User join failed (dialog: "${lastDialog}"), retrying...`);
+    // Clear sessionStorage and retry
+    await _userPage.evaluate(() => sessionStorage.clear());
+    await _userPage.goto(`${baseUrl}/index.html?token=${qrToken}`);
+    await _userPage.waitForSelector('#login-ui:not(.hidden)', { timeout: 10000 });
+    await _userPage.fill('#p-name', 'test_viewer');
+    await _userPage.click('button[onclick="join()"]');
+    await _userPage.waitForSelector('#waiting-ui:not(.hidden)', { timeout: 15000 });
+  }
   console.log('  User browser opened (test_viewer joined)');
 }
 
