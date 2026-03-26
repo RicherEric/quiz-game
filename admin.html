@@ -1335,40 +1335,29 @@
                     console.log("Admin 即時訂閱狀態:", status);
                 });
 
-            // Lottery realtime subscriptions
-            sbClient.channel('admin-lottery-winners-sync')
+            // Lottery realtime: 合併 4 個 postgres_changes 為 1 個 channel（減少 Realtime 連線負載）
+            sbClient.channel('admin-lottery-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_winners' }, () => {
                     if (currentSection !== 'lottery') return;
                     if (currentLotteryTab === 'tab-lottery-winners') fetchLotteryWinners();
                     if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
                     if (currentLotteryTab === 'tab-lottery-prizes') fetchLotteryPrizes();
                 })
-                .subscribe();
-
-            sbClient.channel('admin-lottery-groups-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_groups' }, () => {
                     if (currentSection !== 'lottery') return;
                     if (currentLotteryTab === 'tab-lottery-groups') fetchLotteryGroups();
                     if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
                 })
-                .subscribe();
-
-            sbClient.channel('admin-lottery-members-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_members' }, () => {
                     if (currentSection !== 'lottery') return;
                     if (currentLotteryTab === 'tab-lottery-groups') fetchLotteryGroups();
                     if (currentLotteryTab === 'tab-lottery-stats') { fetchLotteryStats(); fetchLotteryWinnerStats(); fetchLotteryIndividualStats(); }
                 })
-                .subscribe();
-
-            sbClient.channel('admin-lottery-prizes-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_prizes' }, () => {
                     if (currentSection !== 'lottery') return;
                     if (currentLotteryTab === 'tab-lottery-prizes') fetchLotteryPrizes();
                 })
                 .subscribe();
-
-            // Lottery 完全依靠 Realtime subscription（已有 4 個 channel 監聽各表）
         }
 
         let currentState = 'waiting';

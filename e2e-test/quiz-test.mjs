@@ -23,6 +23,7 @@ import {
   fetchResponseCounts, fetchLeaderboard, fetchPlayerStats,
 } from './lib/quiz/admin.mjs';
 import { createPlayer } from './lib/quiz/player.mjs';
+import { subscribeAll as hubSubscribe, cleanupAll as hubCleanup } from './lib/quiz/realtime-hub.mjs';
 import { runEdgeCaseTests, validateDataIntegrity, evaluatePassFail, measureRealtimePropagation } from './lib/quiz/validators.mjs';
 import { printReport, generateHtmlReport } from './lib/quiz/report.mjs';
 
@@ -99,30 +100,23 @@ async function main() {
   await launchBrowsers(qrToken);
 
   // ══════════════════════════════════════════════════════════════════════════════
-  // Phase 1.6: Subscribe players to realtime (在 edge case 之後，避免收到測試狀態變更)
+  // Phase 1.6: Subscribe shared realtime hub (1 client, 3 channels for ALL players)
+  //   取代原本 70 clients × 3 channels = 210 subscriptions，降至 3 subscriptions
   // ══════════════════════════════════════════════════════════════════════════════
   phaseStart('1.6-player-subscribe');
-  // Subscribe all active players to realtime (wait for SUBSCRIBED confirmation)
-  console.log('  Subscribing all players to realtime...');
-  const subscribeResults = await Promise.allSettled(
-    activePlayers.map(p =>
-      p.subscribe((playerName, state, receivedAt) => {
-        // This callback fires for every realtime event received by every player
-      })
-    )
-  );
-  const subOk = subscribeResults.filter(r => r.status === 'fulfilled').length;
-  const subFail = subscribeResults.filter(r => r.status === 'rejected').length;
-  if (subFail > 0) {
-    const failures = subscribeResults
-      .filter(r => r.status === 'rejected')
-      .slice(0, 3)
-      .map(r => r.reason?.message || r.reason);
-    console.warn(`  WARNING: ${subFail}/${activePlayers.length} realtime subscriptions failed. First errors: ${failures.join('; ')}`);
+  console.log('  Registering players with shared realtime hub...');
+  for (const p of activePlayers) {
+    p.registerRealtime((playerName, state, receivedAt) => {
+      // Callback fires for every realtime event dispatched to this player
+    });
   }
-  console.log(`  Realtime subscribed: ${subOk} ok, ${subFail} failed out of ${activePlayers.length} players.`);
-  // Extra settle time for WebSocket connections to stabilize
-  await sleep(1000);
+  try {
+    await hubSubscribe(15000);
+    console.log(`  Shared realtime hub subscribed (3 channels for ${activePlayers.length} players).`);
+  } catch (err) {
+    console.warn(`  WARNING: Shared realtime hub failed: ${err.message}`);
+  }
+  await sleep(500);
   phaseEnd('1.6-player-subscribe');
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -364,8 +358,10 @@ async function main() {
   // ══════════════════════════════════════════════════════════════════════════════
   phaseStart('4-cleanup');
   console.log('\n[Phase 4] Cleaning up...');
+  await hubCleanup();
+  console.log('  Shared realtime hub closed.');
   await Promise.all(activePlayers.map(p => p.cleanup()));
-  console.log(`  ${activePlayers.length} player connections closed.`);
+  console.log(`  ${activePlayers.length} player registrations cleared.`);
 
   // Close browser monitors and HTTP server
   await closeBrowsers();

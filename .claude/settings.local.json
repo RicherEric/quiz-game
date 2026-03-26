@@ -17,7 +17,10 @@
       "Bash(node --check lib/quiz/player.mjs)",
       "Bash(node --check lib/quiz/validators.mjs)",
       "Bash(node --check lib/quiz/report.mjs)",
-      "Bash(find D:quiz-game -name *.log -o -name test-report* -o -name *report*.html)"
+      "Bash(find D:quiz-game -name *.log -o -name test-report* -o -name *report*.html)",
+      "Bash(node -e \"import\\(''./lib/quiz/realtime-hub.mjs''\\).then\\(\\(\\) => console.log\\(''OK''\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
+      "Bash(node -e \"import\\(''./lib/quiz/player.mjs''\\).then\\(\\(\\) => console.log\\(''OK''\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
+      "Bash(node -e \"import\\(''./quiz-test.mjs''\\).then\\(\\(\\) => console.log\\(''OK''\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")"
     ]
   }
 }

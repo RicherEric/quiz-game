@@ -1,21 +1,21 @@
 /**
  * Player simulation: createPlayer factory.
+ *
+ * Each player has its own Supabase client for REST API calls (RPC, queries),
+ * but realtime subscriptions are shared via realtime-hub.mjs (1 client, 3 channels)
+ * to avoid 70×3=210 subscriptions overwhelming Supabase.
  */
 import { getGameGroupId } from '../config.mjs';
 import { sleep, randomInt, randomSleep, now, withRetry, weightedChoice, padNum } from '../helpers.mjs';
 import { stats, initQStats, recordStep, recordError } from '../timing.mjs';
 import { newClient } from './admin.mjs';
+import { registerPlayer, unregisterPlayer, getLastReceivedAt, getPendingScore } from './realtime-hub.mjs';
 
 // ─── Player Simulation ─────────────────────────────────────────────────────────
 
 export function createPlayer(index, qrToken) {
   const name = `test_user_${padNum(index)}`;
-  const client = newClient();
-  let channel = null;
-  let broadcastChannel = null;
-  let scoreBroadcastChannel = null;
-  let lastStateReceivedAt = 0;
-  const pendingScores = {};  // questionId -> { question_score, total_score, receivedAt }
+  const client = newClient();  // REST-only (no realtime subscriptions)
 
   stats.playerLogs[name] = { joinTimeMs: 0, joinSuccess: false, answers: [] };
 
@@ -47,75 +47,26 @@ export function createPlayer(index, qrToken) {
     },
 
     /**
-     * Subscribe to game_status realtime and record propagation lag.
-     * Returns a Promise that resolves when subscription is confirmed (SUBSCRIBED),
-     * or rejects after timeoutMs.
+     * Register this player with the shared realtime hub.
+     * The hub dispatches broadcast/postgres_changes events to all registered players.
      */
-    subscribe(onStateChange, timeoutMs = 15000) {
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          reject(new Error(`Realtime subscribe timeout for player-${name}`));
-        }, timeoutMs);
-
-        // 主通道：broadcast channel（延遲最低）
-        broadcastChannel = client
-          .channel('game-state-broadcast', { config: { broadcast: { self: false } } })
-          .on('broadcast', { event: 'state-change' }, (msg) => {
-            lastStateReceivedAt = Date.now();
-            if (onStateChange) onStateChange(name, msg.payload, lastStateReceivedAt);
-          })
-          .subscribe();
-
-        // 分數 broadcast channel（與 index.html 一致）
-        scoreBroadcastChannel = client
-          .channel('score-broadcast', { config: { broadcast: { self: false } } })
-          .on('broadcast', { event: 'score-update' }, (msg) => {
-            const payload = msg.payload;
-            if (payload && payload.scores && payload.scores[name]) {
-              pendingScores[payload.question_id] = {
-                ...payload.scores[name],
-                receivedAt: Date.now(),
-              };
-            }
-          })
-          .subscribe();
-
-        // Fallback：postgres_changes
-        channel = client
-          .channel(`player-${name}`)
-          .on(
-            'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'game_status', filter: 'id=eq.1' },
-            (payload) => {
-              lastStateReceivedAt = Date.now();
-              if (onStateChange) onStateChange(name, payload.new, lastStateReceivedAt);
-            }
-          )
-          .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-              clearTimeout(timer);
-              resolve(true);
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-              clearTimeout(timer);
-              reject(new Error(`Realtime subscribe failed for player-${name}: ${status}`));
-            }
-          });
-      });
+    registerRealtime(onStateChange) {
+      registerPlayer(name, onStateChange);
     },
 
     isSubscribed() {
-      return channel && channel.state === 'joined';
+      return true;  // Hub manages subscription state
     },
 
     getLastStateReceivedAt() {
-      return lastStateReceivedAt;
+      return getLastReceivedAt(name);
     },
 
     /**
      * Check if score was received via broadcast (like pendingScore in index.html).
      */
     getPendingScore(questionId) {
-      return pendingScores[questionId] || null;
+      return getPendingScore(name, questionId);
     },
 
     async answer(questionId, isAborted) {
@@ -204,9 +155,7 @@ export function createPlayer(index, qrToken) {
     },
 
     async cleanup() {
-      if (scoreBroadcastChannel) await client.removeChannel(scoreBroadcastChannel);
-      if (broadcastChannel) await client.removeChannel(broadcastChannel);
-      if (channel) await client.removeChannel(channel);
+      unregisterPlayer(name);
     },
   };
 }

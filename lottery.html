@@ -1407,14 +1407,13 @@
         }
 
         function setupRealtimeSync() {
-            // Listen for prize changes (admin add/edit/delete prizes)
+            // 合併 4 個 postgres_changes 為 1 個 channel（減少 Realtime 連線負載）
             sbClient
-                .channel('lottery-prizes-sync')
+                .channel('lottery-data-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_prizes' }, async () => {
                     const oldSelectedId = document.getElementById('prize-selector').value;
                     await Promise.all([loadPrizes(), loadWinners()]);
                     populatePrizeSelector();
-                    // Restore selection if prize still exists
                     const sel = document.getElementById('prize-selector');
                     if (oldSelectedId && allPrizes.find(p => p.id === parseInt(oldSelectedId))) {
                         sel.value = oldSelectedId;
@@ -1425,13 +1424,8 @@
                     if (currentLotteryTab === 'individual-stats') renderIndividualStats();
                     if (currentLotteryTab === 'group-view') renderGroupView();
                 })
-                .subscribe();
-
-            // Listen for winner changes (admin remove/redraw winners)
-            sbClient
-                .channel('lottery-winners-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_winners' }, async () => {
-                    if (isDrawing) return; // Don't interrupt ongoing draw
+                    if (isDrawing) return;
                     await loadWinners();
                     renderWinnerHistory();
                     updateEligibleCount();
@@ -1439,22 +1433,12 @@
                     if (currentLotteryTab === 'individual-stats') renderIndividualStats();
                     if (currentLotteryTab === 'group-view') renderGroupView();
                 })
-                .subscribe();
-
-            // Listen for group changes (probability, add/delete groups)
-            sbClient
-                .channel('lottery-groups-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_groups' }, async () => {
                     await loadGroups();
                     updateEligibleCount();
                     if (currentLotteryTab === 'group-view') renderGroupView();
                     if (currentLotteryTab === 'member-stats') renderMemberStats();
                 })
-                .subscribe();
-
-            // Listen for member changes (add/delete members)
-            sbClient
-                .channel('lottery-members-sync')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_members' }, async () => {
                     await loadGroups();
                     updateEligibleCount();
