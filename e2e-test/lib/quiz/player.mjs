@@ -9,7 +9,7 @@ import { getGameGroupId } from '../config.mjs';
 import { sleep, randomInt, randomSleep, now, withRetry, weightedChoice, padNum } from '../helpers.mjs';
 import { stats, initQStats, recordStep, recordError } from '../timing.mjs';
 import { newClient } from './admin.mjs';
-import { registerPlayer, unregisterPlayer, getLastReceivedAt, getPendingScore } from './realtime-hub.mjs';
+import { registerPlayer, unregisterPlayer, getLastReceivedAt, getPendingScore, notifyResponseSubmitted, notifyPlayerJoined } from './realtime-hub.mjs';
 
 // ─── Player Simulation ─────────────────────────────────────────────────────────
 
@@ -43,6 +43,7 @@ export function createPlayer(index, qrToken) {
       }
       stats.playersCreated++;
       stats.playerLogs[name].joinSuccess = true;
+      notifyPlayerJoined();
       return true;
     },
 
@@ -114,6 +115,7 @@ export function createPlayer(index, qrToken) {
         stats.playerLogs[name].answers.push({
           questionId, choice, responseTimeMs, apiTimeMs: apiTime, skipped: false, success: true,
         });
+        notifyResponseSubmitted();
       }
     },
 

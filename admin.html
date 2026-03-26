@@ -1314,25 +1314,17 @@
             gameStateBroadcastChannel = sbClient.channel('game-state-broadcast', { config: { broadcast: { self: false } } });
             gameStateBroadcastChannel.subscribe();
 
-            // 即時訂閱：玩家提交答案、新玩家加入、分數更新時立刻刷新
-            // 使用 debounce 合併高頻事件（70 個 INSERT → 1 次 fetch）
-            adminChannel = sbClient.channel('admin-realtime')
-                .on('postgres_changes', {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'responses'
-                }, () => {
+            // 即時訂閱：玩家提交答案、新玩家加入時立刻刷新
+            // 改用 broadcast 取代 postgres_changes：70 個 INSERT 不再產生 WAL 事件，大幅降低 Realtime 負載
+            adminChannel = sbClient.channel('quiz-activity-broadcast', { config: { broadcast: { self: false } } })
+                .on('broadcast', { event: 'response-submitted' }, () => {
                     debouncedFetchStats();
                 })
-                .on('postgres_changes', {
-                    event: '*',
-                    schema: 'public',
-                    table: 'players'
-                }, () => {
+                .on('broadcast', { event: 'player-changed' }, () => {
                     debouncedPlayerChange();
                 })
                 .subscribe((status) => {
-                    console.log("Admin 即時訂閱狀態:", status);
+                    console.log("Admin 活動訂閱狀態:", status);
                 });
 
             // Lottery realtime: 合併 4 個 postgres_changes 為 1 個 channel（減少 Realtime 連線負載）

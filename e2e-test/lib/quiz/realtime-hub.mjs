@@ -15,6 +15,7 @@ const players = new Map();
 let broadcastCh = null;
 let scoreCh = null;
 let pgChangesCh = null;
+let activityCh = null; // Player→Admin broadcast（取代 postgres_changes）
 let subscribed = false;
 
 /**
@@ -79,6 +80,11 @@ export function subscribeAll(timeoutMs = 15000) {
       })
       .subscribe();
 
+    // Player→Admin activity broadcast（通知 admin 有新作答/新玩家）
+    activityCh = sharedClient
+      .channel('quiz-activity-broadcast', { config: { broadcast: { self: false } } })
+      .subscribe();
+
     // Fallback: postgres_changes (SINGLE subscription for all players)
     pgChangesCh = sharedClient
       .channel('shared-quiz-control')
@@ -105,15 +111,35 @@ export function subscribeAll(timeoutMs = 15000) {
 }
 
 /**
+ * Notify admin that a player submitted a response (broadcast, replaces postgres_changes).
+ */
+export function notifyResponseSubmitted() {
+  if (activityCh) {
+    activityCh.send({ type: 'broadcast', event: 'response-submitted', payload: {} });
+  }
+}
+
+/**
+ * Notify admin that a player joined (broadcast, replaces postgres_changes).
+ */
+export function notifyPlayerJoined() {
+  if (activityCh) {
+    activityCh.send({ type: 'broadcast', event: 'player-changed', payload: {} });
+  }
+}
+
+/**
  * Cleanup all shared channels.
  */
 export async function cleanupAll() {
   if (broadcastCh) await sharedClient.removeChannel(broadcastCh);
   if (scoreCh) await sharedClient.removeChannel(scoreCh);
   if (pgChangesCh) await sharedClient.removeChannel(pgChangesCh);
+  if (activityCh) await sharedClient.removeChannel(activityCh);
   broadcastCh = null;
   scoreCh = null;
   pgChangesCh = null;
+  activityCh = null;
   players.clear();
   subscribed = false;
 }

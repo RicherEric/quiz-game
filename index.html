@@ -260,6 +260,7 @@
         let questionsMap = new Map(); // 預載題目內容快取，避免 playing 時 100 人同時 fetch
         let countdownTimer = null;
         let pendingScore = null; // 暫存 admin broadcast 推送的分數
+        let activityChannel = null; // Player→Admin broadcast（取代 postgres_changes，減少 WAL 負載）
 
         /**
          * 暫時性錯誤重試（502/503/504 Bad Gateway）
@@ -347,12 +348,23 @@
             document.getElementById('sync-btn').classList.remove('hidden');
 
             listenToHost();
+
+            // 通知 Admin 有新玩家加入（broadcast 取代 postgres_changes）
+            if (activityChannel) {
+                activityChannel.send({ type: 'broadcast', event: 'player-changed', payload: {} });
+            }
         }
 
         function listenToHost() {
             checkCurrentStatus(); // 處理中途進場
 
             if (channel) sbClient.removeChannel(channel);
+
+            // Player→Admin 活動通知（取代 admin 端的 postgres_changes，大幅減少 Realtime WAL 負載）
+            if (!activityChannel) {
+                activityChannel = sbClient.channel('quiz-activity-broadcast', { config: { broadcast: { self: false } } });
+                activityChannel.subscribe();
+            }
 
             // 主通道：broadcast channel（直接 WebSocket，不經 DB，延遲最低）
             sbClient.channel('game-state-broadcast')
@@ -697,6 +709,7 @@
                 sessionStorage.removeItem('quiz_player_name');
                 hideAllUI();
                 if (channel) { sbClient.removeChannel(channel); channel = null; }
+                if (activityChannel) { sbClient.removeChannel(activityChannel); activityChannel = null; }
                 if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
                 stopCountdown();
                 myName = '';
@@ -799,6 +812,10 @@
                 p_qr_token: qrToken
             }), 2).then(result => {
                 if (result?.error) console.error('submit_response 失敗:', result.error.message);
+                // 通知 Admin 有新作答（broadcast 取代 postgres_changes，避免 70 個 WAL 事件淹沒 Realtime）
+                if (activityChannel) {
+                    activityChannel.send({ type: 'broadcast', event: 'response-submitted', payload: {} });
+                }
             });
         }
 
@@ -815,6 +832,7 @@
             sessionStorage.removeItem('quiz_player_name');
             hideAllUI();
             if (channel) { sbClient.removeChannel(channel); channel = null; }
+            if (activityChannel) { sbClient.removeChannel(activityChannel); activityChannel = null; }
             if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
             stopCountdown();
             myName = '';

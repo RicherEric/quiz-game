@@ -21,7 +21,8 @@
       "Bash(node -e \"import\\(''./lib/quiz/realtime-hub.mjs''\\).then\\(\\(\\) => console.log\\(''OK''\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
       "Bash(node -e \"import\\(''./lib/quiz/player.mjs''\\).then\\(\\(\\) => console.log\\(''OK''\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
       "Bash(node -e \"import\\(''./quiz-test.mjs''\\).then\\(\\(\\) => console.log\\(''OK''\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
-      "Bash(grep -r \"preload\\\\|loading\\\\|responsive\\\\|srcset\\\\|picture\\\\|aspect-video\" /d/quiz-game/*.html)"
+      "Bash(grep -r \"preload\\\\|loading\\\\|responsive\\\\|srcset\\\\|picture\\\\|aspect-video\" /d/quiz-game/*.html)",
+      "Bash(grep -E \"\\\\.\\(html|js\\)$\")"
     ]
   }
 }
